@@ -1,0 +1,11 @@
+[package]
+name = "shp2obj"
+version = "0.1.0"
+authors = ["fanzhenhua <fanzhenhua@superengine.com.cn>"]
+
+[dependencies]
+libc = "0.2"
+encoding = "0.2"
+
+[build-dependencies]
+cc = "1.0.*"
