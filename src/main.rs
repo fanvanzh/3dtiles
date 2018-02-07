@@ -5,6 +5,8 @@ use std::time;
 
 extern "C" {
 	fn shp2obj(name: *const u8, layer: i32, dest: *const u8) -> bool;
+
+	fn test() -> bool;
 }
 
 
@@ -53,6 +55,11 @@ pub extern fn mkdirs(path : *const i8) -> bool {
 }
 
 fn main() {
+	unsafe {
+		test();
+	}
+
+	return;
 	//let mut msg = String::new();
 	//io::stdin().read_line(&mut msg);
 	let shpfile = r#"E:\test\buildings\osm_bd_height_rd.shp"#;

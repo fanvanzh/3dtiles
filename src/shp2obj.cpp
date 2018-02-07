@@ -315,3 +315,86 @@ extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
     GDALClose( poDS );
     return true;
 }
+
+
+#include "tiny_gltf.h"
+
+extern "C" bool test() {
+    tinygltf::TinyGLTF gltf;
+    tinygltf::Model model;
+
+	tinygltf::Mesh mesh;
+	mesh.name = "box";
+	//mesh.weights = 1.0;
+	tinygltf::Primitive primits;
+	primits.attributes = { std::pair<std::string,int>("POSITION",1) };
+	primits.indices = 0;
+	mesh.primitives = {
+		primits
+	};
+	model.meshes = { mesh };
+	tinygltf::Buffer buffer;
+	buffer.data = {
+		 0x00 ,0x00 ,0x01 ,0x00 ,0x02 ,0x00 ,0x00 ,0x00
+		,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00
+		,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x80 ,0x3f
+		,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00
+		,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x80 ,0x3f
+		,0x00 ,0x00 ,0x00 ,0x00
+	};
+	//buffer.uri = "data:application/octet-stream;base64,AAABAAIAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAA=";
+	model.buffers = {
+		buffer
+	};
+	tinygltf::BufferView bv0;
+	bv0.buffer = 0;
+	bv0.byteOffset = 0;
+	bv0.byteLength = 6;
+	bv0.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
+
+	tinygltf::BufferView bv1;
+	bv1.buffer = 0;
+	bv1.byteOffset = 8;
+	bv1.byteLength = 36;
+	bv1.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+
+	model.bufferViews = {
+		bv0,bv1
+	};
+
+	tinygltf::Accessor acsor0;
+	acsor0.bufferView = 0;
+	acsor0.byteOffset = 0;
+	acsor0.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+	acsor0.count = 3;
+	acsor0.type = TINYGLTF_TYPE_SCALAR;
+	//acsor0.max = 0;
+	//acsor0.min = 0;
+
+	tinygltf::Accessor acsor1;
+	acsor1.bufferView = 1;
+	acsor1.byteOffset = 0;
+	acsor1.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+	acsor1.count = 3;
+	acsor1.type = TINYGLTF_TYPE_VEC3;
+	//acsor1.max = 0;
+	//acsor1.min = 0;
+
+	model.accessors = {
+		acsor0,acsor1
+	};
+
+	model.asset.version = "2.0";
+	model.asset.generator = "fanfan";
+
+	tinygltf::Scene sence;
+	sence.nodes = {0};
+	model.scenes = { sence };
+	model.defaultScene = 0;
+	tinygltf::Node node;
+	node.mesh = 0;
+	model.nodes = { node };
+
+    gltf.WriteGlbSceneToFile(&model, "D:\\test.glb");
+    return true;
+}

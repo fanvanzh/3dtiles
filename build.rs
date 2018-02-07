@@ -11,6 +11,8 @@ fn main() {
         .warnings(false)
         .file("./src/shp2obj.cpp")
         .include("./src/")
+        .define("TINYGLTF_IMPLEMENTATION", None)
+        .define("STB_IMAGE_IMPLEMENTATION", None)
         .compile("shp2obj");
 
     if cfg!(windows) {
