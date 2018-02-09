@@ -788,9 +788,8 @@ class TinyGLTF {
           filename /*, bool embedImages, bool embedBuffers, bool writeBinary*/);
 
   /// Write glb to file
-  bool WriteGlbSceneToFile(
-	  Model *model,
-	  const std::string &filename);
+  std::string Serialize(
+	  Model *model);
 
  private:
   ///
@@ -3211,7 +3210,7 @@ static void SerializeNumberProperty(const std::string &key, T number,
                                     json &obj) {
   //obj.insert(
   //    json_object_pair(key, json(static_cast<double>(number))));
-  obj[key] = static_cast<double>(number);
+  obj[key] = number;
 }
 
 template <typename T>
@@ -3222,7 +3221,7 @@ static void SerializeNumberArrayProperty(const std::string &key,
   json vals;
 
   for (unsigned int i = 0; i < value.size(); ++i) {
-    vals.push_back(static_cast<double>(value[i]));
+    vals.push_back(value[i]);
   }
 
   obj[key] = vals;
@@ -3795,19 +3794,10 @@ bool TinyGLTF::WriteGltfSceneToFile(
   return true;
 }
 
-static void WriteGlbFile(const std::string &output,
-	const std::string &content) {
-	std::ofstream gltfFile(output.c_str());
-	gltfFile << content;
-}
-
 /// Write glb to file
-bool TinyGLTF::WriteGlbSceneToFile(
-	Model *model,
-	const std::string &filename) {
+std::string TinyGLTF::Serialize(Model *model) {
 
 	json output;
-
 	// ACCESSORS
 	json accessors;
 	for (unsigned int i = 0; i < model->accessors.size(); ++i) {
@@ -3996,8 +3986,7 @@ bool TinyGLTF::WriteGlbSceneToFile(
 	final_buf.push_back(0x00);
 	final_buf.append(bin_out.data(), bin_out.data() + bin_out.size());
 
-	WriteGlbFile(filename, final_buf);
-	return true;
+	return final_buf;
 }
 
 }  // namespace tinygltf
