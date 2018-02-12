@@ -336,6 +336,7 @@ using ColorValue = std::array<double, 4>;
 
  struct Parameter {
   bool bool_value;
+  int number_value = -1;
   std::string string_value;
   std::vector<double> number_array;
   std::map<std::string, double> json_double_value;
@@ -3296,7 +3297,11 @@ static void SerializeParameterMap(ParameterMap &param, json &o) {
       o[paramIt->first] = json_double_value;
     } else if (!paramIt->second.string_value.empty()) {
       SerializeStringProperty(paramIt->first, paramIt->second.string_value, o);
-    } else {
+	}
+	else if (paramIt->second.number_value > -1) {
+		o[paramIt->first] = paramIt->second.number_value;
+	}
+	else {
       o[paramIt->first] = paramIt->second.bool_value;
     }
   }
@@ -3858,22 +3863,27 @@ std::string TinyGLTF::Serialize(Model *model) {
 	}
 
 	// IMAGES
-	json images;
-	for (unsigned int i = 0; i < model->images.size(); ++i) {
-		json image;
-		SerializeGltfImage(model->images[i], image);
-		images.push_back(image);
+	if (model->images.size()) {
+		json images;
+		for (unsigned int i = 0; i < model->images.size(); ++i) {
+			json image;
+			SerializeGltfImage(model->images[i], image);
+			images.push_back(image);
+		}
+		output["images"] = images;
 	}
-	output["images"] = images;
+	
 
 	// MATERIALS
-	json materials;
-	for (unsigned int i = 0; i < model->materials.size(); ++i) {
-		json material;
-		SerializeGltfMaterial(model->materials[i], material);
-		materials.push_back(material);
+	if (model->materials.size()) {
+		json materials;
+		for (unsigned int i = 0; i < model->materials.size(); ++i) {
+			json material;
+			SerializeGltfMaterial(model->materials[i], material);
+			materials.push_back(material);
+		}
+		output["materials"] = materials;
 	}
-	output["materials"] = materials;
 
 	// MESHES
 	json meshes;
@@ -3917,40 +3927,48 @@ std::string TinyGLTF::Serialize(Model *model) {
 	}
 
 	// TEXTURES
-	json textures;
-	for (unsigned int i = 0; i < model->textures.size(); ++i) {
-		json texture;
-		SerializeGltfTexture(model->textures[i], texture);
-		textures.push_back(texture);
+	if (model->textures.size()) {
+		json textures;
+		for (unsigned int i = 0; i < model->textures.size(); ++i) {
+			json texture;
+			SerializeGltfTexture(model->textures[i], texture);
+			textures.push_back(texture);
+		}
+		output["textures"] = textures;
 	}
-	output["textures"] = textures;
 
 	// SAMPLERS
-	json samplers;
-	for (unsigned int i = 0; i < model->samplers.size(); ++i) {
-		json sampler;
-		SerializeGltfSampler(model->samplers[i], sampler);
-		samplers.push_back(sampler);
+	if (model->samplers.size()) {
+		json samplers;
+		for (unsigned int i = 0; i < model->samplers.size(); ++i) {
+			json sampler;
+			SerializeGltfSampler(model->samplers[i], sampler);
+			samplers.push_back(sampler);
+		}
+		output["samplers"] = samplers;
 	}
-	output["samplers"] = samplers;
 
 	// CAMERAS
-	json cameras;
-	for (unsigned int i = 0; i < model->cameras.size(); ++i) {
-		json camera;
-		SerializeGltfCamera(model->cameras[i], camera);
-		cameras.push_back(camera);
+	if (model->cameras.size()) {
+		json cameras;
+		for (unsigned int i = 0; i < model->cameras.size(); ++i) {
+			json camera;
+			SerializeGltfCamera(model->cameras[i], camera);
+			cameras.push_back(camera);
+		}
+		output["cameras"] = cameras;
 	}
-	output["cameras"] = cameras;
 
 	// LIGHTS
-	json lights;
-	for (unsigned int i = 0; i < model->lights.size(); ++i) {
-		json light;
-		SerializeGltfLight(model->lights[i], light);
-		lights.push_back(light);
+	if (model->lights.size()) {
+		json lights;
+		for (unsigned int i = 0; i < model->lights.size(); ++i) {
+			json light;
+			SerializeGltfLight(model->lights[i], light);
+			lights.push_back(light);
+		}
+		output["lights"] = lights;
 	}
-	output["lights"] = lights;
 
 	std::string json_out = output.dump();
 	while (json_out.size() % 4 != 0) {

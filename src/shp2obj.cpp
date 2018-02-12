@@ -153,6 +153,9 @@ public:
 
 struct Polygon_Mesh
 {
+    std::string mesh_name; // 模型名称
+    std::vector<double> box_max; // 外包矩形
+    std::vector<double> box_min; // 外包矩形
 	std::vector<std::array<float, 3>> vertex; // 顶点
 	std::vector<std::array<float, 3>> normal; // 面法线
 	std::vector<std::array<float, 2>>  texcoord; // 贴图坐标
@@ -173,6 +176,16 @@ Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_
 
 	OGREnvelope geo_box;
 	polyon->getEnvelope(&geo_box);
+    mesh.box_min = {
+        (geo_box.MinX - center_x) * scale, 
+        bottom, 
+        (geo_box.MinY - center_y) * scale
+    };
+    mesh.box_max = { 
+        (geo_box.MaxX - center_x) * scale,
+        height, 
+        (geo_box.MaxY - center_y) * scale
+    };
 	{
 		OGRLinearRing* pRing = polyon->getExteriorRing();
 		int ptNum = pRing->getNumPoints();
@@ -367,7 +380,8 @@ Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_
 }
 
 
-void make_polymesh(std::vector<Polygon_Mesh>& meshes, const char* mesh_name, const char* filename);
+std::string make_polymesh(std::vector<Polygon_Mesh>& meshes);
+std::string make_b3dm(std::vector<Polygon_Mesh>& meshes);
 //
 extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
 {
@@ -423,11 +437,11 @@ extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
 	double build_height = 10.0;
 	for (auto item : items_array) {
 		node* _node = (node*)item;
-		char obj_file[512];
-		sprintf(obj_file, "%s\\obj\\%d\\%d", dest, _node->_z, _node->_x);
-		mkdirs(obj_file);
-		double center_x = _node->_box.minx;
-		double center_y = _node->_box.miny;
+		char b3dm_file[512];
+		sprintf(b3dm_file, "%s\\tile\\%d\\%d", dest, _node->_z, _node->_x);
+		mkdirs(b3dm_file);
+		double center_x = ( _node->_box.minx );//+ _node->_box.maxx ) / 2;
+		double center_y = ( _node->_box.miny );//+ _node->_box.maxy ) / 2;
         std::vector<Polygon_Mesh> v_meshes;
 		for (auto id : _node->get_ids()) {
 			OGRFeature *poFeature = poLayer->GetFeature(id);
@@ -449,8 +463,11 @@ extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
 			}
 			OGRFeature::DestroyFeature(poFeature);
 		}
-        sprintf(obj_file, "%s\\obj\\%d\\%d\\%d.glb", dest, _node->_z, _node->_x, _node->_y);
-        make_polymesh(v_meshes,"",obj_file);
+
+        sprintf(b3dm_file, "%s\\tile\\%d\\%d\\%d.b3dm", dest, _node->_z, _node->_x, _node->_y);
+        std::string b3dm_buf = make_b3dm(v_meshes);
+        write_file(b3dm_file, b3dm_buf.data(), b3dm_buf.size());
+        break;
 	}
 	//
 	GDALClose(poDS);
@@ -462,7 +479,13 @@ void put_val(std::vector<unsigned char>& buf, T val) {
 	buf.insert(buf.end(), (unsigned char*)&val, (unsigned char*)&val + sizeof(T));
 }
 
-void make_polymesh(std::vector<Polygon_Mesh>& meshes, const char* mesh_name, const char* filename) {
+template<class T> 
+void put_val(std::string& buf, T val) {
+    buf.append((unsigned char*)&val, (unsigned char*)&val + sizeof(T));
+}
+
+// convert poly-mesh to glb buffer
+std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
 	
 	tinygltf::TinyGLTF gltf;
 	tinygltf::Model model;
@@ -505,22 +528,29 @@ void make_polymesh(std::vector<Polygon_Mesh>& meshes, const char* mesh_name, con
 					acc.componentType = TINYGLTF_COMPONENT_TYPE_INT;
 				acc.count = idx_size * 3;
 				acc.type = TINYGLTF_TYPE_SCALAR;
-
 				model.accessors.push_back(acc);
+                // as convert to b3dm , we add a BATCH , same as vertex`s count
+                {
+                    unsigned short batch_id = i;
+                    for (auto& vertex : meshes[i].vertex) {
+                        put_val(buffer.data, batch_id);
+                    }
+                    tinygltf::Accessor acc;
+                    acc.bufferView = 0;
+                    acc.byteOffset = acc_offset[j];
+                    acc_offset[j] = buffer.data.size();
+                    acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+                    acc.count = vec_size;
+                    acc.type = TINYGLTF_TYPE_SCALAR;
+                    model.accessors.push_back(acc);
+                }
 			}
 			else if( j == 1){
-				// vec3
-				float max_v3[3] = { meshes[i].vertex[0][0],meshes[i].vertex[0][1],meshes[i].vertex[0][2] };
-				float min_v3[3] = { meshes[i].vertex[0][0],meshes[i].vertex[0][1],meshes[i].vertex[0][2] };
 				int vec_size = meshes[i].vertex.size();
 				for (auto& vertex : meshes[i].vertex) {
 					put_val(buffer.data, vertex[0]);
 					put_val(buffer.data, vertex[1]);
 					put_val(buffer.data, vertex[2]);
-					for (int i = 0; i < 3; i++) {
-						if (max_v3[i] < vertex[i]) max_v3[i] = vertex[i];
-						if (min_v3[i] > vertex[i]) min_v3[i] = vertex[i];
-					}
 				}
 				tinygltf::Accessor acc;
 				acc.bufferView = 1;
@@ -529,8 +559,8 @@ void make_polymesh(std::vector<Polygon_Mesh>& meshes, const char* mesh_name, con
 				acc.count = vec_size;
 				acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 				acc.type = TINYGLTF_TYPE_VEC3;
-				acc.maxValues = { max_v3[0],max_v3[1],max_v3[2] };
-				acc.minValues = { min_v3[0],min_v3[1],min_v3[2] };
+				acc.maxValues = meshes[i].box_max;
+				acc.minValues = meshes[i].box_min;
 				model.accessors.push_back(acc);
 			}
 			else if (j == 2) {
@@ -571,15 +601,15 @@ void make_polymesh(std::vector<Polygon_Mesh>& meshes, const char* mesh_name, con
 
 	for (int i = 0; i < meshes.size(); i++) {
 		tinygltf::Mesh mesh;
-		if (mesh_name) {
-			mesh.name = mesh_name;
-		}
+        mesh.name = meshes[i].mesh_name;
 		tinygltf::Primitive primits;
 		primits.attributes = { 
-			std::pair<std::string,int>("POSITION", meshes.size() + i),
-			std::pair<std::string,int>("NORMAL",2 * meshes.size() + i),
+            std::pair<std::string,int>("_BATCHID", 2 * i + 1),
+			std::pair<std::string,int>("POSITION", 2 * meshes.size() + i),
+			std::pair<std::string,int>("NORMAL",   3 * meshes.size() + i),
 		};
-		primits.indices = i ;
+		primits.indices = i * 2 ;
+        primits.material = 0;
 		primits.mode = TINYGLTF_MODE_TRIANGLES;
 		mesh.primitives = {
 			primits
@@ -601,10 +631,95 @@ void make_polymesh(std::vector<Polygon_Mesh>& meshes, const char* mesh_name, con
 	// 所有场景
 	model.scenes = { sence };
 	model.defaultScene = 0;
-	
-	model.asset.version = "2.0";
+
+    tinygltf::Sampler sample;
+    sample.magFilter = TINYGLTF_TEXTURE_FILTER_LINEAR;
+    sample.minFilter = TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR;
+    sample.wrapS = TINYGLTF_TEXTURE_WRAP_REPEAT;
+    sample.wrapT = TINYGLTF_TEXTURE_WRAP_REPEAT;
+	model.samplers = {sample};
+	/// --------------
+    tinygltf::Material material;
+    material.name = "default";
+	tinygltf::Parameter baseColorFactor;
+	baseColorFactor.number_array = {0.5,0.5,0.5,1.0};
+	material.values["baseColorFactor"] = baseColorFactor;
+	tinygltf::Parameter metallicFactor;
+	metallicFactor.number_value = 0;
+	material.values["metallicFactor"] = metallicFactor;
+	tinygltf::Parameter roughnessFactor;
+	roughnessFactor.number_value = 1;
+	material.values["roughnessFactor"] = roughnessFactor;
+	/// ---------
+	tinygltf::Parameter emissiveFactor;
+	emissiveFactor.number_array = { 0, 0, 0 };
+	material.additionalValues["emissiveFactor"] = emissiveFactor;
+	tinygltf::Parameter alphaMode;
+	alphaMode.string_value = "OPAQUE";
+	material.additionalValues["alphaMode"] = alphaMode;
+	tinygltf::Parameter doubleSided;
+	doubleSided.bool_value = false;
+	material.additionalValues["doubleSided"] = doubleSided;
+	model.materials = { material };
+
+    model.asset.version = "2.0";
 	model.asset.generator = "fanfan";
 	
 	std::string buf = gltf.Serialize(&model);
-	write_file(filename, buf.data(), buf.size());
+    return buf;
+}
+
+std::string make_b3dm(std::vector<Polygon_Mesh>& meshes) {
+    std::string feature_json_string;
+    feature_json_string += "{\"BATCH_LENGTH\":";
+    feature_json_string += std::to_string(meshes.size());
+    feature_json_string += "}";
+    while (feature_json_string.size() % 4 != 0 ) {
+        feature_json_string.push_back(' ');
+    }
+    
+    json batch_json;
+    std::vector<int> ids;
+    for (int i = 0; i < meshes.size(); ++i) {
+        ids.push_back(i);
+    }
+    std::vector<std::string> names;
+    for (int i = 0; i < meshes.size(); ++i) {
+        names.push_back(meshes[i].mesh_name);
+    }
+    batch_json["batchId"] = ids;
+    batch_json["name"] = names;
+    std::string batch_json_string = batch_json.dump();
+    while (batch_json_string.size() % 4 != 0 ) {
+        batch_json_string.push_back(' ');
+    }
+
+    std::string glb_buf = make_polymesh(meshes);
+    // how length total ?
+
+    //test
+    //feature_json_string.clear();
+    //batch_json_string.clear();
+    //end-test
+
+    int feature_json_len = feature_json_string.size();
+    int feature_bin_len = 0;
+    int batch_json_len = batch_json_string.size();
+    int batch_bin_len = 0;
+    int total_len = 28 /*header size*/ + feature_json_len + batch_json_len + glb_buf.size();
+    
+    std::string b3dm_buf;
+    b3dm_buf += "b3dm";
+    int version = 1;
+    put_val(b3dm_buf, version);
+    put_val(b3dm_buf, total_len);
+    put_val(b3dm_buf, feature_json_len);
+    put_val(b3dm_buf, feature_bin_len);
+    put_val(b3dm_buf, batch_json_len);
+    put_val(b3dm_buf, batch_bin_len);
+    //put_val(b3dm_buf, total_len);
+    b3dm_buf.append(feature_json_string.begin(),feature_json_string.end());
+    b3dm_buf.append(batch_json_string.begin(),batch_json_string.end());
+    b3dm_buf.append(glb_buf);
+    return b3dm_buf;
 }
