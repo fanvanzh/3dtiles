@@ -55,10 +55,9 @@ pub extern fn mkdirs(path : *const i8) -> bool {
 }
 
 fn main() {
+	//use std::io;
 	//let mut msg = String::new();
 	//io::stdin().read_line(&mut msg);
-	//use std::thread;
-	//thread::sleep_ms(5000);
 	let shpfile = r#"E:\test\buildings\osm_bd_height_rd.shp"#;
 	let dest = r#"E:\test\buildings\结果文件"#;
 	//let mut rs = GB18030.encode(shpfile, EncoderTrap::Strict).unwrap();

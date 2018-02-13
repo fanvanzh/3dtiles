@@ -10,6 +10,7 @@ fn main() {
         .cpp(true)
         .warnings(false)
         .file("./src/shp2obj.cpp")
+        .file("./src/tileset.cpp")
         .include("./src/")
         .define("TINYGLTF_IMPLEMENTATION", None)
         .define("STB_IMAGE_IMPLEMENTATION", None)

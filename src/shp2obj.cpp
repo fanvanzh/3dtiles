@@ -10,7 +10,15 @@
 // extern function impl by rust
 extern "C" bool mkdirs(const char* path);
 extern "C" bool write_file(const char* filename, const char* buf, unsigned long buf_len);
+//// -- others 
+extern bool write_tileset(double longti, double lati, 
+	double tile_w, double tile_h, 
+	double height_min, double height_max,
+	const char* filename, const char* full_path
+	) ;
+extern double lati_to_meter(double diff);
 
+extern double longti_to_meter(double diff, double lati);
 
 ////////////////////////
 
@@ -434,14 +442,13 @@ extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
 	std::vector<void*> items_array;
 	root.get_all(items_array);
 	//
-	double build_height = 10.0;
 	for (auto item : items_array) {
 		node* _node = (node*)item;
 		char b3dm_file[512];
 		sprintf(b3dm_file, "%s\\tile\\%d\\%d", dest, _node->_z, _node->_x);
 		mkdirs(b3dm_file);
-		double center_x = ( _node->_box.minx );//+ _node->_box.maxx ) / 2;
-		double center_y = ( _node->_box.miny );//+ _node->_box.maxy ) / 2;
+		double center_x = ( _node->_box.minx + _node->_box.maxx ) / 2;
+		double center_y = ( _node->_box.miny + _node->_box.maxy ) / 2;
         std::vector<Polygon_Mesh> v_meshes;
 		for (auto id : _node->get_ids()) {
 			OGRFeature *poFeature = poLayer->GetFeature(id);
@@ -469,6 +476,18 @@ extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
         sprintf(b3dm_file, "%s\\tile\\%d\\%d\\%d.b3dm", dest, _node->_z, _node->_x, _node->_y);
         std::string b3dm_buf = make_b3dm(v_meshes);
         write_file(b3dm_file, b3dm_buf.data(), b3dm_buf.size());
+
+        char b3dm_name[512], tile_json_path[512];
+        sprintf(b3dm_name,"%d.b3dm",_node->_y);
+        sprintf(tile_json_path, "%s\\tile\\%d\\%d\\%d.json", dest, _node->_z, _node->_x, _node->_y);
+        double box_width = ( _node->_box.maxx - _node->_box.minx )  ;
+        double box_height = ( _node->_box.maxy - _node->_box.miny ) ;
+		const double pi = std::acos(-1);
+        write_tileset(center_x, center_y, 
+        	longti_to_meter(box_width / 2, center_y * pi / 180.0),
+        	lati_to_meter(box_height / 2),
+        	0 , 500,
+			b3dm_name,tile_json_path);
 	}
 	//
 	GDALClose(poDS);
