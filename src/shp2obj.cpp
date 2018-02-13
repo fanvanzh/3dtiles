@@ -243,12 +243,12 @@ Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_
 		pt_normal.push_back(pt_normal[1]);
 		for (int i = 0; i < ptNum; i++) {
 			// 平均法线
-			for (size_t i = 0; i < 2; i++)
+			for (size_t j = 0; j < 2; j++)
 			{
 				std::array<float, 3> n0 = pt_normal[i];
 				std::array<float, 3> n1 = pt_normal[i + 1];
 				std::array<float, 3> n2 = { 0, -1, 0 };
-				if (i == 1) n2[1] = 1;
+				if (j == 1) n2[1] = 1;
 				std::array<float, 3> normal = {
 					(n0[0] + n1[0] + n2[0]) / 3,
 					(n0[1] + n1[1] + n2[1]) / 3,
@@ -320,12 +320,12 @@ Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_
 			pt_normal.push_back(pt_normal[1]);
 			for (int i = 0; i < ptNum; i++) {
 				// 平均法线
-				for (size_t i = 0; i < 2; i++)
+				for (size_t j = 0; j < 2; j++)
 				{
 					std::array<float, 3> n0 = pt_normal[i];
 					std::array<float, 3> n1 = pt_normal[i + 1];
 					std::array<float, 3> n2 = { 0, -1, 0 };
-					if (i == 1) n2[1] = 1;
+					if (j == 1) n2[1] = 1;
 					std::array<float, 3> normal = {
 						(n0[0] + n1[0] + n2[0]) / 3,
 						(n0[1] + n1[1] + n2[1]) / 3,
@@ -370,7 +370,7 @@ Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_
 		std::vector<int> indices = mapbox::earcut<int>(polygon);
 		// 剖分三角形
 		for (int idx = 0; idx < indices.size(); idx += 3) {
-			mesh.index.push_back({ 2 * indices[idx] - 1, 2 * indices[idx + 1] - 1, 2 * indices[idx + 2] - 1 });
+			mesh.index.push_back({ 2 * indices[idx] - 1, 2 * indices[idx + 2] - 1, 2 * indices[idx + 1] - 1 });
 		}
 		for (int idx = 0; idx < indices.size(); idx += 3) {
 			mesh.index.push_back({ 2 * indices[idx], 2 * indices[idx + 1], 2 * indices[idx + 2] });
@@ -450,6 +450,7 @@ extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
 			if (wkbFlatten(poGeometry->getGeometryType()) == wkbPolygon) {
 				OGRPolygon* polyon = (OGRPolygon*)poGeometry;
 				Polygon_Mesh mesh = convert_polygon(polyon, center_x, center_y);
+				mesh.mesh_name = "mesh_" + std::to_string(id);
                 v_meshes.push_back(mesh);
 			}
 			else if (wkbFlatten(poGeometry->getGeometryType()) == wkbMultiPolygon) {
@@ -458,6 +459,7 @@ extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
 				for (int j = 0; j < sub_count; j++) {
 					OGRPolygon * polyon = (OGRPolygon*)_multi->getGeometryRef(j);
 					Polygon_Mesh mesh = convert_polygon(polyon, center_x, center_y);
+					mesh.mesh_name = "mesh_" + std::to_string(id);
                     v_meshes.push_back(mesh);
 				}
 			}
@@ -467,7 +469,6 @@ extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
         sprintf(b3dm_file, "%s\\tile\\%d\\%d\\%d.b3dm", dest, _node->_z, _node->_x, _node->_y);
         std::string b3dm_buf = make_b3dm(v_meshes);
         write_file(b3dm_file, b3dm_buf.data(), b3dm_buf.size());
-        break;
 	}
 	//
 	GDALClose(poDS);
@@ -652,7 +653,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
 	material.values["roughnessFactor"] = roughnessFactor;
 	/// ---------
 	tinygltf::Parameter emissiveFactor;
-	emissiveFactor.number_array = { 0, 0, 0 };
+	emissiveFactor.number_array = { 0.5,0.5,0.5 };
 	material.additionalValues["emissiveFactor"] = emissiveFactor;
 	tinygltf::Parameter alphaMode;
 	alphaMode.string_value = "OPAQUE";
