@@ -1,7 +1,7 @@
 #include "gdal/ogrsf_frmts.h"
 #include "tiny_gltf.h"
 #include "earcut.hpp"
-
+#include "json.hpp"
 #include <vector>
 #include <cmath>
 #include <array>
@@ -394,7 +394,7 @@ Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_
 std::string make_polymesh(std::vector<Polygon_Mesh>& meshes);
 std::string make_b3dm(std::vector<Polygon_Mesh>& meshes);
 //
-extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
+extern "C" bool shp23dtile(const char* filename, int layer_id, const char* dest)
 {
 	if (!filename || layer_id < 0 || layer_id > 10000 || !dest) {
 		return false;
@@ -716,6 +716,8 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
 }
 
 std::string make_b3dm(std::vector<Polygon_Mesh>& meshes) {
+	using nlohmann::json;
+	
     std::string feature_json_string;
     feature_json_string += "{\"BATCH_LENGTH\":";
     feature_json_string += std::to_string(meshes.size());

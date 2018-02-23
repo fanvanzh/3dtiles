@@ -1,0 +1,674 @@
+/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2006 Robert Osfield
+ *
+ * This library is open source and may be redistributed and/or modified under
+ * the terms of the OpenSceneGraph Public License (OSGPL) version 0.0 or
+ * (at your option) any later version.  The full license is in LICENSE file
+ * included with this distribution, and on the openscenegraph.org website.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * OpenSceneGraph Public License for more details.
+*/
+
+#ifndef OSG_DRAWABLE
+#define OSG_DRAWABLE 1
+
+#include <osg/BoundingBox>
+#include <osg/Shape>
+#include <osg/BufferObject>
+#include <osg/PrimitiveSet>
+#include <osg/RenderInfo>
+#include <osg/Group>
+
+
+#ifndef GL_NV_occlusion_query
+
+    #define GL_OCCLUSION_TEST_HP                0x8165
+    #define GL_OCCLUSION_TEST_RESULT_HP         0x8166
+    #define GL_PIXEL_COUNTER_BITS_NV            0x8864
+    #define GL_CURRENT_OCCLUSION_QUERY_ID_NV    0x8865
+    #define GL_PIXEL_COUNT_NV                   0x8866
+    #define GL_PIXEL_COUNT_AVAILABLE_NV         0x8867
+
+#endif
+
+#ifndef GL_ARB_occlusion_query
+
+    #define GL_SAMPLES_PASSED_ARB               0x8914
+    #define GL_QUERY_COUNTER_BITS_ARB           0x8864
+    #define GL_CURRENT_QUERY_ARB                0x8865
+    #define GL_QUERY_RESULT_ARB                 0x8866
+    #define GL_QUERY_RESULT_AVAILABLE_ARB       0x8867
+
+#endif
+
+
+#ifndef GL_TIME_ELAPSED
+    #define GL_TIME_ELAPSED                    0x88BF
+    #define GL_TIMESTAMP                       0x8E28
+#endif
+
+#ifndef GL_QUERY_RESULT
+    #define GL_QUERY_RESULT                     0x8866
+    #define GL_QUERY_RESULT_AVAILABLE           0x8867
+#endif
+
+
+namespace osg {
+
+
+class Vec2f;
+class Vec3f;
+class Vec4f;
+class Vec4ub;
+class Geometry;
+class NodeVisitor;
+class ArrayDispatchers;
+
+// this is defined to alter the way display lists are compiled inside the
+// the draw method, it has been found that the NVidia drivers fail completely
+// to optimize COMPILE_AND_EXECUTE in fact make it go slower than for no display
+// lists, but optimize a separate COMPILE very well?!  Define it as default
+// the use of a separate COMPILE, then glCallList rather than use COMPILE_AND_EXECUTE.
+
+#define USE_SEPARATE_COMPILE_AND_EXECUTE
+
+/** Pure virtual base class for drawable geometry. In OSG, everything that can
+ *  be rendered is implemented as a class derived from \c Drawable. The
+ *  \c Drawable class contains no drawing primitives, since these are provided
+ *  by subclasses such as \c osg::Geometry.
+ *  <p>Notice that a \c Drawable is not a \c Node, and therefore it cannot be
+ *  directly added to a scene graph. Instead, <tt>Drawable</tt>s are attached to
+ *  <tt>Geode</tt>s, which are scene graph nodes.
+ *  <p>The OpenGL state that must be used when rendering a \c Drawable is
+ *  represented by a \c StateSet. Since a \c Drawable has a reference
+ *  (\c osg::ref_ptr) to a \c StateSet, <tt>StateSet</tt>s can be shared between
+ *  different <tt>Drawable</tt>s. In fact, sharing <tt>StateSet</tt>s is a good
+ *  way to improve performance, since this allows OSG to reduce the number of
+ *  expensive changes in the OpenGL state.
+ *  <p>Finally, <tt>Drawable</tt>s can also be shared between different
+ *  <tt>Geode</tt>s, so that the same geometry (loaded to memory just once) can
+ *  be used in different parts of the scene graph.
+*/
+class OSG_EXPORT Drawable : public Node
+{
+    public:
+
+        static unsigned int s_numberDrawablesReusedLastInLastFrame;
+        static unsigned int s_numberNewDrawablesInLastFrame;
+        static unsigned int s_numberDeletedDrawablesInLastFrame;
+
+        Drawable();
+
+        /** Copy constructor using CopyOp to manage deep vs shallow copy.*/
+        Drawable(const Drawable& drawable,const CopyOp& copyop=CopyOp::SHALLOW_COPY);
+
+        META_Node(osg, Drawable);
+
+        virtual Drawable* asDrawable() { return this; }
+        virtual const Drawable* asDrawable() const { return this; }
+
+        /** Compute the DataVariance based on an assessment of callback etc.*/
+        virtual void computeDataVariance();
+
+        /** Get the list of matrices that transform this node from local coordinates to world coordinates.
+          * The optional Node* haltTraversalAtNode allows the user to prevent traversal beyond a specifed node. */
+        MatrixList getWorldMatrices(const osg::Node* haltTraversalAtNode=0) const;
+
+
+        /** Set the initial bounding volume to use when computing the overall bounding volume.*/
+        void setInitialBound(const osg::BoundingBox& bbox) { _initialBound = bbox; dirtyBound(); }
+
+        /** Set the initial bounding volume to use when computing the overall bounding volume.*/
+        const BoundingBox& getInitialBound() const { return _initialBound; }
+
+        inline const BoundingSphere& getBound() const
+        {
+            if(!_boundingSphereComputed) getBoundingBox();
+            return _boundingSphere;
+        }
+
+        /** Get BoundingBox of Drawable.
+          * If the BoundingBox is not up to date then its updated via an internal call to computeBond().
+          */
+        inline const BoundingBox& getBoundingBox() const
+        {
+            if(!_boundingSphereComputed)
+            {
+                _boundingBox = _initialBound;
+
+                if (_computeBoundCallback.valid())
+                    _boundingBox.expandBy(_computeBoundCallback->computeBound(*this));
+                else
+                    _boundingBox.expandBy(computeBoundingBox());
+
+                if(_boundingBox.valid()){
+                    _boundingSphere.set(_boundingBox.center(), _boundingBox.radius());
+                } else {
+                    _boundingSphere.init();
+                }
+
+                _boundingSphereComputed = true;
+            }
+
+            return _boundingBox;
+        }
+
+
+        /** Compute the bounding sphere around Drawables's geometry.*/
+        virtual BoundingSphere computeBound() const;
+
+        /** Compute the bounding box around Drawables's geometry.*/
+        virtual BoundingBox computeBoundingBox() const;
+
+        /** Callback to allow users to override the default computation of bounding volume. */
+        struct ComputeBoundingBoxCallback : public osg::Object
+        {
+            ComputeBoundingBoxCallback() {}
+
+            ComputeBoundingBoxCallback(const ComputeBoundingBoxCallback&,const CopyOp&) {}
+
+            META_Object(osg,ComputeBoundingBoxCallback);
+
+            virtual BoundingBox computeBound(const osg::Drawable&) const  { return BoundingBox(); }
+        };
+
+        /** Set the compute bound callback to override the default computeBound.*/
+        void setComputeBoundingBoxCallback(ComputeBoundingBoxCallback* callback) { _computeBoundCallback = callback; }
+
+        /** Get the compute bound callback.*/
+        ComputeBoundingBoxCallback* getComputeBoundingBoxCallback() { return _computeBoundCallback.get(); }
+
+        /** Get the const compute bound callback.*/
+        const ComputeBoundingBoxCallback* getComputeBoundingBoxCallback() const { return _computeBoundCallback.get(); }
+
+
+        /** Set the Shape of the \c Drawable. The shape can be used to
+         *  speed up collision detection or as a guide for procedural
+         *  geometry generation.
+         * @see osg::Shape.
+        */
+        inline void setShape(Shape* shape) { _shape = shape; }
+
+        /** Get the Shape of the Drawable.*/
+        inline Shape* getShape() { return _shape.get(); }
+
+        /** Get the const Shape of the const Drawable.*/
+        inline const Shape* getShape() const { return _shape.get(); }
+
+
+
+        /** Set the drawable so that it can or cannot be used in conjunction with OpenGL
+          * display lists.  When set to true, calls to Drawable::setUseDisplayList,
+          * whereas when set to false, no display lists can be created and calls
+          * to setUseDisplayList are ignored, and a warning is produced.  The latter
+          * is typically used to guard against the switching on of display lists
+          * on objects with dynamic internal data such as continuous Level of Detail
+          * algorithms.*/
+        void setSupportsDisplayList(bool flag);
+
+        /** Get whether display lists are supported for this drawable instance.*/
+        inline bool getSupportsDisplayList() const { return _supportsDisplayList; }
+
+
+        /** When set to true, force the draw method to use OpenGL Display List for rendering.
+            If false, rendering directly.  If the display list has not been compiled
+            already, the next call to draw will automatically create the display list.*/
+        void setUseDisplayList(bool flag);
+
+        /** Return whether OpenGL display lists are being used for rendering.*/
+        inline bool getUseDisplayList() const { return _useDisplayList; }
+
+        /** Return OpenGL display list for specified contextID. */
+        inline GLuint& getDisplayList(unsigned int contextID) const { return _globjList[contextID]; }
+
+        /** When set to true, ignore the setUseDisplayList() settings, and hints to the drawImplementation
+            method to use OpenGL vertex buffer objects for rendering.*/
+        virtual void setUseVertexBufferObjects(bool flag);
+
+        /** Return whether OpenGL vertex buffer objects should be used when supported by OpenGL driver.*/
+        inline bool getUseVertexBufferObjects() const { return _useVertexBufferObjects; }
+
+
+        /** Force a recompile on next draw() of any OpenGL display list associated with this geoset.*/
+        virtual void dirtyDisplayList();
+
+
+        /** Return the estimated size of GLObjects (display lists/vertex buffer objects) that are associated with this drawable.
+          * This size is used a hint for reuse of deleted display lists/vertex buffer objects.  */
+        virtual unsigned int getGLObjectSizeHint() const { return 0; }
+
+
+
+        /** Draw OpenGL primitives.
+          * If the \c Drawable has \c _useDisplayList set to \c true, then use
+          * an OpenGL display list, automatically compiling one if required.
+          * Otherwise, call \c drawImplementation().
+          * @note This method should \e not be overridden in subclasses, as it
+          *       manages the optional display list (notice this is not even
+          *       \c virtual). Subclasses should override
+          *       \c drawImplementation() instead.
+          */
+        inline void draw(RenderInfo& renderInfo) const;
+
+        /** Immediately compile this \c Drawable into an OpenGL Display List/VertexBufferObjects.
+          * @note Operation is ignored if \c _useDisplayList is \c false or VertexBufferObjects are not used.
+        */
+        virtual void compileGLObjects(RenderInfo& renderInfo) const;
+
+        /** Set whether to use a mutex to ensure ref() and unref() are thread safe.*/
+        virtual void setThreadSafeRefUnref(bool threadSafe);
+
+        /** Resize any per context GLObject buffers to specified size. */
+        virtual void resizeGLObjectBuffers(unsigned int maxSize);
+
+        /** If State is non-zero, this function releases OpenGL objects for
+          * the specified graphics context. Otherwise, releases OpenGL objects
+          * for all graphics contexts. */
+        virtual void releaseGLObjects(State* state=0) const;
+
+        struct OSG_EXPORT UpdateCallback : public virtual Callback
+        {
+            UpdateCallback() {}
+
+            UpdateCallback(const UpdateCallback&,const CopyOp&) {}
+
+            META_Object(osg,UpdateCallback);
+
+            /** override Callback::run() entry point to adapt to StateAttributeCallback::run(..) method.*/
+            virtual bool run(osg::Object* object, osg::Object* data);
+
+            /** do customized update code.*/
+            virtual void update(osg::NodeVisitor*, osg::Drawable*) {}
+        };
+
+
+        struct OSG_EXPORT EventCallback : public virtual Callback
+        {
+            EventCallback() {}
+
+            EventCallback(const EventCallback&,const CopyOp&) {}
+
+            META_Object(osg,EventCallback);
+
+            /** override Callback::run() entry point to adapt to StateAttributeCallback::run(..) method.*/
+            virtual bool run(osg::Object* object, osg::Object* data);
+
+            /** do customized Event code. */
+            virtual void event(osg::NodeVisitor*, osg::Drawable*) {}
+        };
+
+        struct CullCallback : public virtual Callback
+        {
+            CullCallback() {}
+
+            CullCallback(const CullCallback&,const CopyOp&) {}
+
+            META_Object(osg,CullCallback);
+
+            // just use the standard run implementation to passes run onto any nested callbacks.
+            using Callback::run;
+
+            /** deprecated.*/
+            virtual bool cull(osg::NodeVisitor*, osg::Drawable*, osg::State*) const { return false; }
+
+            /** do customized cull code, return true if drawable should be culled.*/
+            virtual bool cull(osg::NodeVisitor* nv, osg::Drawable* drawable, osg::RenderInfo* renderInfo) const { return cull(nv, drawable, renderInfo? renderInfo->getState():0); }
+        };
+
+
+        /** Callback attached to an Drawable which allows the users to customize the drawing of an exist Drawable object.
+          * The draw callback is implement as a replacement to the Drawable's own drawImplementation() method, if the
+          * the user intends to decorate the existing draw code then simple call the drawable->drawImplementation() from
+          * with the callbacks drawImplementation() method. This allows the users to do both pre and post callbacks
+          * without fuss and can even disable the inner draw if required.*/
+        struct DrawCallback : public virtual osg::Object
+        {
+            DrawCallback() {}
+
+            DrawCallback(const DrawCallback&,const CopyOp&) {}
+
+            META_Object(osg,DrawCallback);
+
+            /** do customized draw code.*/
+            virtual void drawImplementation(osg::RenderInfo& /*renderInfo*/,const osg::Drawable* /*drawable*/) const {}
+        };
+
+        /** Set the DrawCallback which allows users to attach customize the drawing of existing Drawable object.*/
+        virtual void setDrawCallback(DrawCallback* dc) { _drawCallback=dc; dirtyDisplayList(); }
+
+        /** Get the non const DrawCallback.*/
+        DrawCallback* getDrawCallback() { return _drawCallback.get(); }
+
+        /** Get the const DrawCallback.*/
+        const DrawCallback* getDrawCallback() const { return _drawCallback.get(); }
+
+        /** drawImplementation(RenderInfo&) is a pure virtual method for the actual implementation of OpenGL drawing calls, such as vertex arrays and primitives, that
+          * must be implemented in concrete subclasses of the Drawable base class, examples include osg::Geometry and osg::ShapeDrawable.
+          * drawImplementation(RenderInfo&) is called from the draw(RenderInfo&) method, with the draw method handling management of OpenGL display lists,
+          * and drawImplementation(RenderInfo&) handling the actual drawing itself.
+          * @param renderInfo The osg::RenderInfo object that encapsulates the current rendering information including the osg::State OpenGL state for the current graphics context. */
+        virtual void drawImplementation(RenderInfo& /*renderInfo*/) const {}
+
+
+        /** Return a OpenGL display list handle a newly generated or reused from display list cache. */
+        static GLuint generateDisplayList(unsigned int contextID, unsigned int sizeHint = 0);
+
+        /** Set the minimum number of display lists to retain in the deleted display list cache. */
+        static void setMinimumNumberOfDisplayListsToRetainInCache(unsigned int minimum);
+
+        /** Get the minimum number of display lists to retain in the deleted display list cache. */
+        static unsigned int getMinimumNumberOfDisplayListsToRetainInCache();
+
+        /** Use deleteDisplayList instead of glDeleteList to allow
+          * OpenGL display list to be cached until they can be deleted
+          * by the OpenGL context in which they were created, specified
+          * by contextID.*/
+        static void deleteDisplayList(unsigned int contextID,GLuint globj, unsigned int sizeHint = 0);
+
+        /** Flush all the cached display list which need to be deleted
+          * in the OpenGL context related to contextID.*/
+        static void flushAllDeletedDisplayLists(unsigned int contextID);
+
+        /** Flush all the cached display list which need to be deleted
+          * in the OpenGL context related to contextID.
+          * Note, unlike flush no OpenGL calls are made, instead the handles are all removed.
+          * this call is useful for when an OpenGL context has been destroyed. */
+        static void discardAllDeletedDisplayLists(unsigned int contextID);
+
+        /** Flush the cached display list which need to be deleted
+          * in the OpenGL context related to contextID.*/
+        static void flushDeletedDisplayLists(unsigned int contextID,double& availableTime);
+
+        typedef unsigned int AttributeType;
+
+        enum AttributeTypes
+        {
+            VERTICES            = 0,
+            WEIGHTS             = 1,
+            NORMALS             = 2,
+            COLORS              = 3,
+            SECONDARY_COLORS    = 4,
+            FOG_COORDS          = 5,
+            ATTRIBUTE_6         = 6,
+            ATTRIBUTE_7         = 7,
+            TEXTURE_COORDS      = 8,
+            TEXTURE_COORDS_0    = TEXTURE_COORDS,
+            TEXTURE_COORDS_1    = TEXTURE_COORDS_0+1,
+            TEXTURE_COORDS_2    = TEXTURE_COORDS_0+2,
+            TEXTURE_COORDS_3    = TEXTURE_COORDS_0+3,
+            TEXTURE_COORDS_4    = TEXTURE_COORDS_0+4,
+            TEXTURE_COORDS_5    = TEXTURE_COORDS_0+5,
+            TEXTURE_COORDS_6    = TEXTURE_COORDS_0+6,
+            TEXTURE_COORDS_7    = TEXTURE_COORDS_0+7
+            // only eight texture coord examples provided here, but underlying code can handle any no of texture units,
+            // simply co them as (TEXTURE_COORDS_0+unit).
+        };
+
+        class AttributeFunctor
+        {
+        public:
+            virtual ~AttributeFunctor() {}
+
+            virtual void apply(AttributeType,unsigned int,GLbyte*) {}
+            virtual void apply(AttributeType,unsigned int,GLshort*) {}
+            virtual void apply(AttributeType,unsigned int,GLint*) {}
+
+            virtual void apply(AttributeType,unsigned int,GLubyte*) {}
+            virtual void apply(AttributeType,unsigned int,GLushort*) {}
+            virtual void apply(AttributeType,unsigned int,GLuint*) {}
+
+            virtual void apply(AttributeType,unsigned int,float*) {}
+            virtual void apply(AttributeType,unsigned int,Vec2*) {}
+            virtual void apply(AttributeType,unsigned int,Vec3*) {}
+            virtual void apply(AttributeType,unsigned int,Vec4*) {}
+            virtual void apply(AttributeType,unsigned int,Vec4ub*) {}
+
+            virtual void apply(AttributeType,unsigned int,double*) {}
+            virtual void apply(AttributeType,unsigned int,Vec2d*) {}
+            virtual void apply(AttributeType,unsigned int,Vec3d*) {}
+            virtual void apply(AttributeType,unsigned int,Vec4d*) {}
+        };
+
+
+        /** Return true if the Drawable subclass supports accept(AttributeFunctor&).*/
+        virtual bool supports(const AttributeFunctor&) const { return false; }
+
+        /** accept an AttributeFunctor and call its methods to tell it about the internal attributes that this Drawable has.
+          * return true if functor handled by drawable,
+          * return false on failure of drawable to generate functor calls.*/
+        virtual void accept(AttributeFunctor&) {}
+
+
+        class ConstAttributeFunctor
+        {
+        public:
+
+            virtual ~ConstAttributeFunctor() {}
+
+            virtual void apply(AttributeType,unsigned int,const GLbyte*) {}
+            virtual void apply(AttributeType,unsigned int,const GLshort*) {}
+            virtual void apply(AttributeType,unsigned int,const GLint*) {}
+
+            virtual void apply(AttributeType,unsigned int,const GLubyte*) {}
+            virtual void apply(AttributeType,unsigned int,const GLushort*) {}
+            virtual void apply(AttributeType,unsigned int,const GLuint*) {}
+
+            virtual void apply(AttributeType,unsigned int,const float*) {}
+            virtual void apply(AttributeType,unsigned int,const Vec2*) {}
+            virtual void apply(AttributeType,unsigned int,const Vec3*) {}
+            virtual void apply(AttributeType,unsigned int,const Vec4*) {}
+            virtual void apply(AttributeType,unsigned int,const Vec4ub*) {}
+
+            virtual void apply(AttributeType,unsigned int,const double*) {}
+            virtual void apply(AttributeType,unsigned int,const Vec2d*) {}
+            virtual void apply(AttributeType,unsigned int,const Vec3d*) {}
+            virtual void apply(AttributeType,unsigned int,const Vec4d*) {}
+        };
+
+        /** Return true if the Drawable subclass supports accept(ConstAttributeFunctor&).*/
+        virtual bool supports(const ConstAttributeFunctor&) const { return false; }
+
+        /** Accept an AttributeFunctor and call its methods to tell it about the internal attributes that this Drawable has.
+          * return true if functor handled by drawable,
+          * return false on failure of drawable to generate functor calls.*/
+        virtual void accept(ConstAttributeFunctor&) const {}
+
+
+
+        /** Return true if the Drawable subclass supports accept(PrimitiveFunctor&).*/
+        virtual bool supports(const PrimitiveFunctor&) const { return false; }
+
+        /** Accept a PrimitiveFunctor and call its methods to tell it about the internal primitives that this Drawable has.
+          * return true if functor handled by drawable, return false on failure of drawable to generate functor calls.
+          * Note, PrimtiveFunctor only provides const access of the primitives, as primitives may be procedurally generated
+          * so one cannot modify it.*/
+        virtual void accept(PrimitiveFunctor&) const {}
+
+        /** Return true if the Drawable subclass supports accept(PrimitiveIndexFunctor&).*/
+        virtual bool supports(const PrimitiveIndexFunctor&) const { return false; }
+
+        /** Accept a PrimitiveIndexFunctor and call its methods to tell it about the internal primitives that this Drawable has.
+          * return true if functor handled by drawable, return false on failure of drawable to generate functor calls.
+          * Note, PrimtiveIndexFunctor only provide const access of the primitives, as primitives may be procedurally generated
+          * so one cannot modify it.*/
+        virtual void accept(PrimitiveIndexFunctor&) const {}
+
+    protected:
+
+        Drawable& operator = (const Drawable&) { return *this;}
+
+        virtual ~Drawable();
+
+        /** set the bounding box .*/
+        void setBound(const BoundingBox& bb) const;
+
+        friend class Node;
+        friend class Geode;
+        friend class StateSet;
+
+        BoundingBox                         _initialBound;
+        ref_ptr<ComputeBoundingBoxCallback> _computeBoundCallback;
+        mutable BoundingBox                 _boundingBox;
+        mutable bool                        _boundingBoxComputed;
+
+        ref_ptr<Shape>          _shape;
+
+        bool                    _supportsDisplayList;
+        bool                    _useDisplayList;
+        bool                    _supportsVertexBufferObjects;
+        bool                    _useVertexBufferObjects;
+
+        typedef osg::buffered_value<GLuint> GLObjectList;
+        mutable GLObjectList    _globjList;
+
+        ref_ptr<UpdateCallback> _drawableUpdateCallback;
+        ref_ptr<EventCallback>  _drawableEventCallback;
+
+        ref_ptr<CullCallback>   _drawableCullCallback;
+        ref_ptr<DrawCallback>   _drawCallback;
+};
+
+inline void Drawable::draw(RenderInfo& renderInfo) const
+{
+#ifdef OSG_GL_DISPLAYLISTS_AVAILABLE
+    if (_useDisplayList && !(_supportsVertexBufferObjects && _useVertexBufferObjects && renderInfo.getState()->isVertexBufferObjectSupported()))
+    {
+        // get the contextID (user defined ID of 0 upwards) for the
+        // current OpenGL context.
+        unsigned int contextID = renderInfo.getContextID();
+
+        // get the globj for the current contextID.
+        GLuint& globj = _globjList[contextID];
+
+        // call the globj if already set otherwise compile and execute.
+        if( globj != 0 )
+        {
+            glCallList( globj );
+        }
+        else if (_useDisplayList)
+        {
+#ifdef USE_SEPARATE_COMPILE_AND_EXECUTE
+            globj = generateDisplayList(contextID, getGLObjectSizeHint());
+            glNewList( globj, GL_COMPILE );
+            if (_drawCallback.valid())
+                _drawCallback->drawImplementation(renderInfo,this);
+            else
+                drawImplementation(renderInfo);
+            glEndList();
+
+            glCallList( globj);
+#else
+            globj = generateDisplayList(contextID, getGLObjectSizeHint());
+            glNewList( globj, GL_COMPILE_AND_EXECUTE );
+            if (_drawCallback.valid())
+                _drawCallback->drawImplementation(renderInfo,this);
+            else
+                drawImplementation(renderInfo);
+            glEndList();
+#endif
+        }
+
+        return;
+
+    }
+#endif
+
+    // draw object as nature intended..
+    if (_drawCallback.valid())
+        _drawCallback->drawImplementation(renderInfo,this);
+    else
+        drawImplementation(renderInfo);
+}
+
+class AttributeFunctorArrayVisitor : public ArrayVisitor
+{
+    public:
+
+        AttributeFunctorArrayVisitor(Drawable::AttributeFunctor& af):
+            _af(af),
+            _type(0) {}
+
+        virtual ~AttributeFunctorArrayVisitor() {}
+
+        virtual void apply(ByteArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(ShortArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(IntArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(UByteArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(UShortArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(UIntArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(Vec4ubArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(FloatArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(Vec2Array& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(Vec3Array& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(Vec4Array& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(DoubleArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(Vec2dArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(Vec3dArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(Vec4dArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+
+
+        inline void applyArray(Drawable::AttributeType type,Array* array)
+        {
+            if (array)
+            {
+                _type = type;
+                array->accept(*this);
+            }
+        }
+
+    protected:
+
+        AttributeFunctorArrayVisitor& operator = (const AttributeFunctorArrayVisitor&) { return *this; }
+        Drawable::AttributeFunctor&   _af;
+        Drawable::AttributeType       _type;
+};
+
+class ConstAttributeFunctorArrayVisitor : public ConstArrayVisitor
+{
+    public:
+
+        ConstAttributeFunctorArrayVisitor(Drawable::ConstAttributeFunctor& af):
+            _af(af),
+            _type(0) {}
+
+        virtual ~ConstAttributeFunctorArrayVisitor() {}
+
+        virtual void apply(const ByteArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const ShortArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const IntArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const UByteArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const UShortArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const UIntArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const Vec4ubArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const FloatArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const Vec2Array& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const Vec3Array& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const Vec4Array& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const DoubleArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const Vec2dArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const Vec3dArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+        virtual void apply(const Vec4dArray& array) {  if (!array.empty()) _af.apply(_type,array.size(),&(array.front())); }
+
+
+        inline void applyArray(Drawable::AttributeType type,const Array* array)
+        {
+            if (array)
+            {
+                _type = type;
+                array->accept(*this);
+            }
+        }
+
+protected:
+
+        ConstAttributeFunctorArrayVisitor& operator = (const ConstAttributeFunctorArrayVisitor&) { return *this; }
+
+        Drawable::ConstAttributeFunctor&    _af;
+        Drawable::AttributeType             _type;
+};
+
+}
+
+#endif

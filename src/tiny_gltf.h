@@ -340,6 +340,7 @@ using ColorValue = std::array<double, 4>;
   std::string string_value;
   std::vector<double> number_array;
   std::map<std::string, double> json_double_value;
+  std::map<std::string, int> json_int_value;
 
   //context sensitive methods. depending the type of the Parameter you are accessing, these are either valid or not
   //If this parameter represent a texture map in a material, will return the texture index
@@ -484,7 +485,7 @@ struct BufferView {
   size_t byteLength;  // required, minimum 1
   size_t byteStride;  // minimum 4, maximum 252 (multiple of 4), default 0 =
                       // understood to be tightly packed
-  int target;         // ["ARRAY_BUFFER", "ELEMENT_ARRAY_BUFFER"]
+  int target = 0;         // ["ARRAY_BUFFER", "ELEMENT_ARRAY_BUFFER"]
   Value extras;
 
   BufferView() : byteOffset(0), byteStride(0) {}
@@ -3285,17 +3286,26 @@ static void SerializeParameterMap(ParameterMap &param, json &o) {
     if (paramIt->second.number_array.size()) {
       SerializeNumberArrayProperty<double>(paramIt->first,
                                            paramIt->second.number_array, o);
-    } else if (paramIt->second.json_double_value.size()) {
+    }
+	else if (paramIt->second.json_double_value.size()) {
       json json_double_value;
-
       for (std::map<std::string, double>::iterator it =
                paramIt->second.json_double_value.begin();
            it != paramIt->second.json_double_value.end(); ++it) {
         json_double_value[it->first] = it->second;
       }
-
       o[paramIt->first] = json_double_value;
-    } else if (!paramIt->second.string_value.empty()) {
+    }
+	else if (paramIt->second.json_int_value.size()) {
+		json json_int_value;
+		for (std::map<std::string, int>::iterator it =
+			paramIt->second.json_int_value.begin();
+			it != paramIt->second.json_int_value.end(); ++it) {
+			json_int_value[it->first] = it->second;
+		}
+		o[paramIt->first] = json_int_value;
+	}
+	else if (!paramIt->second.string_value.empty()) {
       SerializeStringProperty(paramIt->first, paramIt->second.string_value, o);
 	}
 	else if (paramIt->second.number_value > -1) {
@@ -3411,10 +3421,13 @@ static void SerializeGltfBufferView(BufferView &bufferView,
                                     json &o) {
   SerializeNumberProperty("buffer", bufferView.buffer, o);
   SerializeNumberProperty<size_t>("byteLength", bufferView.byteLength, o);
-  SerializeNumberProperty<size_t>("byteStride", bufferView.byteStride, o);
+  if (bufferView.byteStride > 0) {
+	  SerializeNumberProperty<size_t>("byteStride", bufferView.byteStride, o);
+  }
   SerializeNumberProperty<size_t>("byteOffset", bufferView.byteOffset, o);
-  SerializeNumberProperty("target", bufferView.target, o);
-
+  if (bufferView.target > 0) {
+	  SerializeNumberProperty("target", bufferView.target, o);
+  }
   if (bufferView.name.size()) {
     SerializeStringProperty("name", bufferView.name, o);
   }
@@ -3422,11 +3435,16 @@ static void SerializeGltfBufferView(BufferView &bufferView,
 
 // Only external textures are serialized for now
 static void SerializeGltfImage(Image &image, json &o) {
-  SerializeStringProperty("uri", image.uri, o);
-
-  if (image.name.size()) {
-    SerializeStringProperty("name", image.name, o);
-  }
+	if (image.uri.empty()) {
+		SerializeStringProperty("mimeType", image.mimeType, o);
+		SerializeNumberProperty<int>("bufferView", image.bufferView, o);
+	}
+	else {
+		SerializeStringProperty("uri", image.uri, o);
+	}
+	if (image.name.size()) {
+		SerializeStringProperty("name", image.name, o);
+	}
 }
 
 static void SerializeGltfMaterial(Material &material, json &o) {
@@ -3538,10 +3556,10 @@ static void SerializeGltfNode(Node &node, json &o) {
     lightsExt["KHR_lights_cmn"] = values;
     o["extensions"] = lightsExt;
   }
-
-
   SerializeStringProperty("name", node.name, o);
-  SerializeNumberArrayProperty<int>("children", node.children, o);
+  if (node.children.size()) {
+	  SerializeNumberArrayProperty<int>("children", node.children, o);
+  }
 }
 
 static void SerializeGltfSampler(Sampler &sampler, json &o) {

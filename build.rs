@@ -1,25 +1,29 @@
 extern crate cc;
 use std::fs;
-use std::process::Command;
+//use std::process::Command;
 
 fn main() {
-    fs::create_dir_all("target/debug");
-    fs::create_dir_all("target/release");
+    fs::create_dir_all("target/debug").unwrap();
+    fs::create_dir_all("target/release").unwrap();
     
-    cc::Build::new()
-        .cpp(true)
-        .warnings(false)
-        .file("./src/shp23dtile.cpp")
-        .file("./src/tileset.cpp")
-        .include("./src/")
-        .define("TINYGLTF_IMPLEMENTATION", None)
-        .define("STB_IMAGE_IMPLEMENTATION", None)
-        .compile("shp2obj");
-
     if cfg!(windows) {
-        println!("build in windows:");
-        println!("cargo:rustc-link-search=native=.");
+        cc::Build::new()
+            .cpp(true)
+            .warnings(false)
+            .define("WIN32",None)
+            .include("./src")
+            .include("./src/osg")
+            .file("./src/tileset.cpp")
+            .file("./src/shp23dtile.cpp")
+            .file("./src/osgb23dtile.cpp")
+            .compile("3dtile");
+        // -------------
+        println!("cargo:rustc-link-search=native=./lib");
+        // -------------
         println!("cargo:rustc-link-lib=gdal_i");
+        println!("cargo:rustc-link-lib=osg");
+        println!("cargo:rustc-link-lib=osgDB");
+        println!("cargo:rustc-link-lib=osgUtil");
     } else {
         println!("cargo:rustc-link-search=native=.");
     }

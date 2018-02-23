@@ -4,7 +4,7 @@ extern crate encoding;
 use std::time;
 
 extern "C" {
-	fn shp2obj(name: *const u8, layer: i32, dest: *const u8) -> bool;
+	fn shp23dtile(name: *const u8, layer: i32, dest: *const u8) -> bool;
 
 	//fn test() -> bool;
 }
@@ -54,13 +54,54 @@ pub extern fn mkdirs(path : *const i8) -> bool {
 	}
 }
 
+////////////////////////////
+use std::io;
+use std::ffi;
+use std::path::Path;
+use std::fs::{self, DirEntry};
+
+#[derive(Debug)]
+pub struct TileInfo {
+	name : String,
+	url : String,
+    children : Vec<TileInfo>
+}
+
+pub fn visit_path(dir: &Path) -> Result<TileInfo,io::Error> {
+	let mut tl = TileInfo{
+			name: "xx".into(),
+			url: dir.to_str().unwrap().into(),
+			children: vec![]
+	};
+	if dir.is_dir() {
+		for entry in fs::read_dir(dir)? {
+			let entry = entry?;
+            let path = entry.path();
+            if !path.is_dir() {
+            	if path.extension().unwrap().to_str() != Some("json") {
+            		continue;
+            	}
+            }
+        	let res = visit_path(&path);
+        	if let Ok(tile) = res {
+        		tl.children.push(tile);
+        	}
+		}
+	}
+	else {
+		// if name is *.json, parse json and merge
+		// tl.url = dir.to_str().unwrap().into();
+	}
+	Ok(tl)
+}
+
 #[no_mangle]
 pub extern fn merge_tileset(path: *const i8) -> bool{
-	use std::fs;
-	use std::ffi;
+
 	unsafe {
 		match ffi::CStr::from_ptr(path).to_str() {
 			Ok(buf) => {
+				//  Walk -> Struct -> Json
 				match fs::create_dir_all(buf) {
 					Ok(_) => { true } 
 					Err(e) => { println!("ERROR: {:?}", e); false }
@@ -77,9 +118,12 @@ pub extern fn merge_tileset(path: *const i8) -> bool{
 fn main() {
 	use std::io;
 	let mut msg = String::new();
-	io::stdin().read_line(&mut msg);
+	io::stdin().read_line(&mut msg).unwrap();
 	let shpfile = r#"E:\test\buildings\osm_bd_height_rd.shp"#;
 	let dest = r#"E:\test\buildings\结果文件"#;
+
+	let res_tile = visit_path(Path::new(dest));
+	println!("{:#?}", res_tile.unwrap());
 	//let mut rs = GB18030.encode(shpfile, EncoderTrap::Strict).unwrap();
 	unsafe {
 		let mut source_vec = shpfile.to_string()
@@ -91,7 +135,7 @@ fn main() {
 		dest_vec.push(0x00);
 
 		let tick = time::SystemTime::now();
-		shp2obj(source_vec.as_ptr(), 0, dest_vec.as_ptr());
+		shp23dtile(source_vec.as_ptr(), 0, dest_vec.as_ptr());
 		println!("{:?}", tick.elapsed());
 	}
 }

@@ -1,0 +1,75 @@
+/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2006 Robert Osfield 
+ *
+ * This library is open source and may be redistributed and/or modified under  
+ * the terms of the OpenSceneGraph Public License (OSGPL) version 0.0 or 
+ * (at your option) any later version.  The full license is in LICENSE file
+ * included with this distribution, and on the openscenegraph.org website.
+ * 
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the 
+ * OpenSceneGraph Public License for more details.
+*/
+
+/* Note, elements of PixeBufferWin32 have used Producer/RenderSurface_Win32.cpp as both
+ * a guide to use of X11/GLX and copiying directly in the case of setBorder().
+ * These elements are license under OSGPL as above, with Copyright (C) 2001-2004  Don Burns.
+ */
+
+#ifndef OSGVIEWER_PIXELBUFFERWIN32
+#define OSGVIEWER_PIXELBUFFERWIN32 1
+
+#include <osg/GraphicsContext>
+#include <osgViewer/api/Win32/GraphicsHandleWin32>
+
+namespace osgViewer
+{
+
+class OSGVIEWER_EXPORT PixelBufferWin32 : public osg::GraphicsContext, public osgViewer::GraphicsHandleWin32
+{
+    public:
+
+        PixelBufferWin32(osg::GraphicsContext::Traits* traits);
+        
+        virtual ~PixelBufferWin32();
+    
+        virtual bool isSameKindAs(const Object* object) const { return dynamic_cast<const PixelBufferWin32*>(object)!=0; }
+        virtual const char* libraryName() const { return "osgViewer"; }
+        virtual const char* className() const { return "PixelBufferWin32"; }
+
+        virtual bool valid() const { return _valid; }
+        
+        /** Realize the GraphicsContext.*/
+        virtual bool realizeImplementation();
+
+        /** Return true if the graphics context has been realized and is ready to use.*/
+        virtual bool isRealizedImplementation() const { return _realized; }
+
+        /** Close the graphics context.*/
+        virtual void closeImplementation();
+
+        /** Make this graphics context current.*/
+        virtual bool makeCurrentImplementation();
+        virtual bool makeContextCurrentImplementation( GraphicsContext* /*readContext*/ );
+
+        /** Release the graphics context.*/
+        virtual bool releaseContextImplementation();
+
+        /** Swap the front and back buffers.*/
+        virtual void swapBuffersImplementation();
+       
+        virtual void bindPBufferToTextureImplementation( GLenum /*buffer*/ );
+        
+    protected:
+    
+        void init();
+
+        bool            _initialized;
+        bool            _valid;
+        bool            _realized;
+        int             _boundBuffer;
+};
+
+}
+
+#endif
