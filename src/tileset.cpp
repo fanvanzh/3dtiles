@@ -7,8 +7,12 @@
 ///////////////////////
 extern "C" bool write_file(const char* filename, const char* buf, unsigned long buf_len);
 
-
 ///////////////////////
+static const double pi = std::acos(-1);
+
+double degree2rad(double val) {
+	return val * pi / 180.0;
+}
 
 double lati_to_meter(double diff) {
 	return diff / 0.000000157891;
@@ -29,9 +33,11 @@ double meter_to_longti(double m, double lati) {
 /**
 根据经纬度，生成tileset
 */
-bool write_tileset(double longti, double lati, 
+bool write_tileset(
+	double radian_x, double radian_y, 
 	double tile_w, double tile_h, 
 	double height_min, double height_max,
+	double geometricError,
 	const char* filename, const char* full_path
 	) {
 
@@ -40,9 +46,6 @@ bool write_tileset(double longti, double lati,
 	double ellipsod_c = 40408299984661.4;
 
 	const double pi = std::acos(-1);
-	double radian_x = longti / 180.0 * pi;
-	double radian_y = lati / 180.0 * pi;
-
 	double xn = std::cos(radian_x) * std::cos(radian_y);
 	double yn = std::sin(radian_x) * std::cos(radian_y);
 	double zn = std::sin(radian_y);
@@ -95,16 +98,13 @@ bool write_tileset(double longti, double lati,
 	};
 
 	std::vector<double> region = {
-		radian_x - (tile_w / 2) * 0.000000156785 * std::cos(radian_y),
-		radian_y - tile_h * 0.000000157891,
-		radian_x + (tile_w / 2) * 0.000000156785 * std::cos(radian_y),
-		radian_y + tile_h * 0.000000157891,
+		radian_x - meter_to_longti(tile_w / 2, radian_y),
+		radian_y - meter_to_lati(tile_h / 2),
+		radian_x + meter_to_longti(tile_w / 2, radian_y),
+		radian_y + meter_to_lati(tile_h / 2),
 		height_min,
 		height_max
 	};
-
-	double geometricError = std::max(tile_w, tile_h);
-	geometricError /= 10.0;
 
 	std::string json_txt = "{\"asset\": {\
     \"version\": \"0.0\",\

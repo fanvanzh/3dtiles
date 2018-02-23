@@ -9,7 +9,7 @@ fn main() {
     cc::Build::new()
         .cpp(true)
         .warnings(false)
-        .file("./src/shp2obj.cpp")
+        .file("./src/shp23dtile.cpp")
         .file("./src/tileset.cpp")
         .include("./src/")
         .define("TINYGLTF_IMPLEMENTATION", None)

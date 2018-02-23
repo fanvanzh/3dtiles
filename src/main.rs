@@ -9,7 +9,6 @@ extern "C" {
 	//fn test() -> bool;
 }
 
-
 #[no_mangle]
 pub extern fn write_file(file_name: *const i8, buf: *const u8, buf_len: u32) -> bool {
 	use std::ffi;
@@ -43,7 +42,8 @@ pub extern fn mkdirs(path : *const i8) -> bool {
 		match ffi::CStr::from_ptr(path).to_str() {
 			Ok(buf) => {
 				match fs::create_dir_all(buf) {
-					Ok(_) => { true } Err(e) => { println!("ERROR: {:?}", e); false }
+					Ok(_) => { true } 
+					Err(e) => { println!("ERROR: {:?}", e); false }
 				}	
 			}
 			Err(e) =>{
@@ -54,10 +54,30 @@ pub extern fn mkdirs(path : *const i8) -> bool {
 	}
 }
 
+#[no_mangle]
+pub extern fn merge_tileset(path: *const i8) -> bool{
+	use std::fs;
+	use std::ffi;
+	unsafe {
+		match ffi::CStr::from_ptr(path).to_str() {
+			Ok(buf) => {
+				match fs::create_dir_all(buf) {
+					Ok(_) => { true } 
+					Err(e) => { println!("ERROR: {:?}", e); false }
+				}	
+			}
+			Err(e) =>{
+				println!("ERROR: {:?}", e);
+				false
+			}
+		}
+	}	
+}
+
 fn main() {
-	//use std::io;
-	//let mut msg = String::new();
-	//io::stdin().read_line(&mut msg);
+	use std::io;
+	let mut msg = String::new();
+	io::stdin().read_line(&mut msg);
 	let shpfile = r#"E:\test\buildings\osm_bd_height_rd.shp"#;
 	let dest = r#"E:\test\buildings\结果文件"#;
 	//let mut rs = GB18030.encode(shpfile, EncoderTrap::Strict).unwrap();

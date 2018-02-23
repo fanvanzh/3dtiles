@@ -11,11 +11,16 @@
 extern "C" bool mkdirs(const char* path);
 extern "C" bool write_file(const char* filename, const char* buf, unsigned long buf_len);
 //// -- others 
-extern bool write_tileset(double longti, double lati, 
+extern bool write_tileset(
+	double longti, double lati, 
 	double tile_w, double tile_h, 
 	double height_min, double height_max,
+	double geometricError,
 	const char* filename, const char* full_path
 	) ;
+
+extern double degree2rad(double val);
+
 extern double lati_to_meter(double diff);
 
 extern double longti_to_meter(double diff, double lati);
@@ -177,22 +182,20 @@ struct Polygon_Mesh
 @param: center_y, 投影中心点
 */
 Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_y) {
-	double scale = 111 * 1000;
 	double bottom = 0.0;
 	double height = 50.0;
 	Polygon_Mesh mesh;
-
 	OGREnvelope geo_box;
 	polyon->getEnvelope(&geo_box);
     mesh.box_min = {
-        (geo_box.MinX - center_x) * scale, 
+        longti_to_meter(degree2rad(geo_box.MinX - center_x), degree2rad( center_y )),
         bottom, 
-        (geo_box.MinY - center_y) * scale
+        lati_to_meter(degree2rad(geo_box.MinY - center_y))
     };
     mesh.box_max = { 
-        (geo_box.MaxX - center_x) * scale,
+        longti_to_meter(degree2rad(geo_box.MaxX - center_x), degree2rad(center_y)),
         height, 
-        (geo_box.MaxY - center_y) * scale
+        lati_to_meter(degree2rad(geo_box.MaxY - center_y))
     };
 	{
 		OGRLinearRing* pRing = polyon->getExteriorRing();
@@ -219,14 +222,14 @@ Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_
 			pRing->getPoint(i, &pt);
 
 			mesh.vertex.push_back({
-				(float)(scale * (pt.getX() - center_x)) , 
+				(float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
 				(float)bottom , 
-				(float)(scale * (pt.getY() - center_y))
+        		(float)lati_to_meter(degree2rad(pt.getY() - center_y))
 			});
 			mesh.vertex.push_back({
-				(float)(scale * (pt.getX() - center_x)) , 
-				(float)height , 
-				(float)(scale * (pt.getY() - center_y))
+				(float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
+				(float)height ,
+				(float)lati_to_meter(degree2rad(pt.getY() - center_y))
 			});
 
 			int point_cnt = mesh.vertex.size();
@@ -297,14 +300,14 @@ Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_
 				OGRPoint pt;
 				pRing->getPoint(i, &pt);
 				mesh.vertex.push_back({
-					(float)(scale * (pt.getX() - center_x)) , 
-					(float)bottom , 
-					(float)(scale * (pt.getY() - center_y))
+					(float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
+					(float)bottom ,
+					(float)lati_to_meter(degree2rad(pt.getY() - center_y))
 				});
 				mesh.vertex.push_back({
-					(float)(scale * (pt.getX() - center_x)) , 
-					(float)height , 
-					(float)(scale * (pt.getY() - center_y))
+					(float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
+					(float)height ,
+					(float)lati_to_meter(degree2rad(pt.getY() - center_y))
 				});
 				int point_cnt = mesh.vertex.size();
 				if (i > 0) {
@@ -447,6 +450,26 @@ extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
 		char b3dm_file[512];
 		sprintf(b3dm_file, "%s\\tile\\%d\\%d", dest, _node->_z, _node->_x);
 		mkdirs(b3dm_file);
+		// fix the box 
+		{
+			OGREnvelope node_box;
+			for (auto id : _node->get_ids()) {
+				OGRFeature *poFeature = poLayer->GetFeature(id);
+				OGRGeometry* poGeometry = poFeature->GetGeometryRef();
+				OGREnvelope geo_box;
+				poGeometry->getEnvelope(&geo_box);
+				if ( !node_box.IsInit() ) {
+					node_box = geo_box;
+				}
+				else {
+					node_box.Merge(geo_box);
+				}
+			}
+			_node->_box.minx = node_box.MinX;
+			_node->_box.maxx = node_box.MaxX;
+			_node->_box.miny = node_box.MinY;
+			_node->_box.maxy = node_box.MaxY;
+		}
 		double center_x = ( _node->_box.minx + _node->_box.maxx ) / 2;
 		double center_y = ( _node->_box.miny + _node->_box.maxy ) / 2;
         std::vector<Polygon_Mesh> v_meshes;
@@ -483,11 +506,14 @@ extern "C" bool shp2obj(const char* filename, int layer_id, const char* dest)
         double box_width = ( _node->_box.maxx - _node->_box.minx )  ;
         double box_height = ( _node->_box.maxy - _node->_box.miny ) ;
 		const double pi = std::acos(-1);
-        write_tileset(center_x, center_y, 
-        	longti_to_meter(box_width / 2, center_y * pi / 180.0),
-        	lati_to_meter(box_height / 2),
-        	0 , 500,
+		double radian_x = degree2rad(center_x);
+		double radian_y = degree2rad(center_y);
+        write_tileset(radian_x, radian_y, 
+        	longti_to_meter(degree2rad(box_width) * 1.05, radian_y),
+        	lati_to_meter(degree2rad(box_height)  * 1.05),
+        	0 , 100, 100,
 			b3dm_name,tile_json_path);
+        break;
 	}
 	//
 	GDALClose(poDS);
