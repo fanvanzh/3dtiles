@@ -7,6 +7,7 @@ extern "C" {
 	fn shp23dtile(name: *const u8, layer: i32, dest: *const u8) -> bool;
 
 	//fn test() -> bool;
+	fn osgb2glb() -> i32;
 }
 
 #[no_mangle]
@@ -116,9 +117,9 @@ pub extern fn merge_tileset(path: *const i8) -> bool{
 }
 
 fn main() {
-	use std::io;
-	let mut msg = String::new();
-	io::stdin().read_line(&mut msg).unwrap();
+	// use std::io;
+	// let mut msg = String::new();
+	// io::stdin().read_line(&mut msg).unwrap();
 	let shpfile = r#"E:\test\buildings\osm_bd_height_rd.shp"#;
 	let dest = r#"E:\test\buildings\结果文件"#;
 
@@ -134,8 +135,12 @@ fn main() {
 			.as_bytes_mut().to_vec();
 		dest_vec.push(0x00);
 
-		let tick = time::SystemTime::now();
+		let mut tick = time::SystemTime::now();
 		shp23dtile(source_vec.as_ptr(), 0, dest_vec.as_ptr());
-		println!("{:?}", tick.elapsed());
+		println!("shp --> 3dtile: {:#?}", tick.elapsed());
+		
+		tick = time::SystemTime::now();
+		osgb2glb();
+		println!("osgb --> glb: {:#?}", tick.elapsed());
 	}
 }

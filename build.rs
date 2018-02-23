@@ -1,6 +1,6 @@
 extern crate cc;
 use std::fs;
-//use std::process::Command;
+use std::process::{Command,Stdio};
 
 fn main() {
     fs::create_dir_all("target/debug").unwrap();
@@ -24,6 +24,22 @@ fn main() {
         println!("cargo:rustc-link-lib=osg");
         println!("cargo:rustc-link-lib=osgDB");
         println!("cargo:rustc-link-lib=osgUtil");
+
+        let out = Command::new("cmd")
+            .args(
+                &[
+                    "/C",
+                    "xcopy",
+                    r#".\bin"#,
+                    r#".\target\debug"#,
+                    "/y",
+                    "/e"
+                ],
+            )
+            .stdout(Stdio::inherit())
+            .output()
+            .expect("fuck");
+        println!("{:?}", out.stdout);
     } else {
         println!("cargo:rustc-link-search=native=.");
     }

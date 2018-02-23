@@ -29,7 +29,7 @@ void write_buf(void* context, void* data, int len) {
 	buf->insert(buf->end(), (char*)data, (char*)data + len);
 }
 
-int osgb2glb() {
+extern "C" int osgb2glb() {
 
 	vector<string> fileNames = { R"(E:\Data\倾斜摄影\hgc\Data\Tile_+005_+004\Tile_+005_+004_L23_00033000.osgb)" };
 
