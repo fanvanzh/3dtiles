@@ -286,8 +286,8 @@ bool osgb2glb_buf(const char* path, std::string& glb_buff) {
 
 			tinygltf::Image image;
 			image.mimeType = "image/jpeg";
-			static int buf_view = 4;
-			image.bufferView = buf_view++;
+			int buf_view = 4;
+			image.bufferView = buf_view;
 			model.images.push_back(image);
 			tinygltf::BufferView bfv;
 			bfv.buffer = 0;
@@ -446,6 +446,15 @@ bool osgb23dtile_buf(const char* path, std::string& b3dm_buf) {
 extern "C" bool osgb23dtile(const char* in, const char* out) {
 	std::string b3dm_buf;
 	bool ret = osgb23dtile_buf(in,b3dm_buf);
+	if (!ret) return false;
+	ret = write_file(out, b3dm_buf.data(), b3dm_buf.size());
+	if (!ret) return false;
+	return true;
+}
+
+extern "C" bool osgb2glb(const char* in, const char* out) {
+	std::string b3dm_buf;
+	bool ret = osgb2glb_buf(in,b3dm_buf);
 	if (!ret) return false;
 	ret = write_file(out, b3dm_buf.data(), b3dm_buf.size());
 	if (!ret) return false;

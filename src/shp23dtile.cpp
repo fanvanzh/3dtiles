@@ -494,7 +494,6 @@ extern "C" bool shp23dtile(const char* filename, int layer_id, const char* dest)
         	lati_to_meter(degree2rad(box_height)  * 1.05),
         	0 , 100, 100,
 			b3dm_name,tile_json_path);
-        break;
 	}
 	//
 	GDALClose(poDS);

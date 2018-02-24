@@ -5,10 +5,26 @@ extern crate rayon;
 use std::time;
 use rayon::prelude::*;
 
+////////////////////////////
+use std::io;
+use std::ffi;
+use std::path::Path;
+use std::fs::{self};
+
+#[derive(Debug)]
+pub struct TileInfo {
+	name : String,
+	url : String,
+    children : Vec<TileInfo>
+}
+
+
 extern "C" {
 	fn shp23dtile(name: *const u8, layer: i32, dest: *const u8) -> bool;
 
 	fn osgb23dtile(name_in: *const u8 , name_out: *const u8 ) -> bool;
+
+	fn osgb2glb(name_in: *const u8 , name_out: *const u8 ) -> bool;
 }
 
 #[no_mangle]
@@ -56,18 +72,6 @@ pub extern fn mkdirs(path : *const i8) -> bool {
 	}
 }
 
-////////////////////////////
-use std::io;
-use std::ffi;
-use std::path::Path;
-use std::fs::{self};
-
-#[derive(Debug)]
-pub struct TileInfo {
-	name : String,
-	url : String,
-    children : Vec<TileInfo>
-}
 
 pub fn visit_path(dir: &Path) -> Result<TileInfo,io::Error> {
 	let mut tl = TileInfo{
@@ -118,17 +122,17 @@ pub extern fn merge_tileset(path: *const i8) -> bool{
 }
 
 fn main() {
-	use std::io;
-	let mut msg = String::new();
-	io::stdin().read_line(&mut msg).unwrap();
+	// use std::io;
+	// let mut msg = String::new();
+	// io::stdin().read_line(&mut msg).unwrap();
 	// let shpfile = r#"E:\test\buildings\osm_bd_height_rd.shp"#;
 	// let dest = r#"E:\test\buildings\结果文件"#;
 	// let res_tile = visit_path(Path::new(dest));
 	// println!("{:#?}", res_tile.unwrap());
 	// let mut rs = GB18030.encode(shpfile, EncoderTrap::Strict).unwrap();
 	// shape_batch_convert(shpfile, dest);
-	let dir = Path::new(r#"E:\Data\倾斜摄影\hgc\"#);
-	let dir_dest = Path::new(r#"E:\Data\倾斜摄影\hgc_b3dm\"#);
+	let dir = Path::new(r#"E:\Data\倾斜摄影\test\"#);
+	let dir_dest = Path::new(r#"E:\Data\倾斜摄影\test_b3dm\"#);
 	osgb_batch_convert(&dir,&dir_dest);
 }
 
@@ -180,27 +184,33 @@ fn osgv_convert(dir_osgb: &str, dir_from: &str, dir_dest: &str) {
 			dest_vec.push(0x00);
 			// create dir first
 			let dest_path = Path::new(dest_string.as_str()).parent().unwrap();
-			fs::create_dir_all(dest_path);
+			if let Err(e) = fs::create_dir_all(dest_path) {
+				println!("{:?}", e);
+				return;
+			}
 			if !osgb23dtile(source_vec.as_ptr(), dest_vec.as_ptr()) {
 				println!("failed: {}",dir_osgb);
-			}	
-		}
+			}
+	}
 }
 
 fn osgb_batch_convert(dir: &Path, dir_dest:&Path) {
-	fs::create_dir_all(dir_dest);
+	if let Err(e) = fs::create_dir_all(dir_dest) {
+		println!("{:?}", e);
+		return;
+	}
 	let mut osg_array = vec![];
 	let tick = time::SystemTime::now();
 	{
-		walk_path(dir, &mut |dir_osgb:&str| {
+		if let Err(e) = walk_path(dir, &mut |dir_osgb:&str| {
 			osg_array.push(dir_osgb.to_string());
-		});
+		}) {
+			println!("{:?}", e);
+			return;
+		}
 	}
 	osg_array.par_iter().map(|x| {
 		osgv_convert(x.as_str(),dir.to_str().unwrap(), dir_dest.to_str().unwrap());
 	}).count();
-	// for x in osg_array {
-	//     osgv_convert(x.as_str(),dir.to_str().unwrap(), dir_dest.to_str().unwrap());
-	// }
-	println!("osgb --> b3dm: {:#?}", tick.elapsed());
+	println!("osgb --> 3dtile: {:#?}", tick.elapsed());
 }
