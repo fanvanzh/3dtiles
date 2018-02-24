@@ -1,7 +1,9 @@
 extern crate libc;
 extern crate encoding;
+extern crate rayon;
 
 use std::time;
+use rayon::prelude::*;
 
 extern "C" {
 	fn shp23dtile(name: *const u8, layer: i32, dest: *const u8) -> bool;
@@ -145,7 +147,7 @@ fn shape_batch_convert(from: &str, to: &str) {
 	}
 }
 
-fn walk_path(dir: &Path, cb: &Fn(&str)) -> io::Result<()>{
+fn walk_path(dir: &Path, cb: &mut FnMut(&str)) -> io::Result<()> {
 	if dir.is_dir() {
 		for entry in fs::read_dir(dir)? {
 			let entry = entry?;
@@ -164,18 +166,14 @@ fn walk_path(dir: &Path, cb: &Fn(&str)) -> io::Result<()>{
 	Ok(())
 }
 
-fn osgb_batch_convert(dir: &Path, dir_dest:&Path) {
-	fs::create_dir_all(dir_dest);
-	let tick = time::SystemTime::now();
-	walk_path(dir, &|dir_osgb:&str| {
-		// new place
-		unsafe {
+fn osgv_convert(dir_osgb: &str, dir_from: &str, dir_dest: &str) {
+	unsafe {
 			let mut source_vec = dir_osgb.to_string()
 			.as_bytes_mut().to_vec();
 			source_vec.push(0x00);
 			let dest_string = dir_osgb.clone()
 				.replace(".osgb",".b3dm")
-				.replace(dir.to_str().unwrap(), dir_dest.to_str().unwrap());
+				.replace(dir_from, dir_dest);
 			//println!("{:?} -- > {:?}", dir_osgb, dest_string);
 			let mut dest_vec = dest_string.to_string()
 				.as_bytes_mut().to_vec();
@@ -184,10 +182,25 @@ fn osgb_batch_convert(dir: &Path, dir_dest:&Path) {
 			let dest_path = Path::new(dest_string.as_str()).parent().unwrap();
 			fs::create_dir_all(dest_path);
 			if !osgb23dtile(source_vec.as_ptr(), dest_vec.as_ptr()) {
-				println!("failed: {:?}",dir_osgb);
+				println!("failed: {}",dir_osgb);
 			}	
 		}
-	});
+}
 
-	println!("osgb --> glb: {:#?}", tick.elapsed());
+fn osgb_batch_convert(dir: &Path, dir_dest:&Path) {
+	fs::create_dir_all(dir_dest);
+	let mut osg_array = vec![];
+	let tick = time::SystemTime::now();
+	{
+		walk_path(dir, &mut |dir_osgb:&str| {
+			osg_array.push(dir_osgb.to_string());
+		});
+	}
+	osg_array.par_iter().map(|x| {
+		osgv_convert(x.as_str(),dir.to_str().unwrap(), dir_dest.to_str().unwrap());
+	}).count();
+	// for x in osg_array {
+	//     osgv_convert(x.as_str(),dir.to_str().unwrap(), dir_dest.to_str().unwrap());
+	// }
+	println!("osgb --> b3dm: {:#?}", tick.elapsed());
 }

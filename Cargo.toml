@@ -7,5 +7,7 @@ authors = ["fanzhenhua <fanzhenhua@superengine.com.cn>"]
 libc = "0.2"
 encoding = "0.2"
 
+rayon = "1.0.0"
+
 [build-dependencies]
 cc = "1.0.*"
