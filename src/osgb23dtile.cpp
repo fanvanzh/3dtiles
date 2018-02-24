@@ -1,5 +1,6 @@
 #include <osg/Material>
 #include <osgDB/ReadFile>
+#include <osgDB/ConvertUTF>
 #include <osgUtil/Optimizer>
 #include <osgUtil/SmoothingVisitor>
 
@@ -11,6 +12,7 @@
 #define TINYGLTF_IMPLEMENTATION
 #include "tiny_gltf.h"
 #include "stb_image_write.h"
+#include "extern.h"
 
 using namespace std;
 
@@ -28,19 +30,51 @@ void write_buf(void* context, void* data, int len) {
 	std::vector<char> *buf = (std::vector<char>*)context;
 	buf->insert(buf->end(), (char*)data, (char*)data + len);
 }
+class InfoVisitor : public osg::NodeVisitor
+{
+public:
+	InfoVisitor()
+		:osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
+	{}
 
-extern "C" int osgb2glb() {
+	virtual void apply(osg::Node& node)
+	{
+		traverse(node);
+	}
 
-	vector<string> fileNames = { R"(E:\Data\倾斜摄影\hgc\Data\Tile_+005_+004\Tile_+005_+004_L23_00033000.osgb)" };
+	virtual void apply(osg::Geode& node)
+	{
+		for (unsigned int n = 0; n < node.getNumDrawables(); n++)
+		{
+			osg::Drawable* draw = node.getDrawable(n);
+			if (!draw)
+				continue;
+			osg::Geometry *g = draw->asGeometry();
+			if (g)
+				geometry_array.push_back(g);
+		}
+		traverse(node);
+	}
+public:
+	std::vector<osg::Geometry*> geometry_array;
+};
 
+bool osgb2glb_buf(const char* path, std::string& glb_buff) {
+
+#ifdef WIN32
+	vector<string> fileNames = { osgDB::convertStringFromUTF8toCurrentCodePage(path) };
+#else
+	vector<string> fileNames = { path };
+#endif // WIN32
 	osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
 	if (!root.valid()) {
-		return 1;
+		return false;
 	}
-	osg::Geode* gNode = root->asGeode();
-	if (!gNode) {
-		return 1;
-	}
+	InfoVisitor infoVisitor;
+	root->accept(infoVisitor);
+	if (infoVisitor.geometry_array.empty())
+		return false;
+
 
 	osgUtil::SmoothingVisitor sv;
 	root->accept(sv);
@@ -51,12 +85,10 @@ extern "C" int osgb2glb() {
 		tinygltf::Buffer buffer;
 		// buffer_view {index,vertex,normal(texcoord,image)}
 		uint32_t buf_offset = 0;
-		uint32_t acc_offset[5] = { 0,0,0,0,0 };
-		for (int j = 0; j < 5; j++)
+		uint32_t acc_offset[4] = { 0,0,0,0 };
+		for (int j = 0; j < 4; j++)
 		{
-			int num = gNode->getNumDrawables();
-			for (size_t i = 0; i < num; i++) {
-				osg::Geometry *g = gNode->getDrawable(i)->asGeometry();
+			for (auto g : infoVisitor.geometry_array) {
 				osg::Array* va = g->getVertexArray();
 				if (j == 0) {
 					// indc
@@ -216,58 +248,60 @@ extern "C" int osgb2glb() {
 					acc.minValues = box_min;
 					model.accessors.push_back(acc);
 				}
-				else if (j == 4) {
-					// image
-					// 共用贴图？？
-					osg::StateSet* ss = g->getStateSet();
-					//osg::Material* mat = dynamic_cast<osg::Material*>(ss->getAttribute(osg::StateAttribute::MATERIAL));
-					osg::Texture* tex = dynamic_cast<osg::Texture*>(ss->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
-					osg::Image* img = tex->getImage(0);
-					int width = img->s();
-					int height = img->t();
-					//int image_len = img->getImageSizeInBytes();
-					const char* buf = (const char*)img->getDataPointer();
-					// jpg
-					stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, buf, 80);
-					
-					tinygltf::Image image;
-					image.mimeType = "image/jpeg";
-					static int buf_view = 4;
-					image.bufferView = buf_view++;
-					model.images.push_back(image);
-					tinygltf::BufferView bfv;
-					bfv.buffer = 0;
-					bfv.byteOffset = buf_offset;
-					bfv.byteLength = buffer.data.size() - buf_offset;
-					/*while (buffer.data.size() % 4 != 0) {
-						buffer.data.push_back(0x00);
-					}*/
-					buf_offset = buffer.data.size();
-					model.bufferViews.push_back(bfv);
-				}
 			}
-			if (j != 4) {
-				tinygltf::BufferView bfv;
-				bfv.buffer = 0;
-				if (j == 0) {
-					bfv.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
-				}
-				else {
-					bfv.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-				}
-				bfv.byteOffset = buf_offset;
-				while (buffer.data.size() % 4 != 0) {
-					buffer.data.push_back(0x00);
-				}
-				bfv.byteLength = buffer.data.size() - buf_offset;
-				buf_offset = buffer.data.size();
-				if (j == 1) { bfv.byteStride = 4 * 3; }
-				model.bufferViews.push_back(bfv);
+			tinygltf::BufferView bfv;
+			bfv.buffer = 0;
+			if (j == 0) {
+				bfv.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
 			}
+			else {
+				bfv.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+			}
+			bfv.byteOffset = buf_offset;
+			while (buffer.data.size() % 4 != 0) {
+				buffer.data.push_back(0x00);
+			}
+			bfv.byteLength = buffer.data.size() - buf_offset;
+			buf_offset = buffer.data.size();
+			if (infoVisitor.geometry_array.size() > 1) {
+				if (j == 1) { bfv.byteStride = 4 * 3; } // ¶¥µã
+				if (j == 2) { bfv.byteStride = 4 * 3; } // ·¨Ïß
+				if (j == 3) { bfv.byteStride = 4 * 2; } // ÌùÍ¼
+			}
+			model.bufferViews.push_back(bfv);
+		}
+		// image
+		// 共用贴图？
+		{
+			osg::StateSet* ss = infoVisitor.geometry_array[0]->getStateSet();
+			//osg::Material* mat = dynamic_cast<osg::Material*>(ss->getAttribute(osg::StateAttribute::MATERIAL));
+			osg::Texture* tex = dynamic_cast<osg::Texture*>(ss->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
+			osg::Image* img = tex->getImage(0);
+			int width = img->s();
+			int height = img->t();
+			//int image_len = img->getImageSizeInBytes();
+			const char* buf = (const char*)img->getDataPointer();
+			// jpg
+			stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, buf, 80);
+
+			tinygltf::Image image;
+			image.mimeType = "image/jpeg";
+			static int buf_view = 4;
+			image.bufferView = buf_view++;
+			model.images.push_back(image);
+			tinygltf::BufferView bfv;
+			bfv.buffer = 0;
+			bfv.byteOffset = buf_offset;
+			bfv.byteLength = buffer.data.size() - buf_offset;
+			while (buffer.data.size() % 4 != 0) {
+				buffer.data.push_back(0x00);
+			}
+			buf_offset = buffer.data.size();
+			model.bufferViews.push_back(bfv);
 		}
 		model.buffers.push_back(std::move(buffer));
 
-		int MeshNum = gNode->getNumDrawables();
+		int MeshNum = infoVisitor.geometry_array.size();
 		for (int i = 0; i < MeshNum; i++) {
 			tinygltf::Mesh mesh;
 			//mesh.name = meshes[i].mesh_name;
@@ -345,11 +379,75 @@ extern "C" int osgb2glb() {
 		model.asset.version = "2.0";
 		model.asset.generator = "fanfan";
 
-		std::string buf = gltf.Serialize(&model);
-
-		FILE* f = fopen("E:\\test\\osgb.glb","wb");
-		fwrite(buf.data(), 1, buf.size(), f);
-		fclose(f);
+		glb_buff = gltf.Serialize(&model);
 	}
-	return 0;
+	return true;
+}
+
+bool osgb23dtile_buf(const char* path, std::string& b3dm_buf) {
+	using nlohmann::json;
+	int mesh_count = 1;
+    std::string feature_json_string;
+    feature_json_string += "{\"BATCH_LENGTH\":";
+    feature_json_string += std::to_string(mesh_count);
+    feature_json_string += "}";
+    while (feature_json_string.size() % 4 != 0 ) {
+        feature_json_string.push_back(' ');
+    }
+    
+    json batch_json;
+    std::vector<int> ids;
+    for (int i = 0; i < mesh_count; ++i) {
+        ids.push_back(i);
+    }
+    std::vector<std::string> names;
+    for (int i = 0; i < mesh_count; ++i) {
+    	std::string mesh_name = "mesh_";
+    	mesh_name += std::to_string(i);
+        names.push_back(mesh_name);
+    }
+    batch_json["batchId"] = ids;
+    batch_json["name"] = names;
+    std::string batch_json_string = batch_json.dump();
+    while (batch_json_string.size() % 4 != 0 ) {
+        batch_json_string.push_back(' ');
+    }
+
+    std::string glb_buf;
+    bool ret = osgb2glb_buf(path, glb_buf);
+    if (!ret) return false;
+    // how length total ?
+    //test
+    //feature_json_string.clear();
+    //batch_json_string.clear();
+    //end-test
+
+    int feature_json_len = feature_json_string.size();
+    int feature_bin_len = 0;
+    int batch_json_len = batch_json_string.size();
+    int batch_bin_len = 0;
+    int total_len = 28 /*header size*/ + feature_json_len + batch_json_len + glb_buf.size();
+    
+    b3dm_buf += "b3dm";
+    int version = 1;
+    put_val(b3dm_buf, version);
+    put_val(b3dm_buf, total_len);
+    put_val(b3dm_buf, feature_json_len);
+    put_val(b3dm_buf, feature_bin_len);
+    put_val(b3dm_buf, batch_json_len);
+    put_val(b3dm_buf, batch_bin_len);
+    //put_val(b3dm_buf, total_len);
+    b3dm_buf.append(feature_json_string.begin(),feature_json_string.end());
+    b3dm_buf.append(batch_json_string.begin(),batch_json_string.end());
+    b3dm_buf.append(glb_buf);
+    return true;
+}
+
+extern "C" bool osgb23dtile(const char* in, const char* out) {
+	std::string b3dm_buf;
+	bool ret = osgb23dtile_buf(in,b3dm_buf);
+	if (!ret) return false;
+	ret = write_file(out, b3dm_buf.data(), b3dm_buf.size());
+	if (!ret) return false;
+	return true;
 }

@@ -39,7 +39,20 @@ fn main() {
             .stdout(Stdio::inherit())
             .output()
             .expect("fuck");
-        println!("{:?}", out.stdout);
+        Command::new("cmd")
+            .args(
+                &[
+                    "/C",
+                    "xcopy",
+                    r#".\bin"#,
+                    r#".\target\release"#,
+                    "/y",
+                    "/e"
+                ],
+            )
+            .stdout(Stdio::inherit())
+            .output()
+            .expect("fuck");
     } else {
         println!("cargo:rustc-link-search=native=.");
     }
