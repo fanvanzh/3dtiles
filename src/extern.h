@@ -3,7 +3,32 @@
 extern "C" bool mkdirs(const char* path);
 extern "C" bool write_file(const char* filename, const char* buf, unsigned long buf_len);
 //// -- others 
-extern bool write_tileset(
+struct Transform
+{
+	bool enable;
+	double radian_x;
+	double radian_y;
+	double min_height;
+};
+
+struct Region
+{
+	double min_x;
+	double min_y;
+	double max_x;
+	double max_y;
+	double min_height;
+	double max_height;
+};
+
+bool write_tileset_region(
+	Transform& trans, 
+	Region& region,
+	double geometricError,
+	const char* b3dm_file,
+	const char* json_file);
+
+bool write_tileset(
 	double longti, double lati, 
 	double tile_w, double tile_h, 
 	double height_min, double height_max,
@@ -11,10 +36,14 @@ extern bool write_tileset(
 	const char* filename, const char* full_path
 	) ;
 
-extern double degree2rad(double val);
+double degree2rad(double val);
 
-extern double lati_to_meter(double diff);
+double lati_to_meter(double diff);
 
-extern double longti_to_meter(double diff, double lati);
+double longti_to_meter(double diff, double lati);
+
+double meter_to_lati (double m);
+
+double meter_to_longti(double m, double lati);
 
 ////////////////////////

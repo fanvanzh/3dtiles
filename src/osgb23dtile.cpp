@@ -6,6 +6,7 @@
 
 #include <vector>
 #include <string>
+#include <algorithm>
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -59,13 +60,21 @@ public:
 	std::vector<osg::Geometry*> geometry_array;
 };
 
-bool osgb2glb_buf(const char* path, std::string& glb_buff) {
+struct mesh_info
+{
+	string name;
+	std::vector<double> min;
+	std::vector<double> max;
+};
+
+bool osgb2glb_buf(const char* path, std::string& glb_buff, std::vector<mesh_info>& v_info) {
 
 #ifdef WIN32
 	vector<string> fileNames = { osgDB::convertStringFromUTF8toCurrentCodePage(path) };
 #else
 	vector<string> fileNames = { path };
 #endif // WIN32
+
 	osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
 	if (!root.valid()) {
 		return false;
@@ -170,11 +179,11 @@ bool osgb2glb_buf(const char* path, std::string& glb_buff) {
 						osg::Vec3f point = v3f->at(vidx);
 						put_val(buffer.data, point.x());
 						put_val(buffer.data, point.z());
-						put_val(buffer.data, point.y());
+						put_val(buffer.data, -point.y());
 						if (point.x() > box_max[0]) box_max[0] = point.x();
 						if (point.x() < box_min[0]) box_min[0] = point.x();
-						if (point.y() > box_max[2]) box_max[2] = point.y();
-						if (point.y() < box_min[2]) box_min[2] = point.y();
+						if (-point.y() > box_max[2]) box_max[2] = -point.y();
+						if (-point.y() < box_min[2]) box_min[2] = -point.y();
 						if (point.z() > box_max[1]) box_max[1] = point.z();
 						if (point.z() < box_min[1]) box_min[1] = point.z();
 					}
@@ -188,6 +197,13 @@ bool osgb2glb_buf(const char* path, std::string& glb_buff) {
 					acc.maxValues = box_max;
 					acc.minValues = box_min;
 					model.accessors.push_back(acc);
+
+					// calc the box
+					mesh_info osgb_info;
+					osgb_info.name = g->getName();
+					osgb_info.min = box_min;
+					osgb_info.max = box_max;
+					v_info.push_back(osgb_info);
 				}
 				else if (j == 2) {
 					// normal
@@ -201,13 +217,7 @@ bool osgb2glb_buf(const char* path, std::string& glb_buff) {
 						osg::Vec3f point = v3f->at(vidx);
 						put_val(buffer.data, point.x());
 						put_val(buffer.data, point.z());
-						put_val(buffer.data, point.y());
-						if (point.x() > box_max[0]) box_max[0] = point.x();
-						if (point.x() < box_min[0]) box_min[0] = point.x();
-						if (point.y() > box_max[2]) box_max[2] = point.y();
-						if (point.y() < box_min[2]) box_min[2] = point.y();
-						if (point.z() > box_max[1]) box_max[1] = point.z();
-						if (point.z() < box_min[1]) box_min[1] = point.z();
+						put_val(buffer.data, -point.y());
 					}
 					tinygltf::Accessor acc;
 					acc.bufferView = 2;
@@ -216,8 +226,8 @@ bool osgb2glb_buf(const char* path, std::string& glb_buff) {
 					acc.count = normal_size;
 					acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 					acc.type = TINYGLTF_TYPE_VEC3;
-					acc.maxValues = box_max;
-					acc.minValues = box_min;
+					acc.maxValues = {1,1,1};
+					acc.minValues = {-1,-1,-1};
 					model.accessors.push_back(acc);
 				}
 				else if (j == 3) {
@@ -232,10 +242,6 @@ bool osgb2glb_buf(const char* path, std::string& glb_buff) {
 						osg::Vec2f point = v2f->at(vidx);
 						put_val(buffer.data, point.x());
 						put_val(buffer.data, point.y());
-						if (point.x() > box_max[0]) box_max[0] = point.x();
-						if (point.x() < box_min[0]) box_min[0] = point.x();
-						if (point.y() > box_max[1]) box_max[1] = point.y();
-						if (point.y() < box_min[1]) box_min[1] = point.y();
 					}
 					tinygltf::Accessor acc;
 					acc.bufferView = 3;
@@ -244,8 +250,8 @@ bool osgb2glb_buf(const char* path, std::string& glb_buff) {
 					acc.count = texture_size;
 					acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 					acc.type = TINYGLTF_TYPE_VEC2;
-					acc.maxValues = box_max;
-					acc.minValues = box_min;
+					acc.maxValues = {1,1};
+					acc.minValues = {0,0};
 					model.accessors.push_back(acc);
 				}
 			}
@@ -384,9 +390,32 @@ bool osgb2glb_buf(const char* path, std::string& glb_buff) {
 	return true;
 }
 
-bool osgb23dtile_buf(const char* path, std::string& b3dm_buf) {
+struct tile_info
+{
+	std::vector<double> max;
+	std::vector<double> min;
+};
+
+bool osgb23dtile_buf(const char* path, std::string& b3dm_buf, tile_info& tile_box) {
 	using nlohmann::json;
-	int mesh_count = 1;
+	
+	std::string glb_buf;
+	std::vector<mesh_info> v_info;
+    bool ret = osgb2glb_buf(path, glb_buf,v_info);
+    if (!ret) return false;
+
+    tile_box.max = {-1e38,-1e38,-1e38};
+    tile_box.min = {1e38,1e38,1e38};
+    for ( auto &mesh: v_info) {
+    	for(int i = 0; i < 3; i++) {
+    		if (mesh.min[i] < tile_box.min[i])
+    			tile_box.min[i] = mesh.min[i];
+    		if (mesh.max[i] > tile_box.max[i])
+    			tile_box.max[i] = mesh.max[i];
+    	}
+    }
+
+	int mesh_count = v_info.size();
     std::string feature_json_string;
     feature_json_string += "{\"BATCH_LENGTH\":";
     feature_json_string += std::to_string(mesh_count);
@@ -413,9 +442,7 @@ bool osgb23dtile_buf(const char* path, std::string& b3dm_buf) {
         batch_json_string.push_back(' ');
     }
 
-    std::string glb_buf;
-    bool ret = osgb2glb_buf(path, glb_buf);
-    if (!ret) return false;
+
     // how length total ?
     //test
     //feature_json_string.clear();
@@ -443,18 +470,62 @@ bool osgb23dtile_buf(const char* path, std::string& b3dm_buf) {
     return true;
 }
 
-extern "C" bool osgb23dtile(const char* in, const char* out) {
+extern "C" bool osgb23dtile(const char* in, const char* out 
+	) {
 	std::string b3dm_buf;
-	bool ret = osgb23dtile_buf(in,b3dm_buf);
+	tile_info tile_box;
+	bool ret = osgb23dtile_buf(in,b3dm_buf,tile_box);
 	if (!ret) return false;
 	ret = write_file(out, b3dm_buf.data(), b3dm_buf.size());
 	if (!ret) return false;
-	return true;
+	// write tileset.json
+	double width_meter = tile_box.max[0] - tile_box.min[0];
+	double height_meter = tile_box.max[2] - tile_box.min[2];
+	printf("%f,%f\n", tile_box.max[0], tile_box.min[0]);
+	printf("%f,%f\n", tile_box.max[1], tile_box.min[1]);
+	printf("%f,%f\n", tile_box.max[2], tile_box.min[2]);
+	double radian_x = degree2rad(120);
+	double radian_y = degree2rad(30);
+	double geometric_error = std::max<double>(width_meter,height_meter) / 2.0;
+	std::string b3dm_fullpath = out;
+	auto p0 = b3dm_fullpath.find_last_of('/');
+	auto p1 = b3dm_fullpath.find_last_of('\\');
+	std::string b3dm_file_name = b3dm_fullpath.substr(
+		std::max<int>(p0,p1) + 1);
+	std::string tileset = out;
+	tileset = tileset.replace(
+		//b3dm_fullpath.find_last_of('.'), 
+		//tileset.length() - 1, ".json");
+		std::max<int>(p0,p1) + 1,
+		tileset.length() - 1, "tileset.json");
+	// 米转度
+	double center_mx = (tile_box.max[0] + tile_box.min[0]) / 2;
+	double center_my = (tile_box.max[2] + tile_box.min[2]) / 2;
+	double center_rx = meter_to_longti(center_mx,radian_y);
+	//double center_rx = meter_to_lati(center_mx);
+	double center_ry = meter_to_lati(center_my);
+	double width_rx = meter_to_longti(width_meter,radian_y);
+	//double width_rx = meter_to_lati(width_meter);
+	double height_ry = meter_to_lati(height_meter);
+	Transform trs = {false, radian_x, radian_y, -1160};
+	Region reg = {
+		radian_x + center_rx - width_rx / 2,
+		radian_y - center_ry - height_ry / 2,
+		radian_x + center_rx + width_rx / 2,
+		radian_y - center_ry + height_ry / 2,
+		0, 50
+	};    
+    write_tileset_region(trs, reg, 
+    	geometric_error, 
+    	b3dm_file_name.c_str(),
+		tileset.c_str());
+    return true;
 }
 
 extern "C" bool osgb2glb(const char* in, const char* out) {
 	std::string b3dm_buf;
-	bool ret = osgb2glb_buf(in,b3dm_buf);
+	std::vector<mesh_info> v_info;
+	bool ret = osgb2glb_buf(in,b3dm_buf,v_info);
 	if (!ret) return false;
 	ret = write_file(out, b3dm_buf.data(), b3dm_buf.size());
 	if (!ret) return false;

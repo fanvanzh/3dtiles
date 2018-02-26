@@ -4,8 +4,7 @@
 #include <string>
 #include <algorithm>
 
-///////////////////////
-extern "C" bool write_file(const char* filename, const char* buf, unsigned long buf_len);
+#include "extern.h"
 
 ///////////////////////
 static const double pi = std::acos(-1);
@@ -19,7 +18,7 @@ double lati_to_meter(double diff) {
 }
 
 double longti_to_meter(double diff, double lati) {
-	return diff / (0.000000156785 * std::cos(lati));
+	return diff / 0.000000156785 * std::cos(lati);
 }
 
 double meter_to_lati (double m) {
@@ -27,7 +26,118 @@ double meter_to_lati (double m) {
 }
 
 double meter_to_longti(double m, double lati) {
-	return m * 0.000000156785 * std::cos(lati);
+	return m * 0.000000156785 / std::cos(lati);
+}
+
+
+std::vector<double> transfrom_xyz(double radian_x, double radian_y, double height_min){
+	double ellipsod_a = 40680631590769;
+	double ellipsod_b = 40680631590769;
+	double ellipsod_c = 40408299984661.4;
+
+	const double pi = std::acos(-1);
+	double xn = std::cos(radian_x) * std::cos(radian_y);
+	double yn = std::sin(radian_x) * std::cos(radian_y);
+	double zn = std::sin(radian_y);
+
+	double x0 = ellipsod_a * xn;
+	double y0 = ellipsod_b * yn;
+	double z0 = ellipsod_c * zn;
+	double gamma = std::sqrt(xn*x0 + yn*y0 + zn*z0);
+	double px = x0 / gamma;
+	double py = y0 / gamma;
+	double pz = z0 / gamma;
+	
+	double dx = xn * height_min;
+	double dy = yn * height_min;
+	double dz = zn * height_min;
+
+	std::vector<double> east_mat = {-y0,x0,0};
+	std::vector<double> north_mat = {
+		(y0*east_mat[2] - east_mat[1]*z0),
+		(z0*east_mat[0] - east_mat[2]*x0),
+		(x0*east_mat[1] - east_mat[0]*y0)
+	};
+	double east_normal = std::sqrt(
+		east_mat[0]*east_mat[0] + 
+		east_mat[1]*east_mat[1] + 
+		east_mat[2]*east_mat[2]
+		);
+	double north_normal = std::sqrt(
+		north_mat[0]*north_mat[0] + 
+		north_mat[1]*north_mat[1] + 
+		north_mat[2]*north_mat[2]
+		);
+
+	std::vector<double> matrix = {
+		east_mat[0] / east_normal,
+		east_mat[1] / east_normal,
+		east_mat[2] / east_normal,
+		0,
+		north_mat[0] / north_normal,
+		north_mat[1] / north_normal,
+		north_mat[2] / north_normal,
+		0,
+		xn,
+		yn,
+		zn,
+		0,
+		px + dx,
+		py + dy,
+		pz + dz,
+		1
+	};
+	return matrix;
+}
+
+bool write_tileset_region(
+	Transform& trans, 
+	Region& region,
+	double geometricError,
+	const char* b3dm_file,
+	const char* json_file) {
+	std::vector<double> matrix;
+	if (trans.enable) {
+		matrix = transfrom_xyz(trans.radian_x,trans.radian_y,trans.min_height);
+	}
+	std::string json_txt = "{\"asset\": {\
+    \"version\": \"0.0\",\
+    \"gltfUpAxis\": \"Y\"\
+  },\
+  \"geometricError\":";
+  json_txt += std::to_string(geometricError);
+  json_txt += ",\"root\": {";
+  std::string trans_str = "\"transform\": [";
+  if (trans.enable) {
+  	for (int i = 0; i < 15 ; i++) {
+    	trans_str += std::to_string(matrix[i]);
+    	trans_str += ",";
+    }
+    trans_str += "1],";
+    json_txt += trans_str;
+  }
+	json_txt += "\"boundingVolume\": {\
+      \"region\": [";
+    double* pRegion = (double*)&region;
+    for (int i = 0; i < 5 ; i++) {
+    	json_txt += std::to_string(pRegion[i]);
+    	json_txt += ",";
+    }
+    json_txt += std::to_string(pRegion[5]);
+
+    char last_buf[512];
+    sprintf(last_buf,"]},\"geometricError\": %f,\
+    \"refine\": \"REPLACE\",\
+    \"content\": {\
+      \"url\": \"%s\"}}}", geometricError, b3dm_file);
+
+    json_txt += last_buf;
+
+    bool ret = write_file(json_file, json_txt.data(), json_txt.size());
+    if (!ret) {
+    	printf("write file %s fail\n", json_file);
+    }
+    return ret;
 }
 
 /**
@@ -102,7 +212,7 @@ bool write_tileset(
 		radian_y - meter_to_lati(tile_h / 2),
 		radian_x + meter_to_longti(tile_w / 2, radian_y),
 		radian_y + meter_to_lati(tile_h / 2),
-		height_min,
+		0,
 		height_max
 	};
 

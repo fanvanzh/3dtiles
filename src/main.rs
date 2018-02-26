@@ -118,7 +118,7 @@ pub extern fn merge_tileset(path: *const i8) -> bool{
 				false
 			}
 		}
-	}	
+	}
 }
 
 fn main() {
