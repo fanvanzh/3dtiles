@@ -503,6 +503,10 @@ extern "C" bool osgb23dtile(
 	double width_rx = meter_to_longti(width_meter,radian_y);
 	//double width_rx = meter_to_lati(width_meter);
 	double height_ry = meter_to_lati(height_meter);
+	if ( width_rx < 0.00001 )  width_rx = 0.00001;
+	if ( height_ry < 0.00001 ) height_ry = 0.00001;
+	if ( tile_box.max[1] - tile_box.min[1] < 0.00001) 
+		tile_box.max[1] = tile_box.min[1] + 0.00001;
 	Transform trs = { radian_x, radian_y, -1160};
 	Region reg = {
 		radian_x + center_rx - width_rx / 2,

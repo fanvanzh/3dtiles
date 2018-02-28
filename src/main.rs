@@ -29,7 +29,7 @@ fn main() {
 	let dir_tileset = dir_dest.join("Data");
 	let center_x = 120.0;
 	let center_y = 30.0;
-	let trans_region = Some(0.0);
+	let trans_region = Some(-21.0);
 	let tick = time::SystemTime::now();
 	osgb::osgb_batch_convert(&dir,&dir_dest, center_x, center_y);
 	osgb::merge_osgb_tileset(

@@ -372,7 +372,7 @@ pub fn merge_osgb_tileset(
 	tileset_json += r#","root": "#;
 	tileset_json += json_str.as_str();
 	tileset_json += "}";
-	let path_json = path.with_file_name("tileset.json");
+	let path_json = path.join("tileset.json");
 	let mut f = File::create(path_json).unwrap();
 	f.write_all(tileset_json.as_bytes());
 }
