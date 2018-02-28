@@ -5,7 +5,6 @@ extern "C" bool write_file(const char* filename, const char* buf, unsigned long 
 //// -- others 
 struct Transform
 {
-	bool enable;
 	double radian_x;
 	double radian_y;
 	double min_height;
@@ -22,7 +21,7 @@ struct Region
 };
 
 bool write_tileset_region(
-	Transform& trans, 
+	Transform* trans, 
 	Region& region,
 	double geometricError,
 	const char* b3dm_file,

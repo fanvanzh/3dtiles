@@ -470,8 +470,9 @@ bool osgb23dtile_buf(const char* path, std::string& b3dm_buf, tile_info& tile_bo
     return true;
 }
 
-extern "C" bool osgb23dtile(const char* in, const char* out 
-	) {
+extern "C" bool osgb23dtile(
+	const char* in, const char* out,
+	double center_x, double center_y ) {
 	std::string b3dm_buf;
 	tile_info tile_box;
 	bool ret = osgb23dtile_buf(in,b3dm_buf,tile_box);
@@ -481,11 +482,8 @@ extern "C" bool osgb23dtile(const char* in, const char* out
 	// write tileset.json
 	double width_meter = tile_box.max[0] - tile_box.min[0];
 	double height_meter = tile_box.max[2] - tile_box.min[2];
-	printf("%f,%f\n", tile_box.max[0], tile_box.min[0]);
-	printf("%f,%f\n", tile_box.max[1], tile_box.min[1]);
-	printf("%f,%f\n", tile_box.max[2], tile_box.min[2]);
-	double radian_x = degree2rad(120);
-	double radian_y = degree2rad(30);
+	double radian_x = degree2rad( center_x );
+	double radian_y = degree2rad( center_y );
 	double geometric_error = std::max<double>(width_meter,height_meter) / 2.0;
 	std::string b3dm_fullpath = out;
 	auto p0 = b3dm_fullpath.find_last_of('/');
@@ -494,10 +492,8 @@ extern "C" bool osgb23dtile(const char* in, const char* out
 		std::max<int>(p0,p1) + 1);
 	std::string tileset = out;
 	tileset = tileset.replace(
-		//b3dm_fullpath.find_last_of('.'), 
-		//tileset.length() - 1, ".json");
-		std::max<int>(p0,p1) + 1,
-		tileset.length() - 1, "tileset.json");
+		b3dm_fullpath.find_last_of('.'), 
+		tileset.length() - 1, ".json");
 	// 米转度
 	double center_mx = (tile_box.max[0] + tile_box.min[0]) / 2;
 	double center_my = (tile_box.max[2] + tile_box.min[2]) / 2;
@@ -507,15 +503,16 @@ extern "C" bool osgb23dtile(const char* in, const char* out
 	double width_rx = meter_to_longti(width_meter,radian_y);
 	//double width_rx = meter_to_lati(width_meter);
 	double height_ry = meter_to_lati(height_meter);
-	Transform trs = {false, radian_x, radian_y, -1160};
+	Transform trs = { radian_x, radian_y, -1160};
 	Region reg = {
 		radian_x + center_rx - width_rx / 2,
 		radian_y - center_ry - height_ry / 2,
 		radian_x + center_rx + width_rx / 2,
 		radian_y - center_ry + height_ry / 2,
-		0, 50
+		tile_box.min[1], tile_box.max[1]
 	};    
-    write_tileset_region(trs, reg, 
+    write_tileset_region(
+    	NULL, reg, 
     	geometric_error, 
     	b3dm_file_name.c_str(),
 		tileset.c_str());

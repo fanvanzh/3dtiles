@@ -29,7 +29,6 @@ double meter_to_longti(double m, double lati) {
 	return m * 0.000000156785 / std::cos(lati);
 }
 
-
 std::vector<double> transfrom_xyz(double radian_x, double radian_y, double height_min){
 	double ellipsod_a = 40680631590769;
 	double ellipsod_b = 40680631590769;
@@ -90,15 +89,22 @@ std::vector<double> transfrom_xyz(double radian_x, double radian_y, double heigh
 	return matrix;
 }
 
+extern "C" void transform_c(double center_x, double center_y, double height_min, double* ptr) {
+	double radian_x = degree2rad( center_x );
+	double radian_y = degree2rad( center_y );
+	std::vector<double> v = transfrom_xyz(radian_x, radian_y, height_min);
+	memcpy(ptr, v.data(), v.size() * 8);
+}
+
 bool write_tileset_region(
-	Transform& trans, 
+	Transform* trans, 
 	Region& region,
 	double geometricError,
 	const char* b3dm_file,
 	const char* json_file) {
 	std::vector<double> matrix;
-	if (trans.enable) {
-		matrix = transfrom_xyz(trans.radian_x,trans.radian_y,trans.min_height);
+	if (trans) {
+		matrix = transfrom_xyz(trans->radian_x,trans->radian_y,trans->min_height);
 	}
 	std::string json_txt = "{\"asset\": {\
     \"version\": \"0.0\",\
@@ -108,7 +114,7 @@ bool write_tileset_region(
   json_txt += std::to_string(geometricError);
   json_txt += ",\"root\": {";
   std::string trans_str = "\"transform\": [";
-  if (trans.enable) {
+  if (trans) {
   	for (int i = 0; i < 15 ; i++) {
     	trans_str += std::to_string(matrix[i]);
     	trans_str += ",";
