@@ -232,16 +232,30 @@ bool osgb2glb_buf(const char* path, std::string& glb_buff, std::vector<mesh_info
 				}
 				else if (j == 3) {
 					// text
+					int texture_size = 0;
 					osg::Array* na = g->getTexCoordArray(0);
-					osg::Vec2Array* v2f = (osg::Vec2Array*)na;
-					vector<double> box_max = { -1e38, -1e38  };
-					vector<double> box_min = { 1e38, 1e38  };
-					int texture_size = v2f->size();
-					for (int vidx = 0; vidx < texture_size; vidx++)
-					{
-						osg::Vec2f point = v2f->at(vidx);
-						put_val(buffer.data, point.x());
-						put_val(buffer.data, point.y());
+					if (na) {
+						osg::Vec2Array* v2f = (osg::Vec2Array*)na;
+						vector<double> box_max = { -1e38, -1e38 };
+						vector<double> box_min = { 1e38, 1e38 };
+						texture_size = v2f->size();
+						for (int vidx = 0; vidx < texture_size; vidx++)
+						{
+							osg::Vec2f point = v2f->at(vidx);
+							put_val(buffer.data, point.x());
+							put_val(buffer.data, point.y());
+						}
+					}
+					else { // mesh 没有纹理坐标
+						osg::Vec3Array* v3f = (osg::Vec3Array*)va;
+						int vec_size = v3f->size();
+						texture_size = vec_size;
+						for (int vidx = 0; vidx < vec_size; vidx++)
+						{
+							float x = 0;
+							put_val(buffer.data, x);
+							put_val(buffer.data, x);
+						}
 					}
 					tinygltf::Accessor acc;
 					acc.bufferView = 3;
@@ -250,8 +264,8 @@ bool osgb2glb_buf(const char* path, std::string& glb_buff, std::vector<mesh_info
 					acc.count = texture_size;
 					acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 					acc.type = TINYGLTF_TYPE_VEC2;
-					acc.maxValues = {1,1};
-					acc.minValues = {0,0};
+					acc.maxValues = { 1,1 };
+					acc.minValues = { 0,0 };
 					model.accessors.push_back(acc);
 				}
 			}
