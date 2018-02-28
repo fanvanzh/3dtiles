@@ -63,14 +63,33 @@ fn osgv_convert(
 	Ok(())
 }
 
-pub fn osgb_batch_convert(dir: &Path, dir_dest:&Path, 
-	center_x: f64, center_y: f64) -> Result<(),Box<Error>>{
+pub fn osgb_batch_convert(
+	dir: &Path, dir_dest:&Path, 
+	center_x: f64, center_y: f64,
+	max_lvl: Option<i32>
+	) -> Result<(),Box<Error>>{
+	
+	let path = dir.join("Data");
+	// 指定 .\Data 目录
+	if !path.exists() || !path.is_dir() { return Err(From::from("dir Data not exist")); }
+
 	fs::create_dir_all(dir_dest)?;
 	let mut osg_array = vec![];
 	{
 		walk_path(
 			dir, &mut |dir_osgb:&str| {
-			osg_array.push(dir_osgb.to_string());
+			if let Some(max_lvl) = max_lvl {
+				let lvl_str = find_lvl_num(dir_osgb);
+				if lvl_str.len() > 0 {
+					let lvl_num: i32 = lvl_str.parse().unwrap();
+					if lvl_num <= max_lvl {
+						osg_array.push(dir_osgb.to_string());
+					}
+				}
+			}
+			else {
+				osg_array.push(dir_osgb.to_string());
+			}
 		})?;
 	}
 	osg_array.par_iter().map(|x| {
@@ -198,7 +217,7 @@ fn get_geometric_error(center_y: f64, lvl: i32) -> f64 {
 }
 
 pub fn merge_osgb_tileset(
-	path: &Path, center_x: f64, 
+	path_root: &Path, center_x: f64, 
 	center_y: f64, region_offset: Option<f64>
 	) {
 	use std::ffi::OsStr;
@@ -207,10 +226,9 @@ pub fn merge_osgb_tileset(
 	use std::fs::File;
 	use serde_json::{self,Value};
 	
+	let path = path_root.join("Data");
 	// 指定 .\Data 目录
-	if path.file_stem() != Some(OsStr::new("Data")) {
-		return;
-	}
+	if !path.exists() || !path.is_dir() { return }
 	let mut root_tile = Tile::default();
 	// minx,miny,maxx,maxy,minh,maxh
 	let mut root_region = vec![1.0E+38,1.0E+38,-1.0E+38,-1.0E+38,1.0E+38,-1.0E+38];
@@ -262,7 +280,7 @@ pub fn merge_osgb_tileset(
 				let mut buffer = String::new();
 				f.read_to_string(&mut buffer).unwrap();
 				let v: Value = serde_json::from_str(&buffer).unwrap();
-				let mut region_v : Vec<f64> =	v["root"]["boundingVolume"]["region"]
+				let region_v : Vec<f64> =	v["root"]["boundingVolume"]["region"]
 							.as_array().unwrap().iter()
 							.map(|x| x.as_f64().unwrap()).collect();
 				let tile = Rc::new(RefCell::new(Tile{
