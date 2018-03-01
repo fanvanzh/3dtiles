@@ -1,4 +1,6 @@
 # 3dtiles
+[![Build Status](https://travis-ci.org/fanvanzh/3dtiles.svg?branch=master)](https://travis-ci.org/fanvanzh/3dtiles)
+
 a serials of tools for cesium 3dtiles, impl by rust and c++.
 
 include these tools：
