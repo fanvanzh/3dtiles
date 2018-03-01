@@ -54,6 +54,42 @@ fn main() {
             .output()
             .expect("fuck");
     } else {
-        println!("cargo:rustc-link-search=native=.");
+        cc::Build::new()
+            .cpp(true)
+            .warnings(false)
+            .include("./src")
+            .include("./src/osg")
+            .file("./src/tileset.cpp")
+//          .file("./src/shp23dtile.cpp")
+            .file("./src/osgb23dtile.cpp")
+            .compile("3dtile");
+        // -------------
+        println!("cargo:rustc-link-search=native=./lib");
+        // -------------
+//      println!("cargo:rustc-link-lib=gdal");
+        println!("cargo:rustc-link-lib=osg");
+        println!("cargo:rustc-link-lib=osgDB");
+        println!("cargo:rustc-link-lib=osgUtil");
+
+        let out = Command::new("cp")
+            .args(
+                &[
+                    r#".\bin\linux"#,
+                    r#".\target\debug"#,
+                    "-r"
+                ],
+            )
+            .stdout(Stdio::inherit())
+            .output();
+        Command::new("cp")
+            .args(
+                &[
+                    r#".\bin\linux"#,
+                    r#".\target\release"#,
+                    "-r"
+                ],
+            )
+            .stdout(Stdio::inherit())
+            .output();
     }
 }
