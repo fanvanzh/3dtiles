@@ -2,6 +2,7 @@
 #include <cmath>
 #include <vector>
 #include <string>
+#include <cstring>
 #include <algorithm>
 
 #include "extern.h"
@@ -93,7 +94,7 @@ extern "C" void transform_c(double center_x, double center_y, double height_min,
 	double radian_x = degree2rad( center_x );
 	double radian_y = degree2rad( center_y );
 	std::vector<double> v = transfrom_xyz(radian_x, radian_y, height_min);
-	memcpy(ptr, v.data(), v.size() * 8);
+	std::memcpy(ptr, v.data(), v.size() * 8);
 }
 
 bool write_tileset_box( 
