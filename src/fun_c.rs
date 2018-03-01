@@ -6,20 +6,25 @@ pub extern fn write_file(file_name: *const i8, buf: *const u8, buf_len: u32) -> 
 	use std::io::prelude::*;
 
 	unsafe{
-		let file_name = ffi::CStr::from_ptr(file_name).to_str().unwrap();
-		if let Ok(mut f) = File::create(file_name) {
+		if let Ok(file_name) = ffi::CStr::from_ptr(file_name).to_str() {
+			if let Ok(mut f) = File::create(file_name) {
 			let arr = slice::from_raw_parts(buf,buf_len as usize);
 			match f.write_all(arr) {
 				Ok(_) => { true }  
 				Err(e) => {
 					println!("ERROR: {:?}", e); 
 					false 
-				} 
+					} 
+				}
 			}
+			else {
+				false
+			}	
 		}
 		else {
+			println!("ERROR: convert file_name failed" );
 			false
-		}	
+		}
 	}
 }
 

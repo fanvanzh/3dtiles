@@ -267,7 +267,7 @@ pub fn merge_osgb_tileset(
 					);
 			}
 		}
-		
+		if kv_path.is_empty() { continue; }
 		let first_kv = kv_path.iter().next().unwrap();
 		let first_lvl = first_kv.0;
 		let first_lvl_coord_num = find_coor_num(first_kv.1[0].as_str(), *first_lvl).len();
