@@ -108,7 +108,8 @@ use std::cell::{RefCell};
 
 #[derive(Serialize,Clone,Default)]
 struct Volume {
-    region: Vec<f64>
+	#[serde(rename = "box")]
+    box_v: Vec<f64>
 }
 
 #[derive(Serialize,Clone,Default)]
@@ -230,8 +231,8 @@ pub fn merge_osgb_tileset(
 	// 指定 .\Data 目录
 	if !path.exists() || !path.is_dir() { return }
 	let mut root_tile = Tile::default();
-	// minx,miny,maxx,maxy,minh,maxh
-	let mut root_region = vec![1.0E+38,1.0E+38,-1.0E+38,-1.0E+38,1.0E+38,-1.0E+38];
+	// minx,miny,minz,maxx,maxy,maxz
+	let mut root_box = vec![1.0E+38f64,1.0E+38,1.0E+38,-1.0E+38,-1.0E+38,-1.0E+38];
 	let mut path_find_tile = BTreeMap::<String, Rc<RefCell<Tile>>>::new();
 	for x in path.read_dir().unwrap() {
 		// every Tile_
@@ -280,20 +281,20 @@ pub fn merge_osgb_tileset(
 				let mut buffer = String::new();
 				f.read_to_string(&mut buffer).unwrap();
 				let v: Value = serde_json::from_str(&buffer).unwrap();
-				let region_v : Vec<f64> =	v["root"]["boundingVolume"]["region"]
+				let box_v : Vec<f64> =	v["root"]["boundingVolume"]["box"]
 							.as_array().unwrap().iter()
 							.map(|x| x.as_f64().unwrap()).collect();
 				let tile = Rc::new(RefCell::new(Tile{
 					boundingVolume: Volume {
-						region: region_v.clone()
+						box_v: box_v.clone()
 					},
 					content : Content {
 						boundingVolume: Volume {
-							region: region_v
+							box_v: box_v
 						},
 						url : {
 							let v_str = v["root"]["content"]["url"].as_str().unwrap().to_string();
-							format!("{}/{}", stem , v_str)
+							format!("Data/{}/{}", stem , v_str)
 						}
 					},
 					geometricError : get_geometric_error(center_y,*lvl as i32),//v["root"]["geometricError"].as_f64().unwrap(),
@@ -320,13 +321,13 @@ pub fn merge_osgb_tileset(
 				if first_lvl == lvl {
 					root_tile.children.push(tile.clone());
 					// modify the root 
-					let t_b_r = &tile.borrow_mut().boundingVolume.region;
-					root_region[0] = t_b_r[0].min(root_region[0]);
-					root_region[1] = t_b_r[1].min(root_region[1]);
-					root_region[2] = t_b_r[2].max(root_region[2]);
-					root_region[3] = t_b_r[3].max(root_region[3]);
-					root_region[4] = t_b_r[4].min(root_region[4]);
-					root_region[5] = t_b_r[5].max(root_region[5]);
+					let t_b_r = &tile.borrow_mut().boundingVolume.box_v;
+					root_box[0] = root_box[0].min(t_b_r[0] - t_b_r[3]);
+					root_box[1] = root_box[1].min(t_b_r[1] - t_b_r[7]);
+					root_box[2] = root_box[2].min(t_b_r[2] - t_b_r[11]);
+					root_box[3] = root_box[3].max(t_b_r[0] + t_b_r[3]);
+					root_box[4] = root_box[4].max(t_b_r[1] + t_b_r[7]);
+					root_box[5] = root_box[5].max(t_b_r[2] + t_b_r[11]);
 				}
 				else {
 					// find the parent
@@ -350,20 +351,7 @@ pub fn merge_osgb_tileset(
 	// do merge plz
 	let mut tras_height = 0f64;
 	if let Some(v) = region_offset { 
-		tras_height = v - root_region[4]; 
-		// fix the region 
-		root_region[4] += tras_height;
-		root_region[5] += tras_height;
-		// all the tile 
-		for (_, ref tile) in path_find_tile.iter_mut() {
-			{
-				let mut t_b_r = tile.borrow_mut();
-				(*t_b_r).boundingVolume.region[4] += tras_height;
-				(*t_b_r).boundingVolume.region[5] += tras_height;
-				(*t_b_r).content.boundingVolume.region[4] += tras_height;
-				(*t_b_r).content.boundingVolume.region[5] += tras_height;
-			}
-		}
+		tras_height = v - root_box[2]; 
 	}
 	let mut trans_vec = vec![0f64; 16];
 	unsafe {
@@ -373,7 +361,7 @@ pub fn merge_osgb_tileset(
 	let mut root_json = RootJson {
 		refine: "REPLACE".into(),
 		transform: trans_vec,
-	    boundingVolume: Volume { region: root_region.clone() },
+	    boundingVolume: Volume { box_v: box_to_tileset_box(&root_box) },
 	    //content: Content { url: "".into() },
 	    geometricError: get_geometric_error(center_y, 15),
 	    children: vec![]
@@ -390,7 +378,28 @@ pub fn merge_osgb_tileset(
 	tileset_json += r#","root": "#;
 	tileset_json += json_str.as_str();
 	tileset_json += "}";
-	let path_json = path.join("tileset.json");
+	let path_json = path.with_file_name("tileset.json");
 	let mut f = File::create(path_json).unwrap();
 	f.write_all(tileset_json.as_bytes());
+}
+
+fn box_to_tileset_box(box_v: &Vec<f64>) -> Vec<f64> {
+	let mut box_new = vec![];
+	box_new.push( (box_v[0] + box_v[3]) / 2.0 );
+	box_new.push( (box_v[1] + box_v[4]) / 2.0 );
+	box_new.push( (box_v[2] + box_v[5]) / 2.0 );
+	
+	box_new.push( (box_v[3] - box_v[0]) / 2.0 );
+	box_new.push( 0.0 );
+	box_new.push( 0.0 );
+
+	box_new.push( 0.0 );
+	box_new.push( (box_v[4] - box_v[1]) / 2.0 );
+	box_new.push( 0.0 );
+
+	box_new.push( 0.0 );
+	box_new.push( 0.0 );
+	box_new.push( (box_v[5] - box_v[2]) / 2.0 );
+
+	box_new
 }

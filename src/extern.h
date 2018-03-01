@@ -10,6 +10,11 @@ struct Transform
 	double min_height;
 };
 
+struct Box
+{
+	double matrix[12];
+};
+
 struct Region
 {
 	double min_x;
@@ -23,6 +28,12 @@ struct Region
 bool write_tileset_region(
 	Transform* trans, 
 	Region& region,
+	double geometricError,
+	const char* b3dm_file,
+	const char* json_file);
+
+bool write_tileset_box( 
+	Transform* trans, Box& box,  	
 	double geometricError,
 	const char* b3dm_file,
 	const char* json_file);

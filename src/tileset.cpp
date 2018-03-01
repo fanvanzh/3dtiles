@@ -96,6 +96,56 @@ extern "C" void transform_c(double center_x, double center_y, double height_min,
 	memcpy(ptr, v.data(), v.size() * 8);
 }
 
+bool write_tileset_box( 
+	Transform* trans, Box& box,  	
+	double geometricError,
+	const char* b3dm_file,
+	const char* json_file) {
+
+	std::vector<double> matrix;
+	if (trans) {
+		matrix = transfrom_xyz(trans->radian_x,trans->radian_y,trans->min_height);
+	}
+	std::string json_txt = "{\"asset\": {\
+    \"version\": \"0.0\",\
+    \"gltfUpAxis\": \"Y\"\
+  },\
+  \"geometricError\":";
+  json_txt += std::to_string(geometricError);
+  json_txt += ",\"root\": {";
+  std::string trans_str = "\"transform\": [";
+  if (trans) {
+  	for (int i = 0; i < 15 ; i++) {
+    	trans_str += std::to_string(matrix[i]);
+    	trans_str += ",";
+    }
+    trans_str += "1],";
+    json_txt += trans_str;
+  }
+	json_txt += "\"boundingVolume\": {\
+      \"box\": [";
+    for (int i = 0; i < 11 ; i++) {
+    	json_txt += std::to_string(box.matrix[i]);
+    	json_txt += ",";
+    }
+    json_txt += std::to_string(box.matrix[11]);
+
+    char last_buf[512];
+    sprintf(last_buf,"]},\"geometricError\": %f,\
+    \"refine\": \"REPLACE\",\
+    \"content\": {\
+      \"url\": \"%s\"}}}", geometricError, b3dm_file);
+
+    json_txt += last_buf;
+
+    bool ret = write_file(json_file, json_txt.data(), json_txt.size());
+    if (!ret) {
+    	printf("write file %s fail\n", json_file);
+    }
+    return ret;
+
+}
+
 bool write_tileset_region(
 	Transform* trans, 
 	Region& region,
