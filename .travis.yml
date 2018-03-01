@@ -1,7 +1,3 @@
-env:
-  globle:
-    - CXXFLAGS="-std=c++11"
-
 matrix:
   include:
     - os: linux
@@ -12,7 +8,8 @@ matrix:
           packages:
             - g++-4.9
       env:
-         - MATRIX_EVAL="CC=gcc-4.9 && CXX=g++-4.9"
+         - MATRIX_EVAL="CC=gcc-4.9 && CXX=g++-4.9 && CXXFLAGS=-std=c++11"
+         - CXXFLAGS="-std=c++11"
 
 language: rust
 rust:
