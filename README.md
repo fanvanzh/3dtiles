@@ -15,19 +15,14 @@ shapefile => 3dtile,  aim at large scale of buiding outline。
 	3dtile.exe [FLAGS] [OPTIONS] --format <osgb,shape> --input <FILE> --output <FILE>
 
 参数说明：
-  -c, --tile config json <config>    Set the tile config:
-	
-                                     {
-				     
-                                      "x": x,
-				      
-                                      "y": y,
-				      
-                                      "offset": 0 (模型最低面地面距离),
-				      
-                                      "max_lvl" : 20 (处理切片模型到20级停止)
-				      
-                                     }
+  -c, --tile config json <config>    
+  Set the tile config:
+     {
+      "x": x,
+      "y": y,
+      "offset": 0 (模型最低面地面距离),
+      "max_lvl" : 20 (处理切片模型到20级停止)
+     }
 				     
   -f, --format <osgb,shape>          Set input format
   
