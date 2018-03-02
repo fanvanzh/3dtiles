@@ -10,6 +10,7 @@ matrix:
       env:
          - MATRIX_EVAL="CC=gcc-4.9 && CXX=g++-4.9"
          - CXXFLAGS="-std=c++11"
+         - LD_LIBRARY_PATH=./lib
 
 language: rust
 rust:
