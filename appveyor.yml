@@ -10,13 +10,16 @@ environment:
 install:
 - cmd: >-
     appveyor DownloadFile %RUST_URL%
-    msiexec /i %RUST_INSTALLER% INSTALLDIR="c:\rust" /qn
-    SET PATH=c:\rust\bin;%PATH%
     
+    msiexec /i %RUST_INSTALLER% INSTALLDIR="c:\rust" /qn
+    
+    SET PATH=c:\rust\bin;%PATH%
 build: off
 
 test_script:
 - cmd: >-
     SET RUST_BACKTRACE=1
+    
+    cargo build
 
     cargo test 
