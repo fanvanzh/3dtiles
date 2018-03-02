@@ -6,6 +6,7 @@
 
 #include <vector>
 #include <string>
+#include <cstring>
 #include <algorithm>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -485,8 +486,7 @@ bool osgb23dtile_buf(const char* path, std::string& b3dm_buf, tile_info& tile_bo
 }
 
 extern "C" bool osgb23dtile(
-	const char* in, const char* out,
-	double center_x, double center_y ) {
+	const char* in, const char* out ) {
 	std::string b3dm_buf;
 	tile_info tile_box;
 	bool ret = osgb23dtile_buf(in,b3dm_buf,tile_box);
@@ -503,7 +503,6 @@ extern "C" bool osgb23dtile(
 	tileset = tileset.replace(
 		b3dm_fullpath.find_last_of('.'), 
 		tileset.length() - 1, ".json");
-	// 米转度
 	double center_mx = (tile_box.max[0] + tile_box.min[0]) / 2;
 	double center_my = (tile_box.max[2] + tile_box.min[2]) / 2;
 	double center_mz = (tile_box.max[1] + tile_box.min[1]) / 2;
@@ -521,7 +520,7 @@ extern "C" bool osgb23dtile(
 		0, height_meter / 2, 0,
 		0, 0, z_meter / 2
 	};
-	memcpy(box.matrix, v.data(), 12 * sizeof(double));
+	std::memcpy(box.matrix, v.data(), 12 * sizeof(double));
     write_tileset_box(
     	NULL, box, 100, 
     	b3dm_file_name.c_str(),

@@ -25,7 +25,6 @@ shapefile => 3dtile,  aim at large scale of buiding outline。
 
   -c, --config <config>      
 ```
-	
      {
 	
       "x": 120,

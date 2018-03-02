@@ -1,16 +1,16 @@
 extern crate cc;
 use std::fs;
-use std::process::{Command,Stdio};
+use std::process::{Command, Stdio};
 
 fn main() {
     fs::create_dir_all("target/debug").unwrap();
     fs::create_dir_all("target/release").unwrap();
-    
+
     if cfg!(windows) {
         cc::Build::new()
             .cpp(true)
             .warnings(false)
-            .define("WIN32",None)
+            .define("WIN32", None)
             .include("./src")
             .include("./src/osg")
             .file("./src/tileset.cpp")
@@ -27,28 +27,14 @@ fn main() {
 
         let out = Command::new("cmd")
             .args(
-                &[
-                    "/C",
-                    "xcopy",
-                    r#".\bin"#,
-                    r#".\target\debug"#,
-                    "/y",
-                    "/e"
-                ],
+                &["/C", "xcopy", r#".\bin"#, r#".\target\debug"#, "/y", "/e"],
             )
             .stdout(Stdio::inherit())
             .output()
             .expect("fuck");
         Command::new("cmd")
             .args(
-                &[
-                    "/C",
-                    "xcopy",
-                    r#".\bin"#,
-                    r#".\target\release"#,
-                    "/y",
-                    "/e"
-                ],
+                &["/C", "xcopy", r#".\bin"#, r#".\target\release"#, "/y", "/e"],
             )
             .stdout(Stdio::inherit())
             .output()
@@ -66,7 +52,7 @@ fn main() {
         // -------------
         println!("cargo:rustc-link-search=native=./lib");
         // -------------
-//      println!("cargo:rustc-link-lib=gdal");
+        //      println!("cargo:rustc-link-lib=gdal");
         println!("cargo:rustc-link-lib=OpenThreads");
         println!("cargo:rustc-link-lib=osg");
         println!("cargo:rustc-link-lib=osgDB");
