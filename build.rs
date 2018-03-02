@@ -67,6 +67,7 @@ fn main() {
         println!("cargo:rustc-link-search=native=./lib");
         // -------------
 //      println!("cargo:rustc-link-lib=gdal");
+        println!("cargo:rustc-link-lib=OpenThreads");        
         println!("cargo:rustc-link-lib=osg");
         println!("cargo:rustc-link-lib=osgDB");
         println!("cargo:rustc-link-lib=osgUtil");
@@ -74,7 +75,7 @@ fn main() {
         let out = Command::new("cp")
             .args(
                 &[
-                    r#".\bin\linux"#,
+                    r#".\lib\*.so"#,
                     r#".\target\debug"#,
                     "-r"
                 ],
@@ -84,7 +85,7 @@ fn main() {
         Command::new("cp")
             .args(
                 &[
-                    r#".\bin\linux"#,
+                    r#".\lib\*.so"#,
                     r#".\target\release"#,
                     "-r"
                 ],
