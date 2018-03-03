@@ -9,6 +9,9 @@ fn main() {
     if cfg!(windows) {
         cc::Build::new()
             .cpp(true)
+            .flag("-Zi")
+            .flag("-Gm")
+            .flag("-INCREMENTAL")
             .warnings(false)
             .define("WIN32", None)
             .include("./src")
@@ -25,23 +28,25 @@ fn main() {
         println!("cargo:rustc-link-lib=osgDB");
         println!("cargo:rustc-link-lib=osgUtil");
 
-        let out = Command::new("cmd")
+        Command::new("cmd")
             .args(
                 &["/C", "xcopy", r#".\bin"#, r#".\target\debug"#, "/y", "/e"],
             )
             .stdout(Stdio::inherit())
             .output()
-            .expect("fuck");
+            .unwrap();
         Command::new("cmd")
             .args(
                 &["/C", "xcopy", r#".\bin"#, r#".\target\release"#, "/y", "/e"],
             )
             .stdout(Stdio::inherit())
             .output()
-            .expect("fuck");
+            .unwrap();
     } else {
         cc::Build::new()
             .cpp(true)
+            .flag("-std=c++11")
+            .flag("-Gi")
             .warnings(false)
             .include("./src")
             .include("./src/osg")

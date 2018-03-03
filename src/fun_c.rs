@@ -1,8 +1,10 @@
+
 #[no_mangle]
 pub extern "C" fn write_file(file_name: *const i8, buf: *const u8, buf_len: u32) -> bool {
     use std::ffi;
     use std::slice;
     use std::fs::File;
+    use std::error::Error;
     use std::io::prelude::*;
 
     unsafe {
@@ -12,7 +14,7 @@ pub extern "C" fn write_file(file_name: *const i8, buf: *const u8, buf_len: u32)
                 match f.write_all(arr) {
                     Ok(_) => true,
                     Err(e) => {
-                        println!("ERROR: {:?}", e);
+                        error!("{}", e.description());
                         false
                     }
                 }
@@ -20,7 +22,7 @@ pub extern "C" fn write_file(file_name: *const i8, buf: *const u8, buf_len: u32)
                 false
             }
         } else {
-            println!("ERROR: convert file_name failed");
+            error!("convert file_name fail");
             false
         }
     }
@@ -30,19 +32,20 @@ pub extern "C" fn write_file(file_name: *const i8, buf: *const u8, buf_len: u32)
 pub extern "C" fn mkdirs(path: *const i8) -> bool {
     use std::fs;
     use std::ffi;
+    use std::error::Error;
     unsafe {
         match ffi::CStr::from_ptr(path).to_str() {
             Ok(buf) => {
                 match fs::create_dir_all(buf) {
                     Ok(_) => true,
                     Err(e) => {
-                        println!("ERROR: {:?}", e);
+                        error!("{}", e.description());
                         false
                     }
                 }
             }
             Err(e) => {
-                println!("ERROR: {:?}", e);
+                error!("{}", e.description());
                 false
             }
         }

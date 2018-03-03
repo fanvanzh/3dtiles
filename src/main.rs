@@ -1,10 +1,10 @@
-extern crate libc;
 extern crate clap;
-extern crate rayon;
-extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 
 mod osgb;
 mod shape;
@@ -16,7 +16,13 @@ fn main() {
     // use std::io;
     // let mut msg = String::new();
     // io::stdin().read_line(&mut msg).unwrap();
+    use std::env;
+    if let Err(_) = env::var("RUST_LOG") {
+        env::set_var("RUST_LOG", "info");
+    }
+    env::set_var("RUST_BACKTRACE", "1");
 
+    env_logger::init();
     let matches = App::new("Make 3dtile program")
         .version("1.0")
         .author("fanvanzh <fanvanzh@sina.com>")
@@ -78,11 +84,11 @@ fn main() {
     let tile_config = matches.value_of("config").unwrap_or("");
 
     if matches.is_present("verbose") {
-        println!("Set Program Versose Output [On].");
+        info!("set program versose on");
     }
     let in_path = std::path::Path::new(input);
     if !in_path.exists() {
-        println!("Error: {} does not exists.", input);
+        error!("{} does not exists.", input);
         return;
     }
     match format {
@@ -90,7 +96,7 @@ fn main() {
             convert_osgb(input, output, tile_config);
         }
         _ => {
-            println!("not support now.");
+            error!("not support now.");
         }
     }
 }
@@ -121,7 +127,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                 if pos0.is_some() && pos1.is_some() {
                     let vec = (&buffer).as_bytes()[(pos0.unwrap() + 5)..(pos1.unwrap())].to_vec();
                     let str1 = String::from_utf8(vec).unwrap();
-                    println!("center point --> {}.", str1);
+                    info!("center point --> {}.", str1);
                     let v: Vec<&str> = str1.split(":").collect();
                     if v.len() > 1 {
                         let v1: Vec<&str> = v[1].split(",").collect();
@@ -152,19 +158,18 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
             max_lvl = Some(lvl as i32);
         }
     } else if config.len() > 0 {
-        println!("Error: config error --> {}", config);
+        error!("config error --> {}", config);
     }
     let tick = time::SystemTime::now();
     if let Err(e) = osgb::osgb_batch_convert(&dir, &dir_dest, max_lvl) {
-        println!("Error: {:?}.", e);
+        error!("{}", e.description());
         return;
     }
     if let Err(e) = osgb::merge_osgb_tileset(&dir_dest, center_x, center_y, trans_region) {
-        println!("Error: {:?}.", e);
+        error!("{}", e.description());
         return;
     }
-    println!(
-        "Info: task over, cost {} s.",
-        tick.elapsed().unwrap().as_secs()
-    );
+    let elap_sec = tick.elapsed().unwrap();
+    let tick_num = elap_sec.as_secs() as f64 + elap_sec.subsec_nanos() as f64 * 1e-9;
+    info!("task over, cost {:.2} s.", tick_num);
 }

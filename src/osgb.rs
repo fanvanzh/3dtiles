@@ -1,9 +1,13 @@
+extern crate libc;
+extern crate rayon;
+extern crate serde;
+extern crate serde_json;
 
 use std::fs;
 use std::io;
 use std::path::Path;
 use std::error::Error;
-use rayon::prelude::*;
+use osgb::rayon::prelude::*;
 
 extern "C" {
     fn osgb23dtile(name_in: *const u8, name_out: *const u8) -> bool;
@@ -40,7 +44,6 @@ fn osgv_convert(dir_osgb: &str, dir_from: &str, dir_dest: &str) -> Result<(), Bo
             dir_from,
             dir_dest,
         );
-        //println!("{:?} -- > {:?}", dir_osgb, dest_string);
         let mut dest_vec = dest_string.to_string().as_bytes_mut().to_vec();
         dest_vec.push(0x00);
         // create dir first
@@ -62,7 +65,7 @@ pub fn osgb_batch_convert(
     let path = dir.join("Data");
     // 指定 .\Data 目录
     if !path.exists() || !path.is_dir() {
-        return Err(From::from("dir Data not exist"));
+        return Err(From::from(format!("dir {} not exist", path.display())));
     }
 
     fs::create_dir_all(dir_dest)?;
@@ -88,7 +91,7 @@ pub fn osgb_batch_convert(
             dir_dest.to_str().unwrap(),
         )
         {
-            eprintln!("Error: {:?}", e);
+            error!("{}", e.description());
         })
         .count();
     Ok(())
@@ -217,7 +220,7 @@ pub fn merge_osgb_tileset(
     use std::collections::BTreeMap;
     use std::io::prelude::*;
     use std::fs::File;
-    use serde_json::{self, Value};
+    use self::serde_json::{self, Value};
 
     let path = path_root.join("Data");
     // 指定 .\Data 目录
@@ -274,7 +277,7 @@ pub fn merge_osgb_tileset(
         let first_lvl_coord_num = find_coor_num(first_kv.1[0].as_str(), *first_lvl).len();
         if first_lvl_coord_num != 1 {
             return Err(From::from(format!(
-                "Error: path [{}] not satisfy this program.",
+                "path [{}] not satisfy this program.",
                 first_kv.1[0].as_str()
             )));
         }
@@ -317,7 +320,6 @@ pub fn merge_osgb_tileset(
                 let end_pos = start_pos + tile_coord_num;
                 let key_str = String::from_utf8(bin_path_buf.get(0..end_pos).unwrap().into())
                     .unwrap();
-                //println!("{:?}", key_str);
                 if first_lvl == lvl {
                     root_tile.children.push(tile.clone());
                     // modify the root
