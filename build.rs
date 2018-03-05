@@ -46,7 +46,6 @@ fn main() {
         cc::Build::new()
             .cpp(true)
             .flag("-std=c++11")
-            .flag("-Gi")
             .warnings(false)
             .include("./src")
             .include("./src/osg")
