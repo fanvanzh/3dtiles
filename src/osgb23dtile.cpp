@@ -4,6 +4,7 @@
 #include <osgUtil/Optimizer>
 #include <osgUtil/SmoothingVisitor>
 
+#include <set>
 #include <vector>
 #include <string>
 #include <cstring>
@@ -39,26 +40,18 @@ public:
     :osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
     {}
 
-    virtual void apply(osg::Node& node)
-    {
-        traverse(node);
+    ~InfoVisitor() {
     }
 
-    virtual void apply(osg::Geode& node)
-    {
-        for (unsigned int n = 0; n < node.getNumDrawables(); n++)
-        {
-            osg::Drawable* draw = node.getDrawable(n);
-            if (!draw)
-                continue;
-            osg::Geometry *g = draw->asGeometry();
-            if (g)
-                geometry_array.push_back(g);
+    void apply(osg::Geometry& geometry){
+        geometry_array.push_back(&geometry);
+        if (auto ss = geometry.getStateSet()) {
+            states_array.insert(ss);
         }
-        traverse(node);
     }
 public:
     std::vector<osg::Geometry*> geometry_array;
+	std::set<osg::StateSet*> states_array;
 };
 
 struct mesh_info
@@ -84,7 +77,6 @@ bool osgb2glb_buf(const char* path, std::string& glb_buff, std::vector<mesh_info
     root->accept(infoVisitor);
     if (infoVisitor.geometry_array.empty())
         return false;
-
 
     osgUtil::SmoothingVisitor sv;
     root->accept(sv);

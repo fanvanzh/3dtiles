@@ -13,9 +13,9 @@ pub mod fun_c;
 use clap::{Arg, App};
 
 fn main() {
-    // use std::io;
-    // let mut msg = String::new();
-    // io::stdin().read_line(&mut msg).unwrap();
+//     use std::io;
+//     let mut msg = String::new();
+//     io::stdin().read_line(&mut msg).unwrap();
     use std::env;
     if let Err(_) = env::var("RUST_LOG") {
         env::set_var("RUST_LOG", "info");

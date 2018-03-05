@@ -71,7 +71,7 @@ pub fn osgb_batch_convert(
     fs::create_dir_all(dir_dest)?;
     let mut osg_array = vec![];
     {
-        walk_path(dir, &mut |dir_osgb: &str| if let Some(max_lvl) = max_lvl {
+        walk_path(&path, &mut |dir_osgb: &str| if let Some(max_lvl) = max_lvl {
             let lvl_str = find_lvl_num(dir_osgb);
             if lvl_str.len() > 0 {
                 let lvl_num: i32 = lvl_str.parse().unwrap();
@@ -275,11 +275,9 @@ pub fn merge_osgb_tileset(
         let first_kv = kv_path.iter().next().unwrap();
         let first_lvl = first_kv.0;
         let first_lvl_coord_num = find_coor_num(first_kv.1[0].as_str(), *first_lvl).len();
-        if first_lvl_coord_num != 1 {
-            return Err(From::from(format!(
-                "path [{}] not satisfy this program.",
-                first_kv.1[0].as_str()
-            )));
+        if first_lvl_coord_num < 1 {
+            error!("path [{}] not satisfy this program.",first_kv.1[0].as_str());
+            continue;
         }
         for (lvl, v_path) in kv_path.iter() {
             for path in v_path {
