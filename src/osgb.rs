@@ -67,6 +67,7 @@ fn str_to_vec_c(str: &str) -> Vec<u8>{
     buf
 }
 
+#[derive(Debug)]
 struct TileResult {
     json: String,
     box_v: Vec<f64>
@@ -82,14 +83,18 @@ pub fn osgb_batch_convert(
 ) -> Result<(), Box<Error>> {
     use std::fs::File;
     use std::io::prelude::*;
+    use std::thread;
+    use std::sync::mpsc::channel;
+
     let path = dir.join("Data");
     // 指定 .\Data 目录
     if !path.exists() || !path.is_dir() {
         return Err(From::from(format!("dir {} not exist", path.display())));
     }
 
+    let (sender, receiver) = channel();
+    let mut task_count = 0;
     fs::create_dir_all(dir_dest)?;
-    let mut tile_array = vec![];
     for entry in fs::read_dir(&path)? {
         let entry = entry?;
         let path_tile = entry.path();
@@ -99,29 +104,34 @@ pub fn osgb_batch_convert(
             let osgb = path_tile.join(stem).with_extension("osgb");
             if osgb.exists() && !osgb.is_dir() {
                 // convert this path
+                task_count += 1;
                 let in_buf = str_to_vec_c(osgb.to_str().unwrap());
                 let out_dir = dir_dest.join("Data").join(stem);
                 fs::create_dir_all(&out_dir)?;
                 let out_buf = str_to_vec_c(out_dir.to_str().unwrap());
-                unsafe {
-                    let mut root_box = vec![0f64; 6];
-                    let mut json_buf = vec![0; 1024*512];
-                    let mut json_len = 0i32;
-                    if !osgb23dtile_path(
-                        in_buf.as_ptr(), out_buf.as_ptr(),
-                        root_box.as_mut_ptr(), json_buf.as_mut_ptr(),
-                        (&mut json_len ) as *mut i32, max_lvl.unwrap_or(100)
-                        ) {
-                        error!("failed: {}", path_tile.display());
-                        continue;
+                let path_clone = path_tile.clone();
+                let sender_clone = sender.clone();
+                thread::spawn( move || {
+                    unsafe {
+                        let mut root_box = vec![0f64; 6];
+                        let mut json_buf = vec![0; 1024*512];
+                        let mut json_len = 0i32;
+                        if !osgb23dtile_path(
+                            in_buf.as_ptr(), out_buf.as_ptr(),
+                            root_box.as_mut_ptr(), json_buf.as_mut_ptr(),
+                            (&mut json_len ) as *mut i32, max_lvl.unwrap_or(100)
+                            ) {
+                            error!("failed: {}", path_clone.display());
+                        }
+                        json_buf.resize(json_len as usize, 0);
+                        let t = TileResult {
+                            json: String::from_utf8(json_buf).unwrap(),
+                            box_v: root_box
+                        };
+                        sender_clone.send(t).unwrap();
                     }
-                    json_buf.resize(json_len as usize, 0);
-                    let t = TileResult {
-                        json: String::from_utf8(json_buf).unwrap(),
-                        box_v: root_box
-                    };
-                    tile_array.push(t);
-                }
+                } );
+
             }
             else {
                 error!("dir error: {}", osgb.display());
@@ -130,6 +140,14 @@ pub fn osgb_batch_convert(
     }
 
     // merge and root 
+    let mut tile_array = vec![];
+    for _ in 0..task_count {
+        if let Ok(t) = receiver.recv() {
+            if !t.json.is_empty() {
+                tile_array.push(t);
+            }
+        }
+    }
     let mut root_box = vec![-1.0E+38f64, -1.0E+38, -1.0E+38, 1.0E+38, 1.0E+38, 1.0E+38];
     for x in tile_array.iter() {
         for i in 0..3 {

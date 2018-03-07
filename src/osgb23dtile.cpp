@@ -47,8 +47,11 @@ public:
 
     void apply(osg::Geometry& geometry){
         geometry_array.push_back(&geometry);
-        if (auto ss = geometry.getStateSet()) {
-            states_array.insert(ss);
+        if (auto ss = geometry.getStateSet() ) {
+			osg::Texture* tex = dynamic_cast<osg::Texture*>(ss->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
+			if (tex) {
+				texture_array.insert(tex);
+			}
         }
     }
     
@@ -65,7 +68,7 @@ public:
 
 public:
     std::vector<osg::Geometry*> geometry_array;
-	std::set<osg::StateSet*> states_array;
+	std::set<osg::Texture*> texture_array;
     std::vector<std::string> sub_node_names;
 };
 
@@ -359,9 +362,8 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
             char* buf = 0;
             int width, height;
             {
-                osg::StateSet* ss = *infoVisitor.states_array.begin();
-                if (ss) {
-                    osg::Texture* tex = dynamic_cast<osg::Texture*>(ss->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
+				osg::Texture* tex = *infoVisitor.texture_array.begin();
+                if (tex) {
                     if (tex->getNumImages() > 0) {
                         osg::Image* img = tex->getImage(0);
                         if (img) {
