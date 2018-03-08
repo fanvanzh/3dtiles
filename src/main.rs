@@ -161,8 +161,15 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
         error!("config error --> {}", config);
     }
     let tick = time::SystemTime::now();
-    if let Err(e) = osgb::osgb_batch_convert(&dir, &dir_dest, max_lvl, 
-        center_x, center_y, trans_region) {
+    if let Err(e) = osgb::osgb_batch_convert(
+        &dir,
+        &dir_dest,
+        max_lvl,
+        center_x,
+        center_y,
+        trans_region,
+    )
+    {
         error!("{}", e.description());
         return;
     }

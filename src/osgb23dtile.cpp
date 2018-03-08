@@ -48,10 +48,10 @@ public:
     void apply(osg::Geometry& geometry){
         geometry_array.push_back(&geometry);
         if (auto ss = geometry.getStateSet() ) {
-			osg::Texture* tex = dynamic_cast<osg::Texture*>(ss->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
-			if (tex) {
-				texture_array.insert(tex);
-			}
+            osg::Texture* tex = dynamic_cast<osg::Texture*>(ss->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
+            if (tex) {
+                texture_array.insert(tex);
+            }
         }
     }
     
@@ -68,7 +68,7 @@ public:
 
 public:
     std::vector<osg::Geometry*> geometry_array;
-	std::set<osg::Texture*> texture_array;
+    std::set<osg::Texture*> texture_array;
     std::vector<std::string> sub_node_names;
 };
 
@@ -86,6 +86,14 @@ std::string get_file_name(std::string path) {
 std::string replace(std::string str, std::string s0, std::string s1) {
     auto p0 = str.find(s0);
     return str.replace(p0, p0 + s0.length() - 1, s1);
+}
+
+std::string get_parent(std::string str) {
+    auto p0 = str.find_last_of("/\\");
+    if (p0 != std::string::npos)
+        return str.substr(0, p0);
+    else
+        return "";
 }
 
 int get_lvl_num(std::string file_name){
@@ -362,7 +370,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
             char* buf = 0;
             int width, height;
             {
-				osg::Texture* tex = *infoVisitor.texture_array.begin();
+                osg::Texture* tex = *infoVisitor.texture_array.begin();
                 if (tex) {
                     if (tex->getNumImages() > 0) {
                         osg::Image* img = tex->getImage(0);
@@ -600,15 +608,15 @@ void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl) {
 }
 
 void expend_box(tile_box& box, tile_box& box_new) {
-	if (box_new.max.empty() || box_new.min.empty()) {
-		return;
-	}
-	if (box.max.empty()) {
-		box.max = box_new.max;
-	}
-	if (box.min.empty()) {
-		box.min = box_new.min;
-	}
+    if (box_new.max.empty() || box_new.min.empty()) {
+        return;
+    }
+    if (box.max.empty()) {
+        box.max = box_new.max;
+    }
+    if (box.min.empty()) {
+        box.min = box_new.min;
+    }
     for (int i = 0; i < 3; i++) {
         if (box.min[i] > box_new.min[i])
             box.min[i] = box_new.min[i];
@@ -629,11 +637,11 @@ tile_box extend_tile_box(osg_tree& tree) {
 
 std::string encode_tile_json(osg_tree& tree) {
     // Todo:: 获取 Geometric Error
-	int lvl = get_lvl_num(tree.file_name);
+    int lvl = get_lvl_num(tree.file_name);
     if (lvl == -1) lvl = 15;
-	char buf[512];
-	sprintf(buf, "{ \"geometricError\":%.2f,", get_geometric_error(lvl));
-	std::string tile = buf;
+    char buf[512];
+    sprintf(buf, "{ \"geometricError\":%.2f,", get_geometric_error(lvl));
+    std::string tile = buf;
     string box_str = "\"boundingVolume\":{";
     box_str += "\"box\":[";
     std::vector<double> v_box = convert_bbox(tree.bbox);
@@ -646,7 +654,15 @@ std::string encode_tile_json(osg_tree& tree) {
     tile += box_str;
     tile += ",";
     tile += "\"content\":{ \"url\":";
-    std::string url = replace(get_file_name(tree.file_name),".osgb",".b3dm");
+    // Data/Tile_0/Tile_0.b3dm
+    std::string url_path = "Data/";
+    std::string file_name = get_file_name(tree.file_name);
+    std::string parent_str = get_parent(tree.file_name);
+    std::string file_path = get_file_name(parent_str);
+    url_path += file_path;
+    url_path += "/";
+    url_path += file_name;
+    std::string url = replace(url_path,".osgb",".b3dm");
     tile += "\"";
     tile += url;
     tile += "\",";
@@ -679,7 +695,7 @@ std::string osg_string ( const char* path ) {
 */
 extern "C" bool osgb23dtile_path(
     const char* in_path, const char* out_path, 
-	double *box, char* str,
+    double *box, char* str,
     int* len, int max_lvl) {
     std::string path = osg_string(in_path);
     osg_tree root = get_all_tree(path);
@@ -689,14 +705,14 @@ extern "C" bool osgb23dtile_path(
     do_tile_job(root, out_path, max_lvl);
     // 返回 json 和 最大bbox
     extend_tile_box(root);
-	if (root.bbox.max.empty() || root.bbox.min.empty()) {
-		return false;
-	}
+    if (root.bbox.max.empty() || root.bbox.min.empty()) {
+        return false;
+    }
     std::string json = encode_tile_json(root);
-	memcpy(box, root.bbox.max.data(), 3 * sizeof(double));
-	memcpy(box + 3, root.bbox.min.data(), 3 * sizeof(double));
-	memcpy(str, json.c_str(), json.length());
-	*len = json.length();
+    memcpy(box, root.bbox.max.data(), 3 * sizeof(double));
+    memcpy(box + 3, root.bbox.min.data(), 3 * sizeof(double));
+    memcpy(str, json.c_str(), json.length());
+    *len = json.length();
     return true;
 }
 
