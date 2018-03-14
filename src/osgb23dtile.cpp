@@ -636,7 +636,10 @@ tile_box extend_tile_box(osg_tree& tree) {
 }
 
 std::string encode_tile_json(osg_tree& tree) {
-    // Todo:: 获取 Geometric Error
+	if (tree.bbox.max.empty() || tree.bbox.min.empty()) {
+		return "";
+	}
+	// Todo:: 获取 Geometric Error
     int lvl = get_lvl_num(tree.file_name);
     if (lvl == -1) lvl = 15;
     char buf[512];
@@ -670,8 +673,10 @@ std::string encode_tile_json(osg_tree& tree) {
     tile += "},\"children\":[";
     for ( auto& i : tree.sub_nodes ){
         std::string node_json = encode_tile_json(i);
-        tile += node_json;
-        tile += ",";
+		if (!node_json.empty()) {
+			tile += node_json;
+			tile += ",";
+		}
     }
     if (tile.back() == ',')
         tile.pop_back();

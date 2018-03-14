@@ -4,13 +4,17 @@ extern crate serde_json;
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
+extern crate chrono;
 extern crate env_logger;
 
 mod osgb;
 mod shape;
 pub mod fun_c;
 
+use std::io::Write;
 use clap::{Arg, App};
+use chrono::prelude::*;
+use log::{Level, LevelFilter};
 
 fn main() {
 //     use std::io;
@@ -22,7 +26,24 @@ fn main() {
     }
     env::set_var("RUST_BACKTRACE", "1");
 
-    env_logger::init();
+    let mut builder = env_logger::Builder::from_default_env();
+    builder.format(|buf, record| {
+        let dt = Local::now();
+        let mut style = buf.style();
+        if record.level() <= Level::Error {
+            style.set_color(env_logger::Color::Red);
+        }
+        else {
+            style.set_color(env_logger::Color::Green);
+        }
+        writeln!(buf, "{}: {} - {}", 
+            style.value(record.level()),
+            dt.format("%Y-%m-%d %H:%M:%S").to_string(),
+            record.args())
+        })
+       .filter(None, LevelFilter::Info)
+       .init();
+    //env_logger::init();
     let matches = App::new("Make 3dtile program")
         .version("1.0")
         .author("fanvanzh <fanvanzh@sina.com>")
