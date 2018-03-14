@@ -693,27 +693,28 @@ std::string osg_string ( const char* path ) {
 外面分配好 box[6][double]
 外面分配好 string [1024*1024]
 */
-extern "C" bool osgb23dtile_path(
+extern "C" void* osgb23dtile_path(
     const char* in_path, const char* out_path, 
-    double *box, char* str,
-    int* len, int max_lvl) {
+    double *box, int* len, int max_lvl) {
+    
     std::string path = osg_string(in_path);
     osg_tree root = get_all_tree(path);
     if (root.file_name.empty()) {
-        return false;
+        return NULL;
     }
     do_tile_job(root, out_path, max_lvl);
     // 返回 json 和 最大bbox
     extend_tile_box(root);
     if (root.bbox.max.empty() || root.bbox.min.empty()) {
-        return false;
+        return NULL;
     }
     std::string json = encode_tile_json(root);
     memcpy(box, root.bbox.max.data(), 3 * sizeof(double));
     memcpy(box + 3, root.bbox.min.data(), 3 * sizeof(double));
+    void* str = malloc(json.length());
     memcpy(str, json.c_str(), json.length());
     *len = json.length();
-    return true;
+    return str;
 }
 
 extern "C" bool osgb23dtile(

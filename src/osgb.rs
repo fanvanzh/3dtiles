@@ -14,10 +14,9 @@ extern "C" {
         name_in: *const u8,
         name_out: *const u8,
         box_ptr: *mut f64,
-        json: *mut u8,
         len: *mut i32,
         max_lvl: i32,
-    ) -> bool;
+    ) -> *mut libc::c_void;
 
     fn osgb2glb(name_in: *const u8, name_out: *const u8) -> bool;
 
@@ -115,20 +114,26 @@ pub fn osgb_batch_convert(
                 let sender_clone = sender.clone();
                 thread::spawn(move || unsafe {
                     let mut root_box = vec![0f64; 6];
-                    let mut json_buf = vec![0; 1024 * 512];
+                    let mut json_buf = vec![];
                     let mut json_len = 0i32;
-                    if !osgb23dtile_path(
+                    let out_ptr = osgb23dtile_path(
                         in_buf.as_ptr(),
                         out_buf.as_ptr(),
                         root_box.as_mut_ptr(),
-                        json_buf.as_mut_ptr(),
                         (&mut json_len) as *mut i32,
                         max_lvl.unwrap_or(100),
-                    )
-                    {
+                    );
+                    if out_ptr.is_null() {
                         error!("failed: {}", path_clone.display());
                     }
-                    json_buf.resize(json_len as usize, 0);
+                    else {
+                        json_buf.resize(json_len as usize, 0);
+                        libc::memcpy(
+                            json_buf.as_mut_ptr() as *mut libc::c_void,
+                            out_ptr, json_len as usize
+                            );
+                        libc::free(out_ptr);
+                    }
                     let t = TileResult {
                         json: String::from_utf8(json_buf).unwrap(),
                         box_v: root_box,
