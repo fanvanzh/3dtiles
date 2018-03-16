@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/fanvanzh/3dtiles.svg?branch=master)](https://travis-ci.org/fanvanzh/3dtiles)
 [![Build status](https://ci.appveyor.com/api/projects/status/lyhf989tnt9jhi9y?svg=true)](https://ci.appveyor.com/project/fanvanzh/3dtiles)
 
-A serials tools for cesium 3dtiles, impl by rust and c++.
+A suit of tools for cesium 3dtiles, impl by rust and c++.
 
 include these tools：
 
