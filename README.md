@@ -3,15 +3,18 @@
 [![Build Status](https://travis-ci.org/fanvanzh/3dtiles.svg?branch=master)](https://travis-ci.org/fanvanzh/3dtiles)
 [![Build status](https://ci.appveyor.com/api/projects/status/lyhf989tnt9jhi9y?svg=true)](https://ci.appveyor.com/project/fanvanzh/3dtiles)
 
-A suit of tools for cesium 3dtiles, impl by rust and c++.
+The most fast tools for 3dtiles convert in the world!
 
 include these tools：
 
-osgb => 3dtile , aim at having a high efficiency。
+osgb => 3dtile , convert huge of osgb file to 3dtiles.
 
-shapefile => 3dtile,  aim at large scale of buiding outline。
+shapefile => 3dtile,  convert shape file to 3dtiles.
 
-## 倾斜摄影 (osgb 格式) 转 3dtile 工具。
+fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc..
+
+## 3dtile 转换工具集。
+### 世界上最快的 3dtiles 转换工具，极度节省你的处理时间。
 
 ### 命令行： 
 	3dtile.exe [FLAGS] [OPTIONS] --format <osgb,shape> --input <FILE> --output <FILE>
