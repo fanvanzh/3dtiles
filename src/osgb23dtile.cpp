@@ -74,7 +74,7 @@ public:
 
 double get_geometric_error(int lvl ){
     const double pi = std::acos(-1);
-    double round = 2 * pi * 6378137.0;
+    double round = 2 * pi * 6378137.0 / 128.0;
     return round / std::pow(2.0, lvl );
 }
 
@@ -256,10 +256,12 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                         put_val(buffer.data, -point.y());
                         if (point.x() > box_max[0]) box_max[0] = point.x();
                         if (point.x() < box_min[0]) box_min[0] = point.x();
-                        if (-point.y() > box_max[2]) box_max[2] = -point.y();
-                        if (-point.y() < box_min[2]) box_min[2] = -point.y();
-                        if (point.z() > box_max[1]) box_max[1] = point.z();
-                        if (point.z() < box_min[1]) box_min[1] = point.z();
+                        
+                        if (point.y() > box_max[1]) box_max[1] = point.y();
+                        if (point.y() < box_min[1]) box_min[1] = point.y();
+
+                        if (point.z() > box_max[2]) box_max[2] = point.z();
+                        if (point.z() < box_min[2]) box_min[2] = point.z();
                     }
                     tinygltf::Accessor acc;
                     acc.bufferView = 1;
@@ -568,19 +570,19 @@ bool osgb23dtile_buf(std::string path, std::string& b3dm_buf, tile_box& tile_box
 
 std::vector<double> convert_bbox(tile_box tile) {
     double center_mx = (tile.max[0] + tile.min[0]) / 2;
-    double center_my = (tile.max[2] + tile.min[2]) / 2;
-    double center_mz = (tile.max[1] + tile.min[1]) / 2;
-    double width_meter = tile.max[0] - tile.min[0];
-    double height_meter = tile.max[2] - tile.min[2];
-    double z_meter = tile.max[1] - tile.min[1];
-    if (width_meter < 0.01) { width_meter = 0.01; }
-    if (height_meter < 0.01) { height_meter = 0.01; }
+    double center_my = (tile.max[1] + tile.min[1]) / 2;
+    double center_mz = (tile.max[2] + tile.min[2]) / 2;
+    double x_meter = (tile.max[0] - tile.min[0]) * 1.01;
+    double y_meter = (tile.max[1] - tile.min[1]) * 1.01;
+    double z_meter = (tile.max[2] - tile.min[2]) * 1.01;
+    if (x_meter < 0.01) { x_meter = 0.01; }
+    if (y_meter < 0.01) { y_meter = 0.01; }
     if (z_meter < 0.01) { z_meter = 0.01; }
     std::vector<double> v = {
         center_mx,center_my,center_mz,
-        width_meter / 2, 0, 0,
-        0, height_meter / 2, 0,
-        0, 0, z_meter / 2
+        x_meter/2, 0, 0,
+        0, y_meter/2, 0,
+        0, 0, z_meter/2
     };
     return v;
 }
