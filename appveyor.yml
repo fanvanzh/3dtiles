@@ -31,7 +31,7 @@ after_build:
 
 artifacts:
 
-  - path: 3dtiles.zip
+  - path: bin\**\*
   
     name: 3dtiles
     
