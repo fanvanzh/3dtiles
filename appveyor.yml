@@ -14,12 +14,23 @@ install:
     msiexec /i %RUST_INSTALLER% INSTALLDIR="c:\rust" /qn
     
     SET PATH=c:\rust\bin;%PATH%
-build: off
 
-test_script:
+build_script:
 - cmd: >-
     SET RUST_BACKTRACE=1
     
-    cargo build
+    cargo build --release
+    
+    cargo test
+    
+after build:
+- cmd: >-
+   copy /y target/bin/release/3dtile.exe bin/
+   7z a 3dtiles.zip bin/*
 
-    cargo test 
+artifacts:
+  - path: 3dtiles.zip
+    name: 3dtiles
+    
+    
+    
