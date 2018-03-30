@@ -15,7 +15,7 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 
 [How to build / 编译指南](https://github.com/fanvanzh/3dtiles/wiki/How-to-build)
 
-[Windows pre-build / 预编译下载] (https://ci.appveyor.com/api/projects/fanvanzh/3dtiles/artifacts/3dtiles.zip?branch=master)
+[Windows pre-build / 预编译下载](https://ci.appveyor.com/api/projects/fanvanzh/3dtiles/artifacts/3dtiles.zip?branch=master)
 
 ## 3dtile 转换工具集。
 ### 世界上最快的 3dtiles 转换工具，极度节省你的处理时间。
