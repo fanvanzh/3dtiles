@@ -180,7 +180,7 @@ pub fn osgb_batch_convert(
     // do merge plz
     let mut tras_height = 0f64;
     if let Some(v) = region_offset {
-        tras_height = v - root_box[2];
+        tras_height = v - root_box[5];
     }
     let mut trans_vec = vec![0f64; 16];
     unsafe {

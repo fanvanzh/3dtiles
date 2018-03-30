@@ -645,7 +645,9 @@ std::string encode_tile_json(osg_tree& tree) {
     int lvl = get_lvl_num(tree.file_name);
     if (lvl == -1) lvl = 15;
     char buf[512];
-    sprintf(buf, "{ \"geometricError\":%.2f,", get_geometric_error(lvl));
+    sprintf(buf, "{ \"geometricError\":%.2f,", 
+        tree.sub_nodes.empty()? 0 : get_geometric_error(lvl)
+        );
     std::string tile = buf;
     string box_str = "\"boundingVolume\":{";
     box_str += "\"box\":[";
