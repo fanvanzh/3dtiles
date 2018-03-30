@@ -25,14 +25,11 @@ build_script:
     
 after_build:
 - cmd: >-
-   copy target/release/3dtile.exe bin/
+   copy target\release\3dtiles.exe bin\
    
-   7z a 3dtiles.zip bin/*
 
 artifacts:
-
-  - path: bin\**\*
-  
+  - path: bin
     name: 3dtiles
     
     
