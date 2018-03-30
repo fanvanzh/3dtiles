@@ -21,15 +21,18 @@ build_script:
     
     cargo build --release
     
-    cargo test
+    cargo test --release
     
 after_build:
 - cmd: >-
    copy /y target/bin/release/3dtile.exe bin/
+   
    7z a 3dtiles.zip bin/*
 
 artifacts:
+
   - path: 3dtiles.zip
+  
     name: 3dtiles
     
     
