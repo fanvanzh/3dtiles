@@ -125,13 +125,13 @@ pub fn osgb_batch_convert(
                     );
                     if out_ptr.is_null() {
                         error!("failed: {}", path_clone.display());
-                    }
-                    else {
+                    } else {
                         json_buf.resize(json_len as usize, 0);
                         libc::memcpy(
                             json_buf.as_mut_ptr() as *mut libc::c_void,
-                            out_ptr, json_len as usize
-                            );
+                            out_ptr,
+                            json_len as usize,
+                        );
                         libc::free(out_ptr);
                     }
                     let t = TileResult {

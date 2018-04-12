@@ -901,15 +901,8 @@ static void swap4(unsigned int *val) {
 
 static bool FileExists(const std::string &abs_filename) {
   bool ret;
-#ifdef _WIN32
-  FILE *fp;
-  errno_t err = fopen_s(&fp, abs_filename.c_str(), "rb");
-  if (err != 0) {
-    return false;
-  }
-#else
+
   FILE *fp = fopen(abs_filename.c_str(), "rb");
-#endif
   if (fp) {
     ret = true;
     fclose(fp);

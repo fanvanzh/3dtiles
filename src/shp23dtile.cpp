@@ -404,7 +404,10 @@ extern "C" bool shp23dtile(const char* filename, int layer_id, const char* dest)
     }
 
     OGREnvelope envelop;
-    poLayer->GetExtent(&envelop);
+    OGRErr err = poLayer->GetExtent(&envelop);
+    if (err != OGRERR_NONE) {
+        return false;
+    }
 
     bbox bound(envelop.MinX, envelop.MaxX, envelop.MinY, envelop.MaxY);
     node root(bound);
