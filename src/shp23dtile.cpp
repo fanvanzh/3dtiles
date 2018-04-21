@@ -162,9 +162,13 @@ struct Polygon_Mesh
 @param: center_x, 投影中心点
 @param: center_y, 投影中心点
 */
-Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_y) {
+Polygon_Mesh convert_polygon(
+    OGRPolygon* polyon, 
+    double center_x, 
+    double center_y,
+    double height
+    ) {
     double bottom = 0.0;
-    double height = 50.0;
     Polygon_Mesh mesh;
     OGREnvelope geo_box;
     polyon->getEnvelope(&geo_box);
@@ -186,7 +190,6 @@ Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_
         }
         OGRPoint last_pt;
         std::vector<std::array<float, 3>> pt_normal;
-        // 计算最后一个法线 ( 换 osg 计算吧)
         OGRPoint pt0, pt1;
         pRing->getPoint(0, &pt0);
         pRing->getPoint(ptNum - 2, &pt1); // 闭合面用倒数第二个
@@ -375,18 +378,25 @@ Polygon_Mesh convert_polygon(OGRPolygon* polyon, double center_x, double center_
 std::string make_polymesh(std::vector<Polygon_Mesh>& meshes);
 std::string make_b3dm(std::vector<Polygon_Mesh>& meshes);
 //
-extern "C" bool shp23dtile(const char* filename, int layer_id, const char* dest)
+extern "C" bool shp23dtile(
+    const char* filename, int layer_id, 
+    const char* dest, const char* height)
 {
     if (!filename || layer_id < 0 || layer_id > 10000 || !dest) {
         return false;
     }
+    std::string height_field = "";
+    if( height ) {
+        height_field = height;
+    }
     GDALAllRegister();
     GDALDataset       *poDS;
-    poDS = (GDALDataset*)GDALOpenEx(filename, GDAL_OF_VECTOR,
+    poDS = (GDALDataset*)GDALOpenEx(
+        filename, GDAL_OF_VECTOR,
         NULL, NULL, NULL);
     if (poDS == NULL)
     {
-        printf("Open failed.\n");
+        printf("open shapefile failed.\n");
         return false;
     }
     OGRLayer  *poLayer;
@@ -429,6 +439,10 @@ extern "C" bool shp23dtile(const char* filename, int layer_id, const char* dest)
     std::vector<void*> items_array;
     root.get_all(items_array);
     //
+	int field_index = -1;
+	if (!height_field.empty()) {
+		poLayer->GetLayerDefn()->GetGeomFieldIndex(height_field.c_str());
+	}
     for (auto item : items_array) {
         node* _node = (node*)item;
         char b3dm_file[512];
@@ -461,9 +475,13 @@ extern "C" bool shp23dtile(const char* filename, int layer_id, const char* dest)
             OGRFeature *poFeature = poLayer->GetFeature(id);
             OGRGeometry *poGeometry;
             poGeometry = poFeature->GetGeometryRef();
+            double height = 50.0;
+            if( field_index >= 0 ) {
+                height = poFeature->GetFieldAsDouble(field_index);
+            }
             if (wkbFlatten(poGeometry->getGeometryType()) == wkbPolygon) {
                 OGRPolygon* polyon = (OGRPolygon*)poGeometry;
-                Polygon_Mesh mesh = convert_polygon(polyon, center_x, center_y);
+                Polygon_Mesh mesh = convert_polygon(polyon, center_x, center_y, height);
                 mesh.mesh_name = "mesh_" + std::to_string(id);
                 v_meshes.push_back(mesh);
             }
@@ -472,7 +490,7 @@ extern "C" bool shp23dtile(const char* filename, int layer_id, const char* dest)
                 int sub_count = _multi->getNumGeometries();
                 for (int j = 0; j < sub_count; j++) {
                     OGRPolygon * polyon = (OGRPolygon*)_multi->getGeometryRef(j);
-                    Polygon_Mesh mesh = convert_polygon(polyon, center_x, center_y);
+                    Polygon_Mesh mesh = convert_polygon(polyon, center_x, center_y, height);
                     mesh.mesh_name = "mesh_" + std::to_string(id);
                     v_meshes.push_back(mesh);
                 }
@@ -485,7 +503,7 @@ extern "C" bool shp23dtile(const char* filename, int layer_id, const char* dest)
         write_file(b3dm_file, b3dm_buf.data(), b3dm_buf.size());
 
         char b3dm_name[512], tile_json_path[512];
-        sprintf(b3dm_name,"%d.b3dm",_node->_y);
+        sprintf(b3dm_name,"./tile/%d/%d/%d.b3dm",_node->_z,_node->_x,_node->_y);
         sprintf(tile_json_path, "%s\\tile\\%d\\%d\\%d.json", dest, _node->_z, _node->_x, _node->_y);
         double box_width = ( _node->_box.maxx - _node->_box.minx )  ;
         double box_height = ( _node->_box.maxy - _node->_box.miny ) ;
