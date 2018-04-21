@@ -1,5 +1,6 @@
 extern crate cc;
 use std::fs;
+use std::env;
 use std::process::{Command, Stdio};
 
 fn build_win_msvc() {
