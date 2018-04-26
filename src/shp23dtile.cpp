@@ -28,12 +28,16 @@ struct bbox
         && contains(other.maxx, other.maxy);
     }
 
-    bool intersect(bbox& other) {
+    bool cross(bbox& other) {
         return contains(other.minx, other.miny)
         || contains(other.maxx, other.maxy)
         || contains(other.minx, other.maxy)
-        || contains(other.maxx, other.miny)
-        || other.contains(*this);
+        || contains(other.maxx, other.miny);
+    }
+
+    bool intersect(bbox& other) {
+        return cross(other) 
+        || other.cross(*this);
     }
 };
 
