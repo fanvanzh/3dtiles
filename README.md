@@ -1,6 +1,5 @@
 # 3dtiles
 
-[![Build Status](https://travis-ci.org/fanvanzh/3dtiles.svg?branch=master)](https://travis-ci.org/fanvanzh/3dtiles)
 [![Build status](https://ci.appveyor.com/api/projects/status/lyhf989tnt9jhi9y?svg=true)](https://ci.appveyor.com/project/fanvanzh/3dtiles)
 
 The fastest tools for 3dtiles convert in the world!
