@@ -21,6 +21,8 @@ extern "C" {
     fn osgb2glb(name_in: *const u8, name_out: *const u8) -> bool;
 
     fn transform_c(radian_x: f64, radian_y: f64, height_min: f64, ptr: *mut f64);
+
+    pub fn epsg_convert(insrs: i32, val: *mut f64) -> bool;
 }
 
 fn walk_path(dir: &Path, cb: &mut FnMut(&str)) -> io::Result<()> {

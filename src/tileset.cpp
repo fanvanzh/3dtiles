@@ -1,3 +1,6 @@
+#include <gdal/ogr_spatialref.h>
+#include <gdal/ogrsf_frmts.h>
+
 #include <cmath>
 #include <vector>
 #include <string>
@@ -8,6 +11,22 @@
 
 ///////////////////////
 static const double pi = std::acos(-1);
+
+extern "C" bool epsg_convert(int insrs, double* val) {
+    CPLSetConfigOption("GDAL_DATA", "gdal_data");
+    OGRSpatialReference inRs,outRs;
+    inRs.importFromEPSG(insrs);
+    outRs.importFromEPSG(4326);
+    OGRCoordinateTransformation *poCT = OGRCreateCoordinateTransformation( &inRs, &outRs );
+    if (poCT) {
+        if (poCT->Transform( 1, val, val + 1)) {
+            delete poCT;
+            return true;
+        }
+        delete poCT;
+    }
+    return false;
+} 
 
 double degree2rad(double val) {
     return val * pi / 180.0;

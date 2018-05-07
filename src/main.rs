@@ -2,6 +2,7 @@ extern crate clap;
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_xml_rs;
 #[macro_use]
 extern crate log;
 extern crate chrono;
@@ -132,6 +133,13 @@ fn main() {
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct ModelMetadata {
+    pub version: String,
+    pub SRS: String,
+    pub SRSOrigin: String,
+}
+
 fn convert_osgb(src: &str, dest: &str, config: &str) {
     use std::time;
     use serde_json::Value;
@@ -153,22 +161,42 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
         if let Ok(mut f) = File::open(metadata_file) {
             let mut buffer = String::new();
             if let Ok(_) = f.read_to_string(&mut buffer) {
-                let pos0 = buffer.find("<SRS>");
-                let pos1 = buffer.find("</SRS>");
-                if pos0.is_some() && pos1.is_some() {
-                    let vec = (&buffer).as_bytes()[(pos0.unwrap() + 5)..(pos1.unwrap())].to_vec();
-                    let str1 = String::from_utf8(vec).unwrap();
-                    info!("center point --> {}.", str1);
-                    let v: Vec<&str> = str1.split(":").collect();
+                //
+                if let Ok(metadata) = serde_xml_rs::deserialize::<_,ModelMetadata>(buffer.as_bytes()) {
+                    //println!("{:?}", metadata);
+                    let v: Vec<&str> = metadata.SRS.split(":").collect();
                     if v.len() > 1 {
-                        let v1: Vec<&str> = v[1].split(",").collect();
-                        if v1.len() > 1 {
-                            let v1_num = (*v1[0]).parse::<f64>();
-                            let v2_num = v1[1].parse::<f64>();
-                            if v1_num.is_ok() && v2_num.is_ok() {
-                                center_y = v1_num.unwrap();
-                                center_x = v2_num.unwrap();
+                        if v[0] == "ENU" {
+                            let v1: Vec<&str> = v[1].split(",").collect();
+                            if v1.len() > 1 {
+                                let v1_num = (*v1[0]).parse::<f64>();
+                                let v2_num = v1[1].parse::<f64>();
+                                if v1_num.is_ok() && v2_num.is_ok() {
+                                    center_y = v1_num.unwrap();
+                                    center_x = v2_num.unwrap();
+                                }
                             }
+                        }
+                        else if v[0] == "EPSG" {
+                            // call gdal to convert
+                            if let Ok(srs) = v[1].parse::<i32>() {
+                                let mut pt: Vec<f64> = metadata.SRSOrigin
+                                    .split(",")
+                                    .map(|v| v.parse().unwrap())
+                                    .collect();
+                                if pt.len() >= 2 {
+                                    unsafe {
+                                        if osgb::epsg_convert(srs, pt.as_mut_ptr()) {
+                                            center_x = pt[0];
+                                            center_y = pt[1];
+                                            //println!("epsg: x->{}, y->{}", pt[0], pt[1]);
+                                        } else {
+                                            println!("epsg convert failed!");
+                                        }
+                                    }    
+                                }
+                            }
+                            //
                         }
                     }
                 }
