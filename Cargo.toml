@@ -7,6 +7,7 @@ authors = ["fanzhenhua <fanzhenhua@superengine.com.cn>"]
 libc = "0.2"
 clap = "2.0"
 chrono = "0.4"
+rayon = "1.0"
 
 # serilaze
 serde = "1.0"

@@ -1,9 +1,13 @@
 extern crate libc;
 extern crate serde;
 extern crate serde_json;
+extern crate rayon;
 
 use std::fs;
 use std::io;
+
+use osgb::rayon::prelude::*;
+
 use std::path::Path;
 use std::error::Error;
 
@@ -76,6 +80,12 @@ struct TileResult {
     box_v: Vec<f64>,
 }
 
+struct OsgbInfo {
+    in_dir: String,
+    out_dir: String,
+    sender: ::std::sync::mpsc::Sender<TileResult>,
+}
+
 pub fn osgb_batch_convert(
     dir: &Path,
     dir_dest: &Path,
@@ -96,6 +106,7 @@ pub fn osgb_batch_convert(
     }
 
     let (sender, receiver) = channel();
+    let mut osgb_dir_pair: Vec<OsgbInfo> = vec![];
     let mut task_count = 0;
     fs::create_dir_all(dir_dest)?;
     for entry in fs::read_dir(&path)? {
@@ -108,46 +119,52 @@ pub fn osgb_batch_convert(
             if osgb.exists() && !osgb.is_dir() {
                 // convert this path
                 task_count += 1;
-                let in_buf = str_to_vec_c(osgb.to_str().unwrap());
+                //let in_buf = str_to_vec_c(osgb.to_str().unwrap());
                 let out_dir = dir_dest.join("Data").join(stem);
                 fs::create_dir_all(&out_dir)?;
-                let out_buf = str_to_vec_c(out_dir.to_str().unwrap());
-                let path_clone = path_tile.clone();
-                let sender_clone = sender.clone();
-                thread::spawn(move || unsafe {
-                    let mut root_box = vec![0f64; 6];
-                    let mut json_buf = vec![];
-                    let mut json_len = 0i32;
-                    let out_ptr = osgb23dtile_path(
-                        in_buf.as_ptr(),
-                        out_buf.as_ptr(),
-                        root_box.as_mut_ptr(),
-                        (&mut json_len) as *mut i32,
-                        max_lvl.unwrap_or(100),
-                    );
-                    if out_ptr.is_null() {
-                        error!("failed: {}", path_clone.display());
-                    } else {
-                        json_buf.resize(json_len as usize, 0);
-                        libc::memcpy(
-                            json_buf.as_mut_ptr() as *mut libc::c_void,
-                            out_ptr,
-                            json_len as usize,
-                        );
-                        libc::free(out_ptr);
-                    }
-                    let t = TileResult {
-                        json: String::from_utf8(json_buf).unwrap(),
-                        box_v: root_box,
-                    };
-                    sender_clone.send(t).unwrap();
+                osgb_dir_pair.push(OsgbInfo{
+                    in_dir: osgb.to_string_lossy().into(),
+                    out_dir: out_dir.to_string_lossy().into(),
+                    sender: sender.clone()
                 });
-
             } else {
                 error!("dir error: {}", osgb.display());
             }
         }
     }
+    let max_lvl: i32 = max_lvl.unwrap_or(100);
+    osgb_dir_pair.into_par_iter().map( | info | {
+        unsafe {
+	        let mut root_box = vec![0f64; 6];
+	        let mut json_buf = vec![];
+	        let mut json_len = 0i32;
+	        let in_ptr = str_to_vec_c(&info.in_dir);
+	        let out_ptr = str_to_vec_c(&info.out_dir);
+	        let out_ptr = osgb23dtile_path(
+	            in_ptr.as_ptr(),
+	            out_ptr.as_ptr(),
+	            root_box.as_mut_ptr(),
+	            (&mut json_len) as *mut i32,
+	            max_lvl
+	        );
+	        if out_ptr.is_null() {
+	            error!("failed: {}", info.in_dir);
+	        } else {
+	            json_buf.resize(json_len as usize, 0);
+	            libc::memcpy(
+	                json_buf.as_mut_ptr() as *mut libc::c_void,
+	                out_ptr,
+	                json_len as usize,
+	            );
+	            libc::free(out_ptr);
+	        }
+	        let t = TileResult {
+	            json: String::from_utf8(json_buf).unwrap(),
+	            box_v: root_box,
+	        };
+	        info.sender.send(t).unwrap();
+	    }
+    }).count();
 
     // merge and root
     let mut tile_array = vec![];
