@@ -648,7 +648,7 @@ std::string encode_tile_json(osg_tree& tree) {
 	}
 	// Todo:: 获取 Geometric Error
     int lvl = get_lvl_num(tree.file_name);
-    if (lvl == -1) lvl = 15;
+    if (lvl == -1) lvl = 10;
     char buf[512];
     sprintf(buf, "{ \"geometricError\":%.2f,", 
         tree.sub_nodes.empty()? 0 : get_geometric_error(lvl)
