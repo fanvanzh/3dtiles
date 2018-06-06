@@ -3,15 +3,14 @@ extern "C" {
         dest: *const u8, height: *const u8) -> bool;
 }
 
-extern crate serde;
-extern crate serde_json;
-
 use std::fs;
 use std::io;
 use std::fs::File;
 use std::path::Path;
 use std::error::Error;
 use std::io::prelude::*;
+
+use serde_json;
 
 fn walk_path(dir: &Path, cb: &mut FnMut(&str)) -> io::Result<()> {
     if dir.is_dir() {
@@ -45,11 +44,21 @@ pub fn shape_batch_convert(from: &str, to: &str, height: &str) -> bool{
         if !res { return res; }
         // meger the tile 
         // minx,miny,maxx,maxy
-        let mut root_tile = String::from(r#"{"asset": {"version": "0.0",
-            "gltfUpAxis": "Y"},
+        let mut tileset_json = json!({
+            "asset":{
+                "version":"0.0",
+                "gltfUpAxis":"Y"
+            },
             "geometricError":200,
-            "root": {
-            "#);
+            "root":{
+                "refine":"REPLACE",
+                "boundingVolume":{
+                    "region":[]
+                },
+                "geometricError":200,
+                "children":[]
+            }
+        });
         let mut root_region = vec![1.0E+38f64, 1.0E+38, -1.0E+38, -1.0E+38, 1.0E+38, -1.0E+38];
         let mut json_vec = vec![];
         walk_path(&Path::new(to).join("tile"),&mut |dir| {
@@ -68,26 +77,26 @@ pub fn shape_batch_convert(from: &str, to: &str, height: &str) -> bool{
                     root_region[x] = val;
                 }    
             }
-            let relative = dir.replace(to,".").replace("\\","/");
-            json_vec.push(relative);
-        });
-        root_tile += &format!(r#""boundingVolume": {{"region":[{},{},{},{},{},{}]}},"children":["#,
-                root_region[0],
-                root_region[1],
-                root_region[2],
-                root_region[3],
-                root_region[4],
-                root_region[5]
-            );
-        for x in json_vec.iter() {
-            root_tile += &format!(r#""{}","#,x);
+            json_vec.push(val["root"].clone());
+        }).expect("walk_path failed!");
+
+        {
+            let region = tileset_json["root"]["boundingVolume"]["region"].as_array_mut().unwrap();
+            for x in root_region {
+                region.push(json!(x));    
+            }    
         }
-        root_tile.pop();
-        root_tile += "]}}";
+        {
+            let children = tileset_json["root"]["children"].as_array_mut().unwrap();
+            for x in json_vec {
+                children.push(json!(x));
+            }    
+        }
+        
         let dir_dest = Path::new(to);
         let path_json = dir_dest.join("tileset.json");
         let mut f = File::create(path_json).unwrap();
-        f.write_all(root_tile.as_bytes()).unwrap();
+        f.write_all( &serde_json::to_string_pretty(&tileset_json).unwrap().into_bytes() ).unwrap();
         true
     }
 }

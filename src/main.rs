@@ -1,4 +1,6 @@
 extern crate clap;
+extern crate serde;
+#[macro_use]
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
@@ -93,8 +95,8 @@ fn main() {
         )
         .arg(
             Arg::with_name("height")
-                .long("height field")
-                .help("set the shapefile height field")
+                .long("height")
+                .help("Set the shapefile height field")
                 .takes_value(true),
         )
         .arg(
