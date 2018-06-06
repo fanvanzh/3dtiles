@@ -21,10 +21,10 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 
 ### 命令行： 
 	3dtile.exe [FLAGS] [OPTIONS] --format <osgb,shape> --input <FILE> --output <FILE>
-	
+
 ### 示例：
 	3dtile.exe -f osgb -i E:\Data\倾斜摄影\hgc -o E:\Data\倾斜摄影\hgc_test
-
+	
 	3dtile.exe -f osgb -i E:\Data\倾斜摄影\dayanta -o E:\Data\倾斜摄影\dayanta_test -c "{\"offset\": 0}"
 
 ### 参数说明：
@@ -42,13 +42,15 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
       "max_lvl" : 20 // 处理切片模型到20级停止
       
      }
-``` 
+```
 ```			     
   -f, --format <osgb,shape> 
   
   -i, --input <FILE> 
 	
   -o, --output <FILE> 
+  
+  --height, 指定shapefile的高度字段
 ```
 #### 命令行参数详解：
 ```
@@ -59,5 +61,7 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 -i 输入数据的目录，截止到 "\Data" 目录的上一级。
 
 -o 输出目录。最终结果位于输出目录的 "\Data" 目录。
+
+--height 高度字段。指定shapefile中的高度属性字段。
 ```
 
