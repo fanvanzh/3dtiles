@@ -93,7 +93,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("height")
-                .long("height field")
+                .long("height")
                 .help("set the shapefile height field")
                 .takes_value(true),
         )
