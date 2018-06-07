@@ -130,7 +130,7 @@ osg_tree get_all_tree(std::string& file_name) {
     {   // add block to release Node
         osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
         if (!root) {
-            printf("read node files [%s] fail!\n", file_name.c_str());
+            LOG_E("read node files [%s] fail!\n", file_name.c_str());
             return root_tile;
         }
         root_tile.file_name = file_name;
@@ -714,14 +714,14 @@ extern "C" void* osgb23dtile_path(
     std::string path = osg_string(in_path);
     osg_tree root = get_all_tree(path);
     if (root.file_name.empty()) {
-        printf("open file [%s] fail!\n", in_path);
+        LOG_E( "open file [%s] fail!\n", in_path);
         return NULL;
     }
     do_tile_job(root, out_path, max_lvl);
     // 返回 json 和 最大bbox
     extend_tile_box(root);
     if (root.bbox.max.empty() || root.bbox.min.empty()) {
-        printf("[%s] bbox is empty!\n", in_path);
+        LOG_E( "[%s] bbox is empty!\n", in_path);
         return NULL;
     }
     std::string json = encode_tile_json(root);

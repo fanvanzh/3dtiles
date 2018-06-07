@@ -2,6 +2,13 @@
 // extern function impl by rust
 extern "C" bool mkdirs(const char* path);
 extern "C" bool write_file(const char* filename, const char* buf, unsigned long buf_len);
+extern "C" void log_error(const char* msg);
+
+#define LOG_E(fmt,...) \
+		char buf[512];\
+        sprintf(buf,fmt,__VA_ARGS__);\
+        log_error(buf);
+
 //// -- others 
 struct Transform
 {

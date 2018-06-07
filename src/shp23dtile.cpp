@@ -41,7 +41,7 @@ class node {
 public:
     bbox _box;
     // 1 公里 ~ 0.01
-    double metric = 0.04;
+    double metric = 0.01;
     node* subnode[4];
     std::vector<int> geo_items;
 public:
@@ -208,12 +208,12 @@ Polygon_Mesh convert_polygon(
             mesh.vertex.push_back({
                 (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
                 (float)bottom , 
-                (float)lati_to_meter(degree2rad(pt.getY() - center_y))
+                -(float)lati_to_meter(degree2rad(pt.getY() - center_y))
             });
             mesh.vertex.push_back({
                 (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
                 (float)height ,
-                (float)lati_to_meter(degree2rad(pt.getY() - center_y))
+                -(float)lati_to_meter(degree2rad(pt.getY() - center_y))
             });
 
             int point_cnt = mesh.vertex.size();
@@ -286,12 +286,12 @@ Polygon_Mesh convert_polygon(
                 mesh.vertex.push_back({
                     (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
                     (float)bottom ,
-                    (float)lati_to_meter(degree2rad(pt.getY() - center_y))
+                    -(float)lati_to_meter(degree2rad(pt.getY() - center_y))
                 });
                 mesh.vertex.push_back({
                     (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
                     (float)height ,
-                    (float)lati_to_meter(degree2rad(pt.getY() - center_y))
+                    -(float)lati_to_meter(degree2rad(pt.getY() - center_y))
                 });
                 int point_cnt = mesh.vertex.size();
                 if (i > 0) {
@@ -383,6 +383,7 @@ extern "C" bool shp23dtile(
     const char* dest, const char* height)
 {
     if (!filename || layer_id < 0 || layer_id > 10000 || !dest) {
+        LOG_E("make shp23dtile [%s] failed", filename);
         return false;
     }
     std::string height_field = "";
@@ -396,13 +397,14 @@ extern "C" bool shp23dtile(
         NULL, NULL, NULL);
     if (poDS == NULL)
     {
-        printf("open shapefile failed.\n");
+        LOG_E("open shapefile [%s] failed", filename);
         return false;
     }
     OGRLayer  *poLayer;
     poLayer = poDS->GetLayer(layer_id);
     if (!poLayer) {
         GDALClose(poDS);
+        LOG_E("open layer [%s]:[%d] failed", filename, layer_id);
         return false;
     }
     OGRwkbGeometryType _t = poLayer->GetGeomType();
@@ -410,12 +412,14 @@ extern "C" bool shp23dtile(
         _t != wkbPolygon25D && _t != wkbMultiPolygon25D)
     {
         GDALClose(poDS);
+        LOG_E("only support polyon now");
         return false;
     }
 
     OGREnvelope envelop;
     OGRErr err = poLayer->GetExtent(&envelop);
     if (err != OGRERR_NONE) {
+        LOG_E("no extent found in shapefile");
         return false;
     }
 
@@ -439,10 +443,14 @@ extern "C" bool shp23dtile(
     std::vector<void*> items_array;
     root.get_all(items_array);
     //
-	int field_index = -1;
-	if (!height_field.empty()) {
-		poLayer->GetLayerDefn()->GetGeomFieldIndex(height_field.c_str());
-	}
+    int field_index = -1;
+    
+    if (!height_field.empty()) {
+        field_index = poLayer->GetLayerDefn()->GetFieldIndex(height_field.c_str());
+        if (field_index == -1) {
+            LOG_E("can`t found field [%s] in [%s]", height_field.c_str(), filename);
+        }
+    }
     for (auto item : items_array) {
         node* _node = (node*)item;
         char b3dm_file[512];
@@ -470,6 +478,7 @@ extern "C" bool shp23dtile(
         }
         double center_x = ( _node->_box.minx + _node->_box.maxx ) / 2;
         double center_y = ( _node->_box.miny + _node->_box.maxy ) / 2;
+        double max_height = 0;
         std::vector<Polygon_Mesh> v_meshes;
         for (auto id : _node->get_ids()) {
             OGRFeature *poFeature = poLayer->GetFeature(id);
@@ -478,6 +487,9 @@ extern "C" bool shp23dtile(
             double height = 50.0;
             if( field_index >= 0 ) {
                 height = poFeature->GetFieldAsDouble(field_index);
+            }
+            if (height > max_height) {
+                max_height = height;
             }
             if (wkbFlatten(poGeometry->getGeometryType()) == wkbPolygon) {
                 OGRPolygon* polyon = (OGRPolygon*)poGeometry;
@@ -513,7 +525,7 @@ extern "C" bool shp23dtile(
         write_tileset(radian_x, radian_y, 
             longti_to_meter(degree2rad(box_width) * 1.05, radian_y),
             lati_to_meter(degree2rad(box_height)  * 1.05),
-            0 , 100, 100,
+            0 , max_height, 100,
             b3dm_name,tile_json_path);
     }
     //
