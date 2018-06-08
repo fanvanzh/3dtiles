@@ -159,10 +159,9 @@ bool write_tileset_box(
 
         bool ret = write_file(json_file, json_txt.data(), json_txt.size());
         if (!ret) {
-            printf("write file %s fail\n", json_file);
+            LOG_E("write file %s fail", json_file);
         }
         return ret;
-
     }
 
     bool write_tileset_region(
@@ -210,7 +209,7 @@ bool write_tileset_box(
 
             bool ret = write_file(json_file, json_txt.data(), json_txt.size());
             if (!ret) {
-                printf("write file %s fail\n", json_file);
+                LOG_E("write file %s fail", json_file);
             }
             return ret;
         }
@@ -322,7 +321,7 @@ bool write_tileset_box(
 
                     bool ret = write_file(full_path, json_txt.data(), json_txt.size());
                     if (!ret) {
-                        printf("write file %s fail\n", filename);
+                        LOG_E("write file %s fail", filename);
                     }
                     return ret;
                 }
