@@ -37,9 +37,11 @@ void write_buf(void* context, void* data, int len) {
 
 class InfoVisitor : public osg::NodeVisitor
 {
+	std::string path;
 public:
-    InfoVisitor()
+    InfoVisitor(std::string _path)
     :osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
+	,path(_path)
     {}
 
     ~InfoVisitor() {
@@ -56,11 +58,11 @@ public:
     }
     
     void apply(osg::PagedLOD& node) {
-        std::string path = node.getDatabasePath();
+        //std::string path = node.getDatabasePath();
         int n = node.getNumFileNames();
         for (size_t i = 1; i < n; i++)
         {
-            std::string file_name = path + node.getFileName(i);
+            std::string file_name = path + "/" + node.getFileName(i);
             sub_node_names.push_back(file_name);
         }
         traverse(node);
@@ -96,6 +98,26 @@ std::string get_parent(std::string str) {
         return "";
 }
 
+std::string osg_string ( const char* path ) {
+    #ifdef WIN32
+        std::string root_path =
+        osgDB::convertStringFromUTF8toCurrentCodePage(path);
+    #else
+        std::string root_path = (path);
+    #endif // WIN32
+    return root_path;
+}
+
+std::string utf8_string (const char* path) {
+    #ifdef WIN32
+        std::string utf8 =
+        osgDB::convertStringFromCurrentCodePageToUTF8(path);
+    #else
+        std::string utf8 = (path);
+    #endif // WIN32
+    return utf8;   
+}
+
 int get_lvl_num(std::string file_name){
     std::string stem = get_file_name(file_name);
     auto p0 = stem.find("_L");
@@ -126,11 +148,12 @@ osg_tree get_all_tree(std::string& file_name) {
     osg_tree root_tile;
     vector<string> fileNames = { file_name };
     
-    InfoVisitor infoVisitor;
+    InfoVisitor infoVisitor(get_parent(file_name));
     {   // add block to release Node
         osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
         if (!root) {
-            LOG_E("read node files [%s] fail!\n", file_name.c_str());
+            std::string name = utf8_string(file_name.c_str());
+            LOG_E("read node files [%s] fail!", name.c_str());
             return root_tile;
         }
         root_tile.file_name = file_name;
@@ -155,11 +178,12 @@ struct mesh_info
 
 bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info>& v_info) {
     vector<string> fileNames = { path };
+	std::string parent_path = get_parent(path);
     osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
     if (!root.valid()) {
         return false;
     }
-    InfoVisitor infoVisitor;
+    InfoVisitor infoVisitor(parent_path);
     root->accept(infoVisitor);
     if (infoVisitor.geometry_array.empty())
         return false;
@@ -374,7 +398,9 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
         // image
         // 共用贴图？
         {
-            char* buf = 0;
+            //char* buf = 0;
+			std::vector<unsigned char> jpeg_buf;
+			jpeg_buf.reserve(512*512*3);
             int width, height;
             {
                 osg::Texture* tex = *infoVisitor.texture_array.begin();
@@ -383,14 +409,21 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                         osg::Image* img = tex->getImage(0);
                         if (img) {
                             width = img->s();
-                            height = img->t();
-                            buf = (char*)img->getDataPointer();   
+                            height = img->t(); 
+							for (int i = 0; i < height; i++) {
+								for (int j = 0; j < width; j++) {
+									osg::Vec4 color = img->getColor(j,i);
+									jpeg_buf.push_back((unsigned char)255*color.r());
+									jpeg_buf.push_back((unsigned char)255*color.g());
+									jpeg_buf.push_back((unsigned char)255*color.b());
+								}
+							}
                         }
                     }
                 }
             }
-            if (buf) {
-                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, buf, 80);
+            if (!jpeg_buf.empty()) {
+                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, jpeg_buf.data(), 80);
             }
             else {
                 std::vector<char> v_data;
@@ -475,7 +508,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
         material.values["roughnessFactor"] = roughnessFactor;
         /// ---------
         tinygltf::Parameter emissiveFactor;
-        emissiveFactor.number_array = { 0,0,0 };
+        emissiveFactor.number_array = { 0.0,0.0,0.0 };
         material.additionalValues["emissiveFactor"] = emissiveFactor;
         tinygltf::Parameter alphaMode;
         alphaMode.string_value = "OPAQUE";
@@ -693,15 +726,6 @@ std::string encode_tile_json(osg_tree& tree) {
     return tile;
 }
 
-std::string osg_string ( const char* path ) {
-    #ifdef WIN32
-        std::string root_path =
-        osgDB::convertStringFromUTF8toCurrentCodePage(path);
-    #else
-        std::string root_path = (path);
-    #endif // WIN32
-    return root_path;
-}
 /**
 外部创建好目录
 外面分配好 box[6][double]
@@ -714,14 +738,14 @@ extern "C" void* osgb23dtile_path(
     std::string path = osg_string(in_path);
     osg_tree root = get_all_tree(path);
     if (root.file_name.empty()) {
-        LOG_E( "open file [%s] fail!\n", in_path);
+        LOG_E( "open file [%s] fail!", in_path);
         return NULL;
     }
     do_tile_job(root, out_path, max_lvl);
     // 返回 json 和 最大bbox
     extend_tile_box(root);
     if (root.bbox.max.empty() || root.bbox.min.empty()) {
-        LOG_E( "[%s] bbox is empty!\n", in_path);
+        LOG_E( "[%s] bbox is empty!", in_path);
         return NULL;
     }
     std::string json = encode_tile_json(root);
