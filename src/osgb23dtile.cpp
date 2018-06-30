@@ -37,11 +37,11 @@ void write_buf(void* context, void* data, int len) {
 
 class InfoVisitor : public osg::NodeVisitor
 {
-	std::string path;
+    std::string path;
 public:
     InfoVisitor(std::string _path)
     :osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
-	,path(_path)
+    ,path(_path)
     {}
 
     ~InfoVisitor() {
@@ -178,7 +178,7 @@ struct mesh_info
 
 bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info>& v_info) {
     vector<string> fileNames = { path };
-	std::string parent_path = get_parent(path);
+    std::string parent_path = get_parent(path);
     osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
     if (!root.valid()) {
         return false;
@@ -399,8 +399,8 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
         // 共用贴图？
         {
             //char* buf = 0;
-			std::vector<unsigned char> jpeg_buf;
-			jpeg_buf.reserve(512*512*3);
+            std::vector<unsigned char> jpeg_buf;
+            jpeg_buf.reserve(512*512*3);
             int width, height;
             {
                 osg::Texture* tex = *infoVisitor.texture_array.begin();
@@ -410,14 +410,14 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                         if (img) {
                             width = img->s();
                             height = img->t(); 
-							for (int i = 0; i < height; i++) {
-								for (int j = 0; j < width; j++) {
-									osg::Vec4 color = img->getColor(j,i);
-									jpeg_buf.push_back((unsigned char)255*color.r());
-									jpeg_buf.push_back((unsigned char)255*color.g());
-									jpeg_buf.push_back((unsigned char)255*color.b());
-								}
-							}
+                            for (int i = 0; i < height; i++) {
+                                for (int j = 0; j < width; j++) {
+                                    osg::Vec4 color = img->getColor(j,i);
+                                    jpeg_buf.push_back((unsigned char)255*color.r());
+                                    jpeg_buf.push_back((unsigned char)255*color.g());
+                                    jpeg_buf.push_back((unsigned char)255*color.b());
+                                }
+                            }
                         }
                     }
                 }
@@ -676,10 +676,10 @@ tile_box extend_tile_box(osg_tree& tree) {
 }
 
 std::string encode_tile_json(osg_tree& tree) {
-	if (tree.bbox.max.empty() || tree.bbox.min.empty()) {
-		return "";
-	}
-	// Todo:: 获取 Geometric Error
+    if (tree.bbox.max.empty() || tree.bbox.min.empty()) {
+        return "";
+    }
+    // Todo:: 获取 Geometric Error
     int lvl = get_lvl_num(tree.file_name);
     if (lvl == -1) lvl = 10;
     char buf[512];
@@ -715,10 +715,10 @@ std::string encode_tile_json(osg_tree& tree) {
     tile += "},\"children\":[";
     for ( auto& i : tree.sub_nodes ){
         std::string node_json = encode_tile_json(i);
-		if (!node_json.empty()) {
-			tile += node_json;
-			tile += ",";
-		}
+        if (!node_json.empty()) {
+            tile += node_json;
+            tile += ",";
+        }
     }
     if (tile.back() == ',')
         tile.pop_back();
