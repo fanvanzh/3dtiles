@@ -26,7 +26,7 @@ extern "C" {
 
     fn transform_c(radian_x: f64, radian_y: f64, height_min: f64, ptr: *mut f64);
 
-    pub fn epsg_convert(insrs: i32, val: *mut f64) -> bool;
+    pub fn epsg_convert(insrs: i32, val: *mut f64, gdal: *const i8) -> bool;
 }
 
 fn walk_path(dir: &Path, cb: &mut FnMut(&str)) -> io::Result<()> {

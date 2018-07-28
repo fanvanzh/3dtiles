@@ -12,8 +12,8 @@
 ///////////////////////
 static const double pi = std::acos(-1);
 
-extern "C" bool epsg_convert(int insrs, double* val) {
-    CPLSetConfigOption("GDAL_DATA", "gdal_data");
+extern "C" bool epsg_convert(int insrs, double* val, char* path) {
+    CPLSetConfigOption("GDAL_DATA", path);
     OGRSpatialReference inRs,outRs;
     inRs.importFromEPSG(insrs);
     outRs.importFromEPSG(4326);

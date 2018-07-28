@@ -25,7 +25,6 @@ fn main() {
         env::set_var("RUST_LOG", "info");
     }
     env::set_var("RUST_BACKTRACE", "1");
-
     let mut builder = env_logger::Builder::from_default_env();
     builder
         .format(|buf, record| {
@@ -85,10 +84,10 @@ fn main() {
                 .help(
                     "Set the tile config:
 {
-	\"x\": x,
-	\"y\": y,
-	\"offset\": 0 (模型最低面地面距离),
-	\"max_lvl\" : 20 (处理切片模型到20级停止)
+    \"x\": x,
+    \"y\": y,
+    \"offset\": 0 (模型最低面地面距离),
+    \"max_lvl\" : 20 (处理切片模型到20级停止)
 }",
                 )
                 .takes_value(true),
@@ -187,8 +186,17 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                                     .map(|v| v.parse().unwrap())
                                     .collect();
                                 if pt.len() >= 2 {
+                                        let gdal_data: String =  {
+                                            use std::path::Path;
+                                            let exe_dir = ::std::env::current_exe().unwrap();
+                                            Path::new(&exe_dir).parent().unwrap()
+                                            .join("gdal_data").to_str().unwrap().into()
+                                        };
                                     unsafe {
-                                        if osgb::epsg_convert(srs, pt.as_mut_ptr()) {
+                                        use std::ffi::CString;
+                                        let c_str = CString::new(gdal_data).unwrap();;
+                                        let ptr = c_str.as_ptr();
+                                        if osgb::epsg_convert(srs, pt.as_mut_ptr(),ptr) {
                                             center_x = pt[0];
                                             center_y = pt[1];
                                             //println!("epsg: x->{}, y->{}", pt[0], pt[1]);
@@ -243,12 +251,12 @@ fn convert_shapefile(src: &str, dest: &str, height: &str) {
     let tick = std::time::SystemTime::now();
 
     let ret = shape::shape_batch_convert(src, dest, height);
-	if !ret {
-		error!("convert shapefile failed");
-	}
-	else {
-		let elap_sec = tick.elapsed().unwrap();
-		let tick_num = elap_sec.as_secs() as f64 + elap_sec.subsec_nanos() as f64 * 1e-9;
-		info!("task over, cost {:.2} s.", tick_num);   
-	}
+    if !ret {
+        error!("convert shapefile failed");
+    }
+    else {
+        let elap_sec = tick.elapsed().unwrap();
+        let tick_num = elap_sec.as_secs() as f64 + elap_sec.subsec_nanos() as f64 * 1e-9;
+        info!("task over, cost {:.2} s.", tick_num);   
+    }
 }
