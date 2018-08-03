@@ -201,9 +201,9 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
         for (int j = 0; j < 4; j++)
         {
             for (auto g : infoVisitor.geometry_array) {
-				if (g->getNumPrimitiveSets() == 0) {
-					continue;
-				}
+                if (g->getNumPrimitiveSets() == 0) {
+                    continue;
+                }
                 osg::Array* va = g->getVertexArray();
                 if (j == 0) {
                     // indc
