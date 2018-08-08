@@ -175,7 +175,11 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                                 if v1_num.is_ok() && v2_num.is_ok() {
                                     center_y = v1_num.unwrap();
                                     center_x = v2_num.unwrap();
+                                } else {
+                                    error!("parse ENU point error");
                                 }
+                            } else {
+                                error!("ENU point is not enough");
                             }
                         }
                         else if v[0] == "EPSG" {
@@ -199,19 +203,36 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                                         if osgb::epsg_convert(srs, pt.as_mut_ptr(),ptr) {
                                             center_x = pt[0];
                                             center_y = pt[1];
-                                            //println!("epsg: x->{}, y->{}", pt[0], pt[1]);
+                                            info!("epsg: x->{}, y->{}", pt[0], pt[1]);
                                         } else {
-                                            println!("epsg convert failed!");
+                                            error!("epsg convert failed!");
                                         }
                                     }    
+                                } else {
+                                    error!("epsg point is not enough");
                                 }
+                            } else {
+                                error!("parse EPSG failed");
                             }
                             //
+                        } else {
+                            error!("EPSG or ENU is expected in SRS");
                         }
+                    } else {
+                        error!("SRS content error");
                     }
+                } else {
+                    error!("parse {} failed", metadata_file.display());
                 }
+            } else {
+                error!("read {} failed", metadata_file.display());
             }
+        } else {
+            error!("open {} failed", metadata_file.display());
         }
+    }
+    else {
+        error!("{} is missing", metadata_file.display());
     }
     if let Ok(v) = serde_json::from_str::<Value>(config) {
         if let Some(x) = v["x"].as_f64() {
