@@ -237,33 +237,70 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                             case(osg::PrimitiveSet::DrawElementsUIntPrimitiveType):
                             {
                                 const osg::DrawElementsUInt* drawElements = static_cast<const osg::DrawElementsUInt*>(ps);
-                                int IndNum = drawElements->getNumIndices();
+                                unsigned int IndNum = drawElements->getNumIndices();
                                 for (size_t m = 0; m < IndNum; m++)
                                 {
                                     put_val(buffer.data, drawElements->at(m));
                                 }
                                 break;
                             }
+							case osg::PrimitiveSet::DrawArraysPrimitiveType: {
+								osg::DrawArrays* da = dynamic_cast<osg::DrawArrays*>(ps);
+								auto mode = da->getMode();
+								if (mode != GL_TRIANGLES) {
+									LOG_E("GLenum is not GL_TRIANGLES in osgb");
+								}
+								int first = da->getFirst();
+								int count = da->getCount();
+								int max_num = first + count;
+								for (int i = first; i < max_num; i++) {
+									if (max_num < 256)
+										put_val(buffer.data, (unsigned char)i);
+									else if (max_num < 65536)
+										put_val(buffer.data, (unsigned short)i);
+									else 
+										put_val(buffer.data, i);
+								}
+								break;
+							}
                             default:
-                            break;
+							{
+								LOG_E("missing osg::PrimitiveSet::Type [%d]", t);
+								break;
+							}
                         }
                         tinygltf::Accessor acc;
                         acc.bufferView = 0;
                         acc.byteOffset = acc_offset[j];
                         acc_offset[j] = buffer.data.size();
-                        acc.componentType = TINYGLTF_COMPONENT_TYPE_INT;
+                        //acc.componentType = TINYGLTF_COMPONENT_TYPE_INT;
                         switch (t)
                         {
                             case osg::PrimitiveSet::DrawElementsUBytePrimitiveType:
-                            acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
+								acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
                             break;
                             case osg::PrimitiveSet::DrawElementsUShortPrimitiveType:
-                            acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+								acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
                             break;
                             case osg::PrimitiveSet::DrawElementsUIntPrimitiveType:
-                            acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
+								acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
                             break;
+							case osg::PrimitiveSet::DrawArraysPrimitiveType: {
+								osg::DrawArrays* da = dynamic_cast<osg::DrawArrays*>(ps);
+								int first = da->getFirst();
+								int count = da->getCount();
+								int max_num = first + count;
+								if (max_num < 256) {
+									acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
+								} else if(max_num < 65536) {
+									acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+								}else {
+									acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
+								}
+								break;
+							}
                             default:
+							//LOG_E("missing osg::PrimitiveSet::Type [%d]", t);
                             break;
                         }
                         acc.count = idx_size;

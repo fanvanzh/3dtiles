@@ -159,7 +159,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     let metadata_file = dir.join("metadata.xml");
     if metadata_file.exists() {
         // read and parse
-        if let Ok(mut f) = File::open(metadata_file) {
+        if let Ok(mut f) = File::open(&metadata_file) {
             let mut buffer = String::new();
             if let Ok(_) = f.read_to_string(&mut buffer) {
                 //
