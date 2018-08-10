@@ -10,8 +10,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		Performance1.psess = Performance1.psess
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test1", "test1\test1.vcxproj", "{A88E0363-FD0C-4033-A790-653F486ECC4F}"
-EndProject
 Global
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true
@@ -31,14 +29,6 @@ Global
 		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Release|x64.Build.0 = Release|x64
 		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Release|x86.ActiveCfg = Release|Win32
 		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Release|x86.Build.0 = Release|Win32
-		{A88E0363-FD0C-4033-A790-653F486ECC4F}.Debug|x64.ActiveCfg = Debug|x64
-		{A88E0363-FD0C-4033-A790-653F486ECC4F}.Debug|x64.Build.0 = Debug|x64
-		{A88E0363-FD0C-4033-A790-653F486ECC4F}.Debug|x86.ActiveCfg = Debug|Win32
-		{A88E0363-FD0C-4033-A790-653F486ECC4F}.Debug|x86.Build.0 = Debug|Win32
-		{A88E0363-FD0C-4033-A790-653F486ECC4F}.Release|x64.ActiveCfg = Release|x64
-		{A88E0363-FD0C-4033-A790-653F486ECC4F}.Release|x64.Build.0 = Release|x64
-		{A88E0363-FD0C-4033-A790-653F486ECC4F}.Release|x86.ActiveCfg = Release|Win32
-		{A88E0363-FD0C-4033-A790-653F486ECC4F}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
