@@ -1,0 +1,255 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\earcut.hpp" />
+    <ClInclude Include="..\..\src\extern.h" />
+    <ClInclude Include="..\..\src\gdal\cplkeywordparser.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_atomic_ops.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_aws.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_config.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_config_extras.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_conv.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_csv.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_error.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_hash_set.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_http.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_list.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_minixml.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_minizip_ioapi.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_minizip_unzip.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_minizip_zip.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_multiproc.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_odbc.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_port.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_progress.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_quad_tree.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_sha256.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_spawn.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_string.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_time.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_virtualmem.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_vsi.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_vsil_curl_priv.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_vsi_error.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_vsi_virtual.h" />
+    <ClInclude Include="..\..\src\gdal\cpl_worker_thread_pool.h" />
+    <ClInclude Include="..\..\src\gdal\gdal.h" />
+    <ClInclude Include="..\..\src\gdal\gdalexif.h" />
+    <ClInclude Include="..\..\src\gdal\gdalgeorefpamdataset.h" />
+    <ClInclude Include="..\..\src\gdal\gdalgrid.h" />
+    <ClInclude Include="..\..\src\gdal\gdalgrid_priv.h" />
+    <ClInclude Include="..\..\src\gdal\gdaljp2abstractdataset.h" />
+    <ClInclude Include="..\..\src\gdal\gdaljp2metadata.h" />
+    <ClInclude Include="..\..\src\gdal\gdaljp2metadatagenerator.h" />
+    <ClInclude Include="..\..\src\gdal\gdalpansharpen.h" />
+    <ClInclude Include="..\..\src\gdal\gdalsse_priv.h" />
+    <ClInclude Include="..\..\src\gdal\gdalwarper.h" />
+    <ClInclude Include="..\..\src\gdal\gdalwarpkernel_opencl.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_alg.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_alg_priv.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_csv.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_frmts.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_mdreader.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_pam.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_priv.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_proxy.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_rat.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_simplesurf.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_utils.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_version.h" />
+    <ClInclude Include="..\..\src\gdal\gdal_vrt.h" />
+    <ClInclude Include="..\..\src\gdal\gvgcpfit.h" />
+    <ClInclude Include="..\..\src\gdal\internal_qhull_headers.h" />
+    <ClInclude Include="..\..\src\gdal\memdataset.h" />
+    <ClInclude Include="..\..\src\gdal\ograpispy.h" />
+    <ClInclude Include="..\..\src\gdal\ogrgeomediageometry.h" />
+    <ClInclude Include="..\..\src\gdal\ogrpgeogeometry.h" />
+    <ClInclude Include="..\..\src\gdal\ogrsf_frmts.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_api.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_attrind.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_core.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_expat.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_feature.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_featurestyle.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_geocoding.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_geometry.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_geos.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_p.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_spatialref.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_srs_api.h" />
+    <ClInclude Include="..\..\src\gdal\ogr_srs_esri_names.h" />
+    <ClInclude Include="..\..\src\gdal\osr_cs_wkt.h" />
+    <ClInclude Include="..\..\src\gdal\osr_cs_wkt_parser.h" />
+    <ClInclude Include="..\..\src\gdal\rawdataset.h" />
+    <ClInclude Include="..\..\src\gdal\swq.h" />
+    <ClInclude Include="..\..\src\gdal\thinplatespline.h" />
+    <ClInclude Include="..\..\src\gdal\vrtdataset.h" />
+    <ClInclude Include="..\..\src\json.hpp" />
+    <ClInclude Include="..\..\src\stb_image.h" />
+    <ClInclude Include="..\..\src\stb_image_write.h" />
+    <ClInclude Include="..\..\src\tiny_gltf.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\src\fun_c.rs" />
+    <None Include="..\..\src\main.rs" />
+    <None Include="..\..\src\osgb.rs" />
+    <None Include="..\..\src\shape.rs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\decompress.cpp" />
+    <ClCompile Include="..\..\src\osgb23dtile.cpp" />
+    <ClCompile Include="..\..\src\shp23dtile.cpp" />
+    <ClCompile Include="..\..\src\tileset.cpp" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{7BA34CCF-D221-4793-ABC1-F8418BD4F687}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>vs</RootNamespace>
+    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;WIN32;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\src\osg;..\..\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <PreBuildEvent>
+      <Command>cd ../../ &amp; cargo build</Command>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <PreBuildEvent>
+      <Command>cd ../../ &amp; cargo build --release</Command>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

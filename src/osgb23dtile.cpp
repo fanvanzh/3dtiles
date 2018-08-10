@@ -128,7 +128,21 @@ int get_lvl_num(std::string file_name){
         catch (...) {
             return -1;
         }
-    }
+	}
+	else if(p0 != std::string::npos){
+		int end = p0 + 2;
+		while (true) {
+			if (isdigit(stem[end]))
+				end++;
+			else
+				break;
+		}
+		std::string substr = stem.substr(p0 + 2, end - p0 - 2);
+		try { return std::stol(substr); }
+		catch (...) {
+			return -1;
+		}
+	}
     return -1;
 }
 
@@ -167,6 +181,116 @@ osg_tree get_all_tree(std::string& file_name) {
         }
     }
     return root_tile;
+}
+
+struct Color {
+	int r;
+	int g;
+	int b;
+};
+
+Color RGB565_RGB(unsigned short color0) {
+	unsigned long temp;
+	temp = (color0 >> 11) * 255 + 16;
+	unsigned char r0 = (unsigned char)((temp / 32 + temp) / 32);
+	temp = ((color0 & 0x07E0) >> 5) * 255 + 32;
+	unsigned char g0 = (unsigned char)((temp / 64 + temp) / 64);
+	temp = (color0 & 0x001F) * 255 + 16;
+	unsigned char b0 = (unsigned char)((temp / 32 + temp) / 32);
+	return Color{ r0,g0,b0 };
+}
+
+Color Mix_Color(
+	unsigned short color0, unsigned short color1, 
+	Color c0, Color c1, int idx) {
+	Color finalColor;
+	if (color0 > color1)
+	{
+		switch (idx)
+		{
+		case 0:
+			finalColor = Color{ c0.r, c0.g, c0.b };
+			break;
+		case 1:
+			finalColor = Color{ c1.r, c1.g, c1.b };
+			break;
+		case 2:
+			finalColor = Color{ 
+				(2 * c0.r + c1.r) / 3, 
+				(2 * c0.g + c1.g) / 3,
+				(2 * c0.b + c1.b) / 3};
+			break;
+		case 3:
+			finalColor = Color{
+				(c0.r + 2 * c1.r) / 3,
+				(c0.g + 2 * c1.g) / 3,
+				(c0.b + 2 * c1.b) / 3 };
+			break;
+		}
+	}
+	else
+	{
+		switch (idx)
+		{
+		case 0:
+			finalColor = Color{ c0.r, c0.g, c0.b };
+			break;
+		case 1:
+			finalColor = Color{ c1.r, c1.g, c1.b };
+			break;
+		case 2:
+			finalColor = Color{ (c0.r + c1.r) / 2, (c0.g + c1.g) / 2, (c0.b + c1.b) / 2 };
+			break;
+		case 3:
+			finalColor = Color{ 0, 0, 0 };
+			break;
+		}
+	}
+	return finalColor;
+}
+
+void fill_4BitImage(vector<unsigned char>& jpeg_buf, osg::Image* img, int& width, int& height ) {
+	jpeg_buf.resize(width * height * 3);
+	unsigned char* pData = img->data();
+	int imgSize = img->getImageSizeInBytes();
+	int x_pos = 0;
+	int y_pos = 0;
+	for (size_t i = 0; i < imgSize; i += 8)
+	{
+		// 64 bit matrix
+		unsigned short color0, color1;
+		memcpy(&color0,pData,2);
+		pData += 2;
+		memcpy(&color1, pData, 2);
+		pData += 2;
+		Color c0 = RGB565_RGB(color0);
+		Color c1 = RGB565_RGB(color1);
+		for (size_t i = 0; i < 4; i++)
+		{
+			unsigned char idx[4];
+			idx[0] = (*pData >> 6) & 0x03;
+			idx[1] = (*pData >> 4) & 0x03;
+			idx[2] = (*pData >> 2) & 0x03;
+			idx[3] = (*pData) & 0x03;
+			// 4 pixel color
+			for (size_t pixel_idx = 0; pixel_idx < 4; pixel_idx++)
+			{
+				Color cf = Mix_Color(color0, color1, c0, c1, idx[pixel_idx]);
+				int cell_x_pos = x_pos + pixel_idx;
+				int cell_y_pos = y_pos + i;
+				int byte_pos = (cell_x_pos + cell_y_pos * width) * 3;
+				jpeg_buf[byte_pos] = cf.r;
+				jpeg_buf[byte_pos + 1] = cf.g;
+				jpeg_buf[byte_pos + 2] = cf.b;
+			}
+			pData++;
+		}
+		x_pos += 4;
+		if (x_pos >= width) {
+			x_pos = 0;
+			y_pos += 4;
+		}
+	}
 }
 
 struct mesh_info
@@ -441,7 +565,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
             //char* buf = 0;
             std::vector<unsigned char> jpeg_buf;
             jpeg_buf.reserve(512*512*3);
-            int width, height;
+            int width, height, comp;
             {
                 osg::Texture* tex = *infoVisitor.texture_array.begin();
                 if (tex) {
@@ -450,20 +574,30 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                         if (img) {
                             width = img->s();
                             height = img->t(); 
-                            for (int i = 0; i < height; i++) {
-                                for (int j = 0; j < width; j++) {
-                                    osg::Vec4 color = img->getColor(j,i);
-                                    jpeg_buf.push_back((unsigned char)255*color.r());
-                                    jpeg_buf.push_back((unsigned char)255*color.g());
-                                    jpeg_buf.push_back((unsigned char)255*color.b());
-                                }
-                            }
+							comp = img->getPixelSizeInBits();
+							if (comp == 8) comp = 1;
+							if (comp == 24) comp = 3;
+							if (comp == 4) {
+								comp = 3;
+								fill_4BitImage(jpeg_buf, img, width, height);
+							} else 
+							{
+								unsigned row_step = img->getRowStepInBytes();
+								unsigned row_size = img->getRowSizeInBytes();
+								for (size_t i = 0; i < height; i++)
+								{
+									jpeg_buf.insert(jpeg_buf.end(),
+										img->data() + row_step * i,
+										img->data() + row_step * i + row_size);
+								}
+							}
                         }
                     }
                 }
             }
             if (!jpeg_buf.empty()) {
-                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, jpeg_buf.data(), 80);
+				buffer.data.reserve(buffer.data.size() + width * height * comp);
+                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, comp, jpeg_buf.data(), 80);
             }
             else {
                 std::vector<char> v_data;
