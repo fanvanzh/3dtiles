@@ -1,0 +1,269 @@
+/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2010 Robert Osfield
+ *
+ * This library is open source and may be redistributed and/or modified under
+ * the terms of the OpenSceneGraph Public License (OSGPL) version 0.0 or
+ * (at your option) any later version.  The full license is in LICENSE file
+ * included with this distribution, and on the openscenegraph.org website.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * OpenSceneGraph Public License for more details.
+*/
+// Written by Wang Rui, (C) 2010
+
+#ifndef OSGDB_OBJECTWRAPPER
+#define OSGDB_OBJECTWRAPPER
+
+#include <OpenThreads/ReentrantMutex>
+#include <osgDB/Serializer>
+#include <osg/ScriptEngine>
+
+namespace osgDB
+{
+
+struct MethodObject : public osg::Referenced
+{
+    typedef std::vector< osg::ref_ptr<osg::Object> > Parameters;
+
+    virtual bool run(void* objectPtr, osg::Parameters& inputParameters, osg::Parameters& outputParameters) const = 0;
+
+    virtual ~MethodObject() {}
+};
+
+class OSGDB_EXPORT BaseCompressor : public osg::Referenced
+{
+public:
+    BaseCompressor() {}
+    void setName( const std::string& name ) { _name = name; }
+    const std::string& getName() const { return _name; }
+
+    virtual bool compress( std::ostream&, const std::string& ) = 0;
+    virtual bool decompress( std::istream&, std::string& ) = 0;
+
+protected:
+    std::string _name;
+};
+
+struct FinishedObjectReadCallback : public osg::Referenced
+{
+    virtual void objectRead(osgDB::InputStream& is, osg::Object& obj) = 0;
+};
+
+class OSGDB_EXPORT ObjectWrapper : public osg::Referenced
+{
+public:
+    typedef std::vector< BaseSerializer::Type > TypeList;
+    typedef std::vector< osg::ref_ptr<BaseSerializer> > SerializerList;
+    typedef std::vector< osg::ref_ptr<FinishedObjectReadCallback> > FinishedObjectReadCallbackList;
+    typedef osg::Object* CreateInstanceFunc();
+
+    ObjectWrapper( CreateInstanceFunc* createInstanceFunc, const std::string& name,
+                   const std::string& associates );
+    ObjectWrapper( CreateInstanceFunc* createInstanceFunc, const std::string& domain, const std::string& name,
+                   const std::string& associates );
+
+    void setUpdatedVersion( int ver ) { _version = ver; }
+    int getUpdatedVersion() const { return _version; }
+
+    osg::Object* createInstance() const { return  _createInstanceFunc(); }
+    const std::string& getDomain() const { return _domain; }
+    const std::string& getName() const { return _name; }
+    const StringList& getAssociates() const { return _associates; }
+
+    SerializerList& getSerializerList() { return _serializers; }
+    const SerializerList& getSerializerList() const { return _serializers; }
+
+    TypeList& getTypeList() { return _typeList; }
+    const TypeList& getTypeList() const { return _typeList; }
+
+    void addSerializer( BaseSerializer* s, BaseSerializer::Type t=BaseSerializer::RW_UNDEFINED );
+    void markSerializerAsRemoved( const std::string& name );
+    BaseSerializer* getLastSerializer() { return _serializers.empty() ? 0 : _serializers.back().get(); }
+    BaseSerializer* getSerializer( const std::string& name );
+    BaseSerializer* getSerializer( const std::string& name, BaseSerializer::Type& type);
+
+    void addFinishedObjectReadCallback ( FinishedObjectReadCallback* forc) { _finishedObjectReadCallbacks.push_back(forc); }
+
+    bool read( InputStream&, osg::Object& );
+    bool write( OutputStream&, const osg::Object& );
+
+    bool readSchema( const StringList& properties, const TypeList& types );
+    void writeSchema( StringList& properties, TypeList& types );
+    void resetSchema() { if ( _backupSerializers.size()>0 ) _serializers = _backupSerializers; }
+
+    void addMethodObject(const std::string& methodName, MethodObject* mo);
+
+    typedef std::multimap< std::string, osg::ref_ptr<MethodObject> > MethodObjectMap;
+
+    MethodObjectMap& getMethodObjectMap() { return _methodObjectMap; }
+    const MethodObjectMap& getMethodObjectMap() const { return _methodObjectMap; }
+
+protected:
+    ObjectWrapper() : _version(0) {}
+    virtual ~ObjectWrapper() {}
+
+    CreateInstanceFunc* _createInstanceFunc;
+    std::string _domain;
+    std::string _name;
+    StringList _associates;
+    SerializerList _serializers;
+    SerializerList _backupSerializers;
+    TypeList _typeList;
+    FinishedObjectReadCallbackList _finishedObjectReadCallbacks;
+    MethodObjectMap _methodObjectMap;
+    int _version;  // Last updated version of the wrapper
+};
+
+struct UpdateWrapperVersionProxy
+{
+    UpdateWrapperVersionProxy( ObjectWrapper* w, int v ): _wrapper(w)
+    {
+        _lastVersion = w->getUpdatedVersion();
+        w->setUpdatedVersion(v);
+    }
+
+    ~UpdateWrapperVersionProxy()
+    {
+        _wrapper->setUpdatedVersion(_lastVersion);
+    }
+
+    ObjectWrapper* _wrapper;
+    int _lastVersion;
+};
+
+class Registry;
+
+class OSGDB_EXPORT ObjectWrapperManager : public osg::Referenced
+{
+public:
+
+    // Wrapper handlers
+    void addWrapper( ObjectWrapper* wrapper );
+    void removeWrapper( ObjectWrapper* wrapper );
+    ObjectWrapper* findWrapper( const std::string& name );
+
+    typedef std::map< std::string, osg::ref_ptr<ObjectWrapper> > WrapperMap;
+    WrapperMap& getWrapperMap() { return _wrappers; }
+    const WrapperMap& getWrapperMap() const { return _wrappers; }
+
+    // Compressor handlers
+    void addCompressor( BaseCompressor* compressor );
+    void removeCompressor( BaseCompressor* compressor );
+    BaseCompressor* findCompressor( const std::string& name );
+
+    typedef std::map< std::string, osg::ref_ptr<BaseCompressor> > CompressorMap;
+    CompressorMap& getCompressorMap() { return _compressors; }
+    const CompressorMap& getCompressorMap() const { return _compressors; }
+
+    typedef std::map<std::string, IntLookup> IntLookupMap;
+    IntLookup::Value getValue( const std::string& group, const std::string& str ) { return findLookup(group).getValue(str.c_str()); }
+    const std::string& getString( const std::string& group, IntLookup::Value value ) { return findLookup(group).getString(value); }
+
+    IntLookupMap& getLookupMap() { return _globalMap; }
+    const IntLookupMap& getLookupMap() const { return _globalMap; }
+
+protected:
+
+    friend class osgDB::Registry;
+
+    ObjectWrapperManager();
+    virtual ~ObjectWrapperManager();
+
+    OpenThreads::ReentrantMutex _wrapperMutex;
+
+    WrapperMap _wrappers;
+    CompressorMap _compressors;
+
+    IntLookup& findLookup( const std::string& group )
+    {
+        IntLookupMap::iterator itr = _globalMap.find(group);
+        if ( itr!=_globalMap.end() ) return itr->second;
+        else return _globalMap["GL"];
+    }
+
+    IntLookupMap _globalMap;
+};
+
+
+class OSGDB_EXPORT RegisterWrapperProxy
+{
+public:
+    typedef void (*AddPropFunc)( ObjectWrapper* );
+
+    RegisterWrapperProxy( ObjectWrapper::CreateInstanceFunc *createInstanceFunc, const std::string& name,
+                          const std::string& associates, AddPropFunc func );
+
+    virtual ~RegisterWrapperProxy();
+
+protected:
+    osg::ref_ptr<ObjectWrapper> _wrapper;
+};
+
+class OSGDB_EXPORT RegisterCustomWrapperProxy
+{
+public:
+    typedef void (*AddPropFunc)( const char*, ObjectWrapper* );
+
+    RegisterCustomWrapperProxy( ObjectWrapper::CreateInstanceFunc *createInstanceFunc, const std::string& domain, const std::string& name,
+                                const std::string& associates, AddPropFunc func );
+
+    virtual ~RegisterCustomWrapperProxy();
+
+protected:
+    osg::ref_ptr<ObjectWrapper> _wrapper;
+};
+
+#define REGISTER_OBJECT_WRAPPER(NAME, CREATEINSTANCE, CLASS, ASSOCIATES) \
+    extern "C" void wrapper_serializer_##NAME(void) {} \
+    extern void wrapper_propfunc_##NAME(osgDB::ObjectWrapper*); \
+    static osg::Object* wrapper_createinstancefunc##NAME() { return CREATEINSTANCE; } \
+    static osgDB::RegisterWrapperProxy wrapper_proxy_##NAME( \
+        wrapper_createinstancefunc##NAME, #CLASS, ASSOCIATES, &wrapper_propfunc_##NAME); \
+    typedef CLASS MyClass; \
+    void wrapper_propfunc_##NAME(osgDB::ObjectWrapper* wrapper)
+
+#define REGISTER_OBJECT_WRAPPER2(NAME, CREATEINSTANCE, CLASS, CLASSNAME, ASSOCIATES) \
+    extern "C" void wrapper_serializer_##NAME(void) {} \
+    extern void wrapper_propfunc_##NAME(osgDB::ObjectWrapper*); \
+    static osg::Object* wrapper_createinstancefunc##NAME() { return CREATEINSTANCE; } \
+    static osgDB::RegisterWrapperProxy wrapper_proxy_##NAME( \
+        wrapper_createinstancefunc##NAME, CLASSNAME, ASSOCIATES, &wrapper_propfunc_##NAME); \
+    typedef CLASS MyClass; \
+    void wrapper_propfunc_##NAME(osgDB::ObjectWrapper* wrapper)
+
+#define REGISTER_CUSTOM_OBJECT_WRAPPER(DOMAIN, NAME, CREATEINSTANCE, CLASS, ASSOCIATES) \
+    extern "C" void wrapper_serializer_##NAME(void) {} \
+    extern void wrapper_propfunc_##NAME(const char*, osgDB::ObjectWrapper*); \
+    static osg::Object* wrapper_createinstancefunc##NAME() { return CREATEINSTANCE; } \
+    static osgDB::RegisterCustomWrapperProxy wrapper_proxy_##NAME( \
+        wrapper_createinstancefunc##NAME, #DOMAIN, #CLASS, ASSOCIATES, &wrapper_propfunc_##NAME); \
+    typedef CLASS MyClass; \
+    void wrapper_propfunc_##NAME(const char* domain, osgDB::ObjectWrapper* wrapper)
+
+#define REGISTER_CUSTOM_OBJECT_WRAPPER2(DOMAIN, NAME, CREATEINSTANCE, CLASS, CLASSNAME, ASSOCIATES) \
+    extern "C" void wrapper_serializer_##NAME(void) {} \
+    extern void wrapper_propfunc_##NAME(const char*, osgDB::ObjectWrapper*); \
+    static osg::Object* wrapper_createinstancefunc##NAME() { return CREATEINSTANCE; } \
+    static osgDB::RegisterCustomWrapperProxy wrapper_proxy_##NAME( \
+        wrapper_createinstancefunc##NAME, #DOMAIN, CLASSNAME, ASSOCIATES, &wrapper_propfunc_##NAME); \
+    typedef CLASS MyClass; \
+    void wrapper_propfunc_##NAME(const char* domain, osgDB::ObjectWrapper* wrapper)
+
+class OSGDB_EXPORT RegisterCompressorProxy
+{
+public:
+    RegisterCompressorProxy( const std::string& name, BaseCompressor* compressor );
+    ~RegisterCompressorProxy();
+
+protected:
+    osg::ref_ptr<BaseCompressor> _compressor;
+};
+
+#define REGISTER_COMPRESSOR(NAME, CLASS) \
+    extern "C" void wrapper_compressor_##CLASS(void) {} \
+    static osgDB::RegisterCompressorProxy compressor_proxy_##CLASS(NAME, new CLASS);
+
+}
+
+#endif
