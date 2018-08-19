@@ -17,6 +17,9 @@ namespace TileMaker
         [DllImport("tile.dll")]
         public static extern IntPtr osgb23dtile_path(string in_path, string out_path, IntPtr box, ref int len, int max_lvl);
 
+        [DllImport("tile.dll")]
+        public static extern void free_buffer(IntPtr buffer);
+
         public Form1()
         {
             InitializeComponent();
@@ -99,7 +102,10 @@ namespace TileMaker
             }
             DirectoryInfo Dir = new DirectoryInfo(data_dir);
             DirectoryInfo[] DirSub = Dir.GetDirectories();
-            foreach(DirectoryInfo f in DirSub)
+
+            double[] root_box = new double[] { -1.0E+38, -1.0E+38, -1.0E+38, 1.0E+38, 1.0E+38, 1.0E+38 };
+
+            foreach (DirectoryInfo f in DirSub)
             {
                 string osb_sub = f.FullName;
                 osb_sub += string.Format("\\{0}.osgb", f.Name);
@@ -119,7 +125,12 @@ namespace TileMaker
                         {
                             int buf_len = 0;
                             IntPtr json = osgb23dtile_path(osb_sub, out_path, (IntPtr)ptr, ref buf_len, 18);
-                            int a = 10;
+                            string tile_json = Marshal.PtrToStringAnsi(json);
+                            free_buffer(json);
+                            for(int i = 0; i < 3; i++)
+                                  root_box[i] = box[i] > root_box[i] ? box[i] : root_box[i];
+                            for (int i = 3; i < 6; i++)
+                                root_box[i] = box[i] < root_box[i] ? box[i] : root_box[i];
                         }
                     }
                 }
@@ -128,6 +139,29 @@ namespace TileMaker
                     MessageBox.Show(ex.Message);
                 }
             }
+            // 合并外包矩形，合并输出 json
+            string tileset_json = "";
+        }
+
+        private List<double> make_tile_box(double[] box)
+        {
+            List<double> tile_box = new List<double>();
+            tile_box.Add((box[0] + box[3]) / 2.0);
+            tile_box.Add((box[1] + box[4]) / 2.0);
+            tile_box.Add((box[2] + box[5]) / 2.0);
+
+            tile_box.Add((box[3] - box[0]) / 2.0);
+            tile_box.Add(0.0);
+            tile_box.Add(0.0);
+
+            tile_box.Add(0.0);
+            tile_box.Add((box[4] - box[1]) / 2.0);
+            tile_box.Add(0.0);
+
+            tile_box.Add(0.0);
+            tile_box.Add((box[5] - box[2]) / 2.0);
+            tile_box.Add(0.0);
+            return tile_box;
         }
 
         private void button1_Click(object sender, EventArgs e)

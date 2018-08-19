@@ -902,6 +902,10 @@ std::string encode_tile_json(osg_tree& tree) {
 
 #include "osgb.h"
 
+extern "C" DLL_API void free_buffer(void* buf) {
+	if(buf) 
+		free(buf);
+}
 /**
 外部创建好目录
 外面分配好 box[6][double]
@@ -926,9 +930,10 @@ extern "C" DLL_API void* osgb23dtile_path(
     std::string json = encode_tile_json(root);
     memcpy(box, root.bbox.max.data(), 3 * sizeof(double));
     memcpy(box + 3, root.bbox.min.data(), 3 * sizeof(double));
-    void* str = malloc(json.length());
+    void* str = malloc(json.length() + 1);
     memcpy(str, json.c_str(), json.length());
-    *len = json.length();
+	((char*)str)[json.length()] = 0x00;
+    *len = json.length() + 1;
     return str;
 }
 
