@@ -874,12 +874,12 @@ std::string encode_tile_json(osg_tree& tree) {
     tile += ",";
     tile += "\"content\":{ \"url\":";
     // Data/Tile_0/Tile_0.b3dm
-    std::string url_path = "Data/";
+    std::string url_path = "./";
     std::string file_name = get_file_name(tree.file_name);
     std::string parent_str = get_parent(tree.file_name);
     std::string file_path = get_file_name(parent_str);
-    url_path += file_path;
-    url_path += "/";
+    //url_path += file_path;
+    //url_path += "/";
     url_path += file_name;
     std::string url = replace(url_path,".osgb",".b3dm");
     tile += "\"";

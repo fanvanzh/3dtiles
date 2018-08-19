@@ -77,6 +77,7 @@ fn str_to_vec_c(str: &str) -> Vec<u8> {
 #[derive(Debug)]
 struct TileResult {
     json: String,
+    path: String,
     box_v: Vec<f64>,
 }
 
@@ -159,6 +160,7 @@ pub fn osgb_batch_convert(
 	            libc::free(out_ptr);
 	        }
 	        let t = TileResult {
+                path: info.out_dir.into(),
 	            json: String::from_utf8(json_buf).unwrap(),
 	            box_v: root_box,
 	        };
@@ -218,9 +220,42 @@ pub fn osgb_batch_convert(
     tileset_json += &json_str;
     tileset_json.pop(); // }
     tileset_json.pop(); // ]
+    let out_dir: String = dir_dest.to_string_lossy().into();
+    let tilesetBox: Vec<f64> = box_to_tileset_box(&root_box);
     for x in tile_array {
-        tileset_json += &x.json;
+        // 
+        let mut path = x.path;
+        // let extern_tile = format!("{{\
+        //     \"content\": {{\
+        //         \"url\": \"{}/tileset.json\"\
+        //      }}\
+        //    }}", path.replace(&out_dir,".").replace("\\","/"));
+
+        let tile_object = json!(
+            {
+                "boundingVolume": {
+                        "box": box_to_tileset_box(&root_box)
+                    },
+                "geometricError": get_geometric_error(center_y, 10),
+                "content": {
+                    "url" : format!("{}/tileset.json", path.replace(&out_dir,".").replace("\\","/"))
+                }
+            }
+        );
+        //tileset_json += &x.json;
+        let tile_json = serde_json::to_string_pretty(&tile_object).unwrap();
+        tileset_json += &tile_json;
         tileset_json += ",";
+
+        let sub_tile = format!("{{    \
+        \"asset\": {{\
+            \"version\": \"0.0\",\
+            \"gltfUpAxis\": \"Y\"\
+        }},\
+        \"root\":{}}}", x.json);
+        let out_file = path.clone() + "/tileset.json";
+        let mut f = File::create(out_file)?;
+        f.write_all(sub_tile.as_bytes())?;
     }
     tileset_json.pop();
     tileset_json.push(']');
