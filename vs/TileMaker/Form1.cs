@@ -8,11 +8,15 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Runtime.InteropServices;
 
 namespace TileMaker
 {
     public partial class Form1 : Form
     {
+        [DllImport("tile.dll")]
+        public static extern IntPtr osgb23dtile_path(string in_path, string out_path, IntPtr box, ref int len, int max_lvl);
+
         public Form1()
         {
             InitializeComponent();
@@ -41,7 +45,6 @@ namespace TileMaker
                 } else {
                     input_osg.Text = dialog.SelectedPath;
                 }
-                //input_osg.Text = 
             }
         }
 
@@ -82,6 +85,54 @@ namespace TileMaker
                 }
             }
             // convert path A to path B
+            convert_osgb(input_osg.Text.Trim(), output_osg.Text.Trim());
+        }
+
+        private void convert_osgb(string osgb_dir, string tile_dir)
+        {
+            string data_dir = osgb_dir;
+            data_dir += "/Data";
+            if (!Directory.Exists(data_dir))
+            {
+                MessageBox.Show(string.Format("未找到目录:{}", data_dir));
+                return;
+            }
+            DirectoryInfo Dir = new DirectoryInfo(data_dir);
+            DirectoryInfo[] DirSub = Dir.GetDirectories();
+            foreach(DirectoryInfo f in DirSub)
+            {
+                string osb_sub = f.FullName;
+                osb_sub += string.Format("\\{0}.osgb", f.Name);
+                if (!File.Exists(osb_sub)) {
+                    MessageBox.Show(string.Format("无法找到文件:{}", osb_sub));
+                    continue;
+                }
+                string out_path = tile_dir + "/Data/" + f.Name;
+                Directory.CreateDirectory(out_path);
+                try
+                {
+                    // call c
+                    double[] box = new double[6];
+                    unsafe
+                    {
+                        fixed (double* ptr = box)
+                        {
+                            int buf_len = 0;
+                            IntPtr json = osgb23dtile_path(osb_sub, out_path, (IntPtr)ptr, ref buf_len, 18);
+                            int a = 10;
+                        }
+                    }
+                }
+                catch(Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                }
+            }
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show("not support now!");
         }
     }
 }
