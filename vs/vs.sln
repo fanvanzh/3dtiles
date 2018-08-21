@@ -1,0 +1,66 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vs", "vs\vs.vcxproj", "{7BA34CCF-D221-4793-ABC1-F8418BD4F687}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{56527103-7D1C-4AC6-860C-A82932556382}"
+	ProjectSection(SolutionItems) = preProject
+		Performance1.psess = Performance1.psess
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TileMaker", "TileMaker\TileMaker.csproj", "{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tile", "tile\tile.vcxproj", "{4B722313-B1ED-4FAB-B095-0D0D772E9427}"
+EndProject
+Global
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Debug|x64.ActiveCfg = Debug|x64
+		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Debug|x64.Build.0 = Debug|x64
+		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Debug|x86.ActiveCfg = Debug|Win32
+		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Debug|x86.Build.0 = Debug|Win32
+		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Release|Any CPU.ActiveCfg = Release|Win32
+		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Release|x64.ActiveCfg = Release|x64
+		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Release|x64.Build.0 = Release|x64
+		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Release|x86.ActiveCfg = Release|Win32
+		{7BA34CCF-D221-4793-ABC1-F8418BD4F687}.Release|x86.Build.0 = Release|Win32
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Debug|x64.Build.0 = Debug|Any CPU
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Debug|x86.Build.0 = Debug|Any CPU
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Release|x64.ActiveCfg = Release|Any CPU
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Release|x64.Build.0 = Release|Any CPU
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Release|x86.ActiveCfg = Release|Any CPU
+		{FB12E3DC-EEFA-4BE2-B83C-F73F807457AD}.Release|x86.Build.0 = Release|Any CPU
+		{4B722313-B1ED-4FAB-B095-0D0D772E9427}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{4B722313-B1ED-4FAB-B095-0D0D772E9427}.Debug|x64.ActiveCfg = Debug|x64
+		{4B722313-B1ED-4FAB-B095-0D0D772E9427}.Debug|x64.Build.0 = Debug|x64
+		{4B722313-B1ED-4FAB-B095-0D0D772E9427}.Debug|x86.ActiveCfg = Debug|Win32
+		{4B722313-B1ED-4FAB-B095-0D0D772E9427}.Debug|x86.Build.0 = Debug|Win32
+		{4B722313-B1ED-4FAB-B095-0D0D772E9427}.Release|Any CPU.ActiveCfg = Release|Win32
+		{4B722313-B1ED-4FAB-B095-0D0D772E9427}.Release|x64.ActiveCfg = Release|x64
+		{4B722313-B1ED-4FAB-B095-0D0D772E9427}.Release|x64.Build.0 = Release|x64
+		{4B722313-B1ED-4FAB-B095-0D0D772E9427}.Release|x86.ActiveCfg = Release|Win32
+		{4B722313-B1ED-4FAB-B095-0D0D772E9427}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

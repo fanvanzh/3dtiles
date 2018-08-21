@@ -11,11 +11,13 @@ fn build_win_msvc() {
         .flag("-INCREMENTAL")
         .warnings(false)
         .define("WIN32", None)
+        .define("_WINDOWS",None)
         .include("./src")
         .include("./src/osg")
         .file("./src/tileset.cpp")
         .file("./src/shp23dtile.cpp")
         .file("./src/osgb23dtile.cpp")
+        .file("./src/decompress.cpp")
         .compile("3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=./lib");
@@ -24,6 +26,7 @@ fn build_win_msvc() {
     println!("cargo:rustc-link-lib=osg");
     println!("cargo:rustc-link-lib=osgDB");
     println!("cargo:rustc-link-lib=osgUtil");
+    println!("cargo:rustc-link-lib=osgViewer");
 
     Command::new("cmd")
         .args(

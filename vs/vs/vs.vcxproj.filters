@@ -1,0 +1,314 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="资源文件">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="头文件\gdal">
+      <UniqueIdentifier>{f538b2d8-6414-4a61-a847-ba6cc671a9ab}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\osg">
+      <UniqueIdentifier>{c75ef153-06a8-492b-b330-84652f14252c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\earcut.hpp">
+      <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\extern.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\json.hpp">
+      <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\stb_image.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\stb_image_write.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\tiny_gltf.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_atomic_ops.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_aws.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_config.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_config_extras.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_conv.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_csv.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_error.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_hash_set.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_http.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_list.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_minixml.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_minizip_ioapi.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_minizip_unzip.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_minizip_zip.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_multiproc.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_odbc.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_port.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_progress.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_quad_tree.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_sha256.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_spawn.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_string.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_time.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_virtualmem.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_vsi.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_vsi_error.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_vsi_virtual.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_vsil_curl_priv.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cpl_worker_thread_pool.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\cplkeywordparser.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_alg.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_alg_priv.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_csv.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_frmts.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_mdreader.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_pam.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_priv.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_proxy.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_rat.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_simplesurf.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_utils.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_version.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdal_vrt.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdalexif.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdalgeorefpamdataset.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdalgrid.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdalgrid_priv.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdaljp2abstractdataset.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdaljp2metadata.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdaljp2metadatagenerator.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdalpansharpen.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdalsse_priv.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdalwarper.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gdalwarpkernel_opencl.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\gvgcpfit.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\internal_qhull_headers.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\memdataset.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_api.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_attrind.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_core.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_expat.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_feature.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_featurestyle.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_geocoding.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_geometry.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_geos.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_p.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_spatialref.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_srs_api.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogr_srs_esri_names.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ograpispy.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogrgeomediageometry.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogrpgeogeometry.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\ogrsf_frmts.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\osr_cs_wkt.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\osr_cs_wkt_parser.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\rawdataset.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\swq.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\thinplatespline.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gdal\vrtdataset.h">
+      <Filter>头文件\gdal</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\src\fun_c.rs">
+      <Filter>源文件</Filter>
+    </None>
+    <None Include="..\..\src\main.rs">
+      <Filter>源文件</Filter>
+    </None>
+    <None Include="..\..\src\osgb.rs">
+      <Filter>源文件</Filter>
+    </None>
+    <None Include="..\..\src\shape.rs">
+      <Filter>源文件</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\osgb23dtile.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\shp23dtile.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\tileset.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\decompress.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
