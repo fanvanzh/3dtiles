@@ -146,14 +146,28 @@ int get_lvl_num(std::string file_name){
     return -1;
 }
 
-struct tile_box
+struct TileBox
 {
     std::vector<double> max;
     std::vector<double> min;
+    
+    void extend(double ratio) {
+        ratio /= 2;
+        double x = max[0] - min[0];
+        double y = max[1] - min[1];
+        double z = max[2] - min[2];
+        max[0] += x * ratio;
+        max[1] += y * ratio;
+        max[2] += z * ratio;
+
+        min[0] -= x * ratio;
+        min[1] -= y * ratio;
+        min[2] -= z * ratio;
+    }
 };
 
 struct osg_tree {
-    tile_box bbox;
+    TileBox bbox;
     std::string file_name;
     std::vector<osg_tree> sub_nodes;
 };
@@ -705,7 +719,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
     return true;
 }
 
-bool osgb23dtile_buf(std::string path, std::string& b3dm_buf, tile_box& tile_box) {
+bool osgb23dtile_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box) {
     using nlohmann::json;
     
     std::string glb_buf;
@@ -780,13 +794,13 @@ bool osgb23dtile_buf(std::string path, std::string& b3dm_buf, tile_box& tile_box
 }
 
 
-std::vector<double> convert_bbox(tile_box tile) {
+std::vector<double> convert_bbox(TileBox tile) {
     double center_mx = (tile.max[0] + tile.min[0]) / 2;
     double center_my = (tile.max[1] + tile.min[1]) / 2;
     double center_mz = (tile.max[2] + tile.min[2]) / 2;
-    double x_meter = (tile.max[0] - tile.min[0]) * 1.01;
-    double y_meter = (tile.max[1] - tile.min[1]) * 1.01;
-    double z_meter = (tile.max[2] - tile.min[2]) * 1.01;
+	double x_meter = (tile.max[0] - tile.min[0]) * 1;
+	double y_meter = (tile.max[1] - tile.min[1]) * 1;
+	double z_meter = (tile.max[2] - tile.min[2]) * 1;
     if (x_meter < 0.01) { x_meter = 0.01; }
     if (y_meter < 0.01) { y_meter = 0.01; }
     if (z_meter < 0.01) { z_meter = 0.01; }
@@ -821,7 +835,7 @@ void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl) {
     }
 }
 
-void expend_box(tile_box& box, tile_box& box_new) {
+void expend_box(TileBox& box, TileBox& box_new) {
     if (box_new.max.empty() || box_new.min.empty()) {
         return;
     }
@@ -839,14 +853,27 @@ void expend_box(tile_box& box, tile_box& box_new) {
     }
 }
 
-tile_box extend_tile_box(osg_tree& tree) {
-    tile_box box = tree.bbox;
+TileBox extend_tile_box(osg_tree& tree) {
+    TileBox box = tree.bbox;
     for (auto& i : tree.sub_nodes) {
-        tile_box sub_tile = extend_tile_box(i);
+        TileBox sub_tile = extend_tile_box(i);
         expend_box(box, sub_tile);
     }
     tree.bbox = box;
     return box;
+}
+
+std::string get_boundingBox(TileBox bbox) {
+    std::string box_str = "\"boundingVolume\":{";
+    box_str += "\"box\":[";
+    std::vector<double> v_box = convert_bbox(bbox);
+    for (auto v: v_box) {
+        box_str += std::to_string(v);
+        box_str += ",";
+    }
+    box_str.pop_back();
+    box_str += "]}";
+    return box_str;
 }
 
 std::string encode_tile_json(osg_tree& tree) {
@@ -861,16 +888,14 @@ std::string encode_tile_json(osg_tree& tree) {
         tree.sub_nodes.empty()? 0 : get_geometric_error(lvl)
         );
     std::string tile = buf;
-    string box_str = "\"boundingVolume\":{";
-    box_str += "\"box\":[";
-    std::vector<double> v_box = convert_bbox(tree.bbox);
-    for (auto v: v_box) {
-        box_str += std::to_string(v);
-        box_str += ",";
-    }
-    box_str.pop_back();
-    box_str += "]}";
-    tile += box_str;
+	TileBox cBox = tree.bbox;
+	cBox.extend(0.8);
+    std::string content_box = get_boundingBox(cBox);
+	TileBox bbox = tree.bbox;
+	bbox.extend(1.5);
+    std::string tile_box = get_boundingBox(bbox);
+
+    tile += tile_box;
     tile += ",";
     tile += "\"content\":{ \"url\":";
     // Data/Tile_0/Tile_0.b3dm
@@ -885,7 +910,7 @@ std::string encode_tile_json(osg_tree& tree) {
     tile += "\"";
     tile += url;
     tile += "\",";
-    tile += box_str;
+    tile += content_box;
     tile += "},\"children\":[";
     for ( auto& i : tree.sub_nodes ){
         std::string node_json = encode_tile_json(i);
@@ -934,7 +959,7 @@ extern "C" void* osgb23dtile_path(
 extern "C" bool osgb23dtile(
     const char* in, const char* out ) {
     std::string b3dm_buf;
-    tile_box tile_box;
+    TileBox tile_box;
     std::string path = osg_string(in);
     bool ret = osgb23dtile_buf(path.c_str(),b3dm_buf,tile_box);
     if (!ret) return false;
