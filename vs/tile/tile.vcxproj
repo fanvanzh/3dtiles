@@ -28,6 +28,7 @@
   <ItemGroup>
     <ClInclude Include="src\earcut.hpp" />
     <ClInclude Include="src\json.hpp" />
+    <ClInclude Include="src\osgb.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{4B722313-B1ED-4FAB-B095-0D0D772E9427}</ProjectGuid>
@@ -118,7 +119,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>..\..\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>gdal_i.lib;osg.lib;osgDB.lib;osgGA.lib;osgUtil.lib;osgViewer.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gdal_i.lib;osgd.lib;osgDBd.lib;osgGAd.lib;osgUtild.lib;osgViewerd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
