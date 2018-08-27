@@ -194,7 +194,7 @@ pub fn osgb_batch_convert(
     let root_geometric_error = get_geometric_error(center_y, 10);
     let mut tileset_json = String::new();
     tileset_json +=
-        r#"{"asset": {    "version": "0.0",    "gltfUpAxis": "Y"  },  "geometricError":"#;
+        r#"{"asset": {    "version": "0.0",    "gltfUpAxis": "Z"  },  "geometricError":"#;
     tileset_json += root_geometric_error.to_string().as_str();
     tileset_json += r#","root": "#;
 
@@ -250,7 +250,7 @@ pub fn osgb_batch_convert(
         let sub_tile = format!("{{    \
         \"asset\": {{\
             \"version\": \"0.0\",\
-            \"gltfUpAxis\": \"Y\"\
+            \"gltfUpAxis\": \"Z\"\
         }},\
         \"root\":{}}}", x.json);
         let out_file = path.clone() + "/tileset.json";
