@@ -465,12 +465,26 @@ struct Texture {
   Texture() : sampler(-1), source(-1) {}
 };
 
+struct Shader {
+	int bufferView;
+	int type;
+};
+
+struct Technique
+{
+	std::string tech_string; // use string tech temp
+};
+
+struct Program {
+	std::string prog_string; // use string program temp
+};
+
 // Each extension should be stored in a ParameterMap.
 // members not in the values could be included in the ParameterMap
 // to keep a single material model
 struct Material {
   std::string name;
-
+  std::string shaderMaterial; // add a special material for osgb oblique photography
   ParameterMap values;            // PBR metal/roughness workflow
   ParameterMap additionalValues;  // normal/occlusion/emissive values
   ParameterMap extCommonValues;   // KHR_common_material extension
@@ -705,7 +719,11 @@ class Model {
   std::vector<Camera> cameras;
   std::vector<Scene> scenes;
   std::vector<Light> lights;
-
+  //
+  std::vector<Shader> shaders;
+  std::vector<Technique> techniques;
+  std::vector<Program> programs;
+  //
   int defaultScene;
   std::vector<std::string> extensionsUsed;
   std::vector<std::string> extensionsRequired;
@@ -3441,6 +3459,10 @@ static void SerializeGltfImage(Image &image, json &o) {
 }
 
 static void SerializeGltfMaterial(Material &material, json &o) {
+	if (!material.shaderMaterial.empty()) {
+		o = json::parse(material.shaderMaterial);
+		return;
+	}
   if (material.extPBRValues.size()) {
     // Serialize PBR specular/glossiness material
     json values;
@@ -3896,6 +3918,31 @@ std::string TinyGLTF::Serialize(Model *model) {
 		output["materials"] = materials;
 	}
 
+	// SHADER 
+	{
+		json shaders;
+		for (auto& shader : model->shaders) {
+			json val;
+			val["bufferView"] = shader.bufferView;
+			val["type"] = shader.type;
+			shaders.push_back(val);
+		}
+		output["shaders"] = shaders;
+	}
+	// PROGREAM
+	{
+		for (auto& prog : model->programs) {
+			json val = json::parse(prog.prog_string);
+			output["programs"].push_back(val);
+		}
+	}
+	// TECHNICH
+	{
+		for (auto& tech : model->techniques) {
+			json val = json::parse(tech.tech_string);
+			output["techniques"].push_back(val);
+		}
+	}
 	// MESHES
 	json meshes;
 	for (unsigned int i = 0; i < model->meshes.size(); ++i) {

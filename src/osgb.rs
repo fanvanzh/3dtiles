@@ -220,8 +220,8 @@ pub fn osgb_batch_convert(
     let mut root_json = json!(
         {
             "asset": {
-                "version": "0.0",
-                "gltfUpAxis": "Y"  
+                "version": "1.0",
+                "gltfUpAxis": "Z"  
             }, 
             "geometricError": 2000,
             "root" : {
@@ -254,8 +254,8 @@ pub fn osgb_batch_convert(
         root_json["root"]["children"].as_array_mut().unwrap().push(tile_object);
         let sub_tile = json!({
             "asset": {
-                "version": "0.0",
-                "gltfUpAxis":"Y"
+                "version": "1.0",
+                "gltfUpAxis":"Z"
             },
             "root": json_val
         }
