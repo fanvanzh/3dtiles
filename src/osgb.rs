@@ -19,6 +19,8 @@ extern "C" {
         name_out: *const u8,
         box_ptr: *mut f64,
         len: *mut i32,
+        x: f64,
+        y: f64,
         max_lvl: i32,
     ) -> *mut libc::c_void;
 
@@ -27,6 +29,12 @@ extern "C" {
     fn transform_c(radian_x: f64, radian_y: f64, height_min: f64, ptr: *mut f64);
 
     pub fn epsg_convert(insrs: i32, val: *mut f64, gdal: *const i8) -> bool;
+
+    fn degree2rad( val:f64 ) -> f64;
+
+    fn meter_to_lati(m:f64) -> f64;
+
+    fn meter_to_longti(m:f64, lati:f64) -> f64;
 }
 
 fn walk_path(dir: &Path, cb: &mut FnMut(&str)) -> io::Result<()> {
@@ -133,6 +141,14 @@ pub fn osgb_batch_convert(
             }
         }
     }
+    
+    let rad_x = unsafe {
+         degree2rad(center_x)
+    };
+    let rad_y = unsafe {
+        degree2rad(center_y)
+    };
+
     let max_lvl: i32 = max_lvl.unwrap_or(100);
     osgb_dir_pair.into_par_iter().map( | info | {
         unsafe {
@@ -146,7 +162,7 @@ pub fn osgb_batch_convert(
 	            out_ptr.as_ptr(),
 	            root_box.as_mut_ptr(),
 	            (&mut json_len) as *mut i32,
-	            max_lvl
+                rad_x,rad_y,max_lvl
 	        );
 	        if out_ptr.is_null() {
 	            error!("failed: {}", info.in_dir);

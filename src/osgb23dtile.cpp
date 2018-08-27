@@ -876,7 +876,27 @@ std::string get_boundingBox(TileBox bbox) {
     return box_str;
 }
 
-std::string encode_tile_json(osg_tree& tree) {
+std::string get_boundingRegion(TileBox bbox, double x, double y) {
+	std::string box_str = "\"boundingVolume\":{";
+	box_str += "\"region\":[";
+	std::vector<double> v_box(6);
+	v_box[0] = meter_to_longti(bbox.min[0],y) + x;
+	v_box[1] = meter_to_lati(bbox.min[1]) + y;
+	v_box[2] = meter_to_longti(bbox.max[0], y) + x;
+	v_box[3] = meter_to_lati(bbox.max[1]) + y;
+	v_box[4] = bbox.min[2];
+	v_box[5] = bbox.max[2];
+
+	for (auto v : v_box) {
+		box_str += std::to_string(v);
+		box_str += ",";
+	}
+	box_str.pop_back();
+	box_str += "]}";
+	return box_str;
+}
+
+std::string encode_tile_json(osg_tree& tree, double x, double y) {
     if (tree.bbox.max.empty() || tree.bbox.min.empty()) {
         return "";
     }
@@ -889,10 +909,10 @@ std::string encode_tile_json(osg_tree& tree) {
         );
     std::string tile = buf;
 	TileBox cBox = tree.bbox;
-	cBox.extend(0.8);
+	cBox.extend(0.2);
     std::string content_box = get_boundingBox(cBox);
 	TileBox bbox = tree.bbox;
-	bbox.extend(1.5);
+	bbox.extend(0.2);
     std::string tile_box = get_boundingBox(bbox);
 
     tile += tile_box;
@@ -913,7 +933,7 @@ std::string encode_tile_json(osg_tree& tree) {
     tile += content_box;
     tile += "},\"children\":[";
     for ( auto& i : tree.sub_nodes ){
-        std::string node_json = encode_tile_json(i);
+        std::string node_json = encode_tile_json(i,x,y);
         if (!node_json.empty()) {
             tile += node_json;
             tile += ",";
@@ -932,7 +952,7 @@ std::string encode_tile_json(osg_tree& tree) {
 */
 extern "C" void* osgb23dtile_path(
     const char* in_path, const char* out_path, 
-    double *box, int* len, int max_lvl) {
+    double *box, int* len, double x, double y,int max_lvl) {
     
     std::string path = osg_string(in_path);
     osg_tree root = get_all_tree(path);
@@ -947,7 +967,8 @@ extern "C" void* osgb23dtile_path(
         LOG_E( "[%s] bbox is empty!", in_path);
         return NULL;
     }
-    std::string json = encode_tile_json(root);
+    std::string json = encode_tile_json(root,x,y);
+	root.bbox.extend(0.2);
     memcpy(box, root.bbox.max.data(), 3 * sizeof(double));
     memcpy(box + 3, root.bbox.min.data(), 3 * sizeof(double));
     void* str = malloc(json.length());
