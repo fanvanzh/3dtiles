@@ -7,8 +7,8 @@
 #include <cstring>
 #include <algorithm>
 
+#include "osgb.h"
 #include "extern.h"
-
 ///////////////////////
 static const double pi = std::acos(-1);
 
@@ -108,7 +108,7 @@ std::vector<double> transfrom_xyz(double radian_x, double radian_y, double heigh
     return matrix;
 }
 
-extern "C" void transform_c(double center_x, double center_y, double height_min, double* ptr) {
+extern "C" DLL_API void transform_c(double center_x, double center_y, double height_min, double* ptr) {
     double radian_x = degree2rad( center_x );
     double radian_y = degree2rad( center_y );
     std::vector<double> v = transfrom_xyz(radian_x, radian_y, height_min);
