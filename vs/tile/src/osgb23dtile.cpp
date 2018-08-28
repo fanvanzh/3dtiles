@@ -874,12 +874,12 @@ std::string encode_tile_json(osg_tree& tree) {
     tile += ",";
     tile += "\"content\":{ \"url\":";
     // Data/Tile_0/Tile_0.b3dm
-    std::string url_path = "Data/";
+    std::string url_path = "./";
     std::string file_name = get_file_name(tree.file_name);
     std::string parent_str = get_parent(tree.file_name);
     std::string file_path = get_file_name(parent_str);
-    url_path += file_path;
-    url_path += "/";
+    //url_path += file_path;
+    //url_path += "/";
     url_path += file_name;
     std::string url = replace(url_path,".osgb",".b3dm");
     tile += "\"";
@@ -900,34 +900,40 @@ std::string encode_tile_json(osg_tree& tree) {
     return tile;
 }
 
+#include "osgb.h"
+
+extern "C" DLL_API void free_buffer(void* buf) {
+	if(buf) 
+		free(buf);
+}
 /**
 外部创建好目录
 外面分配好 box[6][double]
 外面分配好 string [1024*1024]
 */
-extern "C" void* osgb23dtile_path(
+extern "C" DLL_API void* osgb23dtile_path(
     const char* in_path, const char* out_path, 
     double *box, int* len, int max_lvl) {
-    
-    std::string path = osg_string(in_path);
+    std::string path = in_path;
     osg_tree root = get_all_tree(path);
     if (root.file_name.empty()) {
-        LOG_E( "open file [%s] fail!", in_path);
+        LOG_E( "open file [%s] fail!", path.c_str());
         return NULL;
     }
     do_tile_job(root, out_path, max_lvl);
     // 返回 json 和 最大bbox
     extend_tile_box(root);
     if (root.bbox.max.empty() || root.bbox.min.empty()) {
-        LOG_E( "[%s] bbox is empty!", in_path);
+        LOG_E( "[%s] bbox is empty!", path.c_str());
         return NULL;
     }
     std::string json = encode_tile_json(root);
     memcpy(box, root.bbox.max.data(), 3 * sizeof(double));
     memcpy(box + 3, root.bbox.min.data(), 3 * sizeof(double));
-    void* str = malloc(json.length());
+    void* str = malloc(json.length() + 1);
     memcpy(str, json.c_str(), json.length());
-    *len = json.length();
+	((char*)str)[json.length()] = 0x00;
+    *len = json.length() + 1;
     return str;
 }
 

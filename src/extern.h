@@ -53,14 +53,12 @@ bool write_tileset(
 	const char* filename, const char* full_path
 	) ;
 
-double degree2rad(double val);
-
-double lati_to_meter(double diff);
-
-double longti_to_meter(double diff, double lati);
-
-double meter_to_lati (double m);
-
-double meter_to_longti(double m, double lati);
+extern "C" {
+	double degree2rad(double val);
+	double lati_to_meter(double diff);
+	double longti_to_meter(double diff, double lati);
+	double meter_to_lati(double m);
+	double meter_to_longti(double m, double lati);
+}
 
 ////////////////////////

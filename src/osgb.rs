@@ -19,6 +19,8 @@ extern "C" {
         name_out: *const u8,
         box_ptr: *mut f64,
         len: *mut i32,
+        x: f64,
+        y: f64,
         max_lvl: i32,
     ) -> *mut libc::c_void;
 
@@ -27,6 +29,12 @@ extern "C" {
     fn transform_c(radian_x: f64, radian_y: f64, height_min: f64, ptr: *mut f64);
 
     pub fn epsg_convert(insrs: i32, val: *mut f64, gdal: *const i8) -> bool;
+
+    fn degree2rad( val:f64 ) -> f64;
+
+    fn meter_to_lati(m:f64) -> f64;
+
+    fn meter_to_longti(m:f64, lati:f64) -> f64;
 }
 
 fn walk_path(dir: &Path, cb: &mut FnMut(&str)) -> io::Result<()> {
@@ -133,6 +141,14 @@ pub fn osgb_batch_convert(
             }
         }
     }
+    
+    let rad_x = unsafe {
+         degree2rad(center_x)
+    };
+    let rad_y = unsafe {
+        degree2rad(center_y)
+    };
+
     let max_lvl: i32 = max_lvl.unwrap_or(100);
     osgb_dir_pair.into_par_iter().map( | info | {
         unsafe {
@@ -146,7 +162,7 @@ pub fn osgb_batch_convert(
 	            out_ptr.as_ptr(),
 	            root_box.as_mut_ptr(),
 	            (&mut json_len) as *mut i32,
-	            max_lvl
+                rad_x,rad_y,max_lvl
 	        );
 	        if out_ptr.is_null() {
 	            error!("failed: {}", info.in_dir);
@@ -191,13 +207,7 @@ pub fn osgb_batch_convert(
         }
     }
 
-    let root_geometric_error = get_geometric_error(center_y, 10);
-    let mut tileset_json = String::new();
-    tileset_json +=
-        r#"{"asset": {    "version": "0.0",    "gltfUpAxis": "Y"  },  "geometricError":"#;
-    tileset_json += root_geometric_error.to_string().as_str();
-    tileset_json += r#","root": "#;
-
+    //let root_geometric_error = get_geometric_error(center_y, 10);
     // do merge plz
     let mut tras_height = 0f64;
     if let Some(v) = region_offset {
@@ -207,93 +217,57 @@ pub fn osgb_batch_convert(
     unsafe {
         transform_c(center_x, center_y, tras_height, trans_vec.as_mut_ptr());
     }
-    //
-    let root_json = RootJson {
-        refine: "REPLACE".into(),
-        transform: trans_vec,
-        boundingVolume: Volume { box_v: box_to_tileset_box(&root_box) },
-        //content: Content { url: "".into() },
-        geometricError: get_geometric_error(center_y, 10),
-        children: vec![],
-    };
-    let json_str = serde_json::to_string(&root_json).unwrap();
-    tileset_json += &json_str;
-    tileset_json.pop(); // }
-    tileset_json.pop(); // ]
-    let out_dir: String = dir_dest.to_string_lossy().into();
-    let tilesetBox: Vec<f64> = box_to_tileset_box(&root_box);
-    for x in tile_array {
-        // 
-        let mut path = x.path;
-        // let extern_tile = format!("{{\
-        //     \"content\": {{\
-        //         \"url\": \"{}/tileset.json\"\
-        //      }}\
-        //    }}", path.replace(&out_dir,".").replace("\\","/"));
+    let mut root_json = json!(
+        {
+            "asset": {
+                "version": "1.0",
+                "gltfUpAxis": "Z"  
+            }, 
+            "geometricError": 2000,
+            "root" : {
+                "transform" : trans_vec,
+                "boundingVolume" : {
+                    "box": box_to_tileset_box(&root_box)
+                },
+                "geometricError": 2000,
+                "children": []
+            }
+        }
+    );
 
+    let out_dir: String = dir_dest.to_string_lossy().into();
+    for x in tile_array {
+        let mut path = x.path;
+        let mut json_val : serde_json::Value = serde_json::from_str(&x.json).unwrap();
+        let tile_box = json_val["boundingVolume"]["box"].as_array().unwrap();
         let tile_object = json!(
             {
                 "boundingVolume": {
-                        "box": box_to_tileset_box(&root_box)
-                    },
-                "geometricError": get_geometric_error(center_y, 10),
+                    "box": &tile_box
+                },
+                "geometricError": 1000,
                 "content": {
                     "url" : format!("{}/tileset.json", path.replace(&out_dir,".").replace("\\","/"))
                 }
             }
         );
-        //tileset_json += &x.json;
-        let tile_json = serde_json::to_string_pretty(&tile_object).unwrap();
-        tileset_json += &tile_json;
-        tileset_json += ",";
-
-        let sub_tile = format!("{{    \
-        \"asset\": {{\
-            \"version\": \"0.0\",\
-            \"gltfUpAxis\": \"Y\"\
-        }},\
-        \"root\":{}}}", x.json);
+        root_json["root"]["children"].as_array_mut().unwrap().push(tile_object);
+        let sub_tile = json!({
+            "asset": {
+                "version": "1.0",
+                "gltfUpAxis":"Z"
+            },
+            "root": json_val
+        }
+        );
         let out_file = path.clone() + "/tileset.json";
         let mut f = File::create(out_file)?;
-        f.write_all(sub_tile.as_bytes())?;
+        f.write_all(serde_json::to_string_pretty(&sub_tile).unwrap().as_bytes())?;
     }
-    tileset_json.pop();
-    tileset_json.push(']');
-    tileset_json.push('}'); // end-root
-    tileset_json.push('}'); // end-json
     let path_json = dir_dest.join("tileset.json");
     let mut f = File::create(path_json)?;
-    f.write_all(tileset_json.as_bytes())?;
+    f.write_all(serde_json::to_string_pretty(&root_json).unwrap().as_bytes())?;
     Ok(())
-}
-
-#[derive(Serialize, Clone, Default)]
-struct Volume {
-    #[serde(rename = "box")]
-    box_v: Vec<f64>,
-}
-
-#[derive(Serialize, Clone, Default)]
-struct Content {
-    boundingVolume: Volume,
-    url: String,
-}
-
-#[derive(Serialize)]
-struct TileJson {
-    boundingVolume: Volume,
-    content: Content,
-    geometricError: f64,
-    children: Vec<TileJson>,
-}
-
-#[derive(Serialize)]
-struct RootJson {
-    refine: String,
-    transform: Vec<f64>,
-    boundingVolume: Volume,
-    geometricError: f64,
-    children: Vec<TileJson>,
 }
 
 fn get_geometric_error(center_y: f64, lvl: i32) -> f64 {

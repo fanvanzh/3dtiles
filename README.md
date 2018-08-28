@@ -66,4 +66,30 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 
 --height 高度字段。指定shapefile中的高度属性字段。
 ```
+### 数据说明：
 
+**1、倾斜摄影数据：**
+
+倾斜摄影数据仅支持 smart3d 格式的 osgb 组织方式， 数据目录必须有一个 `“Data”` 目录的总入口， `“Data”` 目录同级放置一个 `metadata.xml` 文件用来记录模型的位置信息。
+
+每个瓦片目录下，必须有个和目录名同名的 osgb 文件，否则无法识别根节点。
+
+osgb 文件名中需要能识别出来是第几级，如 `Tile_001_001_L8.osgb`，程序能根据最后一个L识别出来第8级，否则程序无法辨认，产生的 `geometricError` 会有错误。
+
+**正确的目录结构如下：**
+
+```
+--metadata.xml
+
+--Data\Tile_000_000\Tile_000_000.osgb
+
+--Data\Tile_000_000\Tile_000_000_L6.osgb
+```
+
+
+
+**2、shapefile 数据：**
+
+目前仅支持 shapefile 的面数据，可用于建筑物轮廓批量生成 3dtile。
+
+shapefile 中需要有字段来表示高度信息。
