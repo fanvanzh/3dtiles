@@ -6,6 +6,7 @@
 #include <osgUtil/SmoothingVisitor>
 
 #include <set>
+#include <cmath>
 #include <vector>
 #include <string>
 #include <cstring>
@@ -34,6 +35,32 @@ void write_buf(void* context, void* data, int len) {
     std::vector<char> *buf = (std::vector<char>*)context;
     buf->insert(buf->end(), (char*)data, (char*)data + len);
 }
+
+struct TileBox
+{
+	std::vector<double> max;
+	std::vector<double> min;
+
+	void extend(double ratio) {
+		ratio /= 2;
+		double x = max[0] - min[0];
+		double y = max[1] - min[1];
+		double z = max[2] - min[2];
+		max[0] += x * ratio;
+		max[1] += y * ratio;
+		max[2] += z * ratio;
+
+		min[0] -= x * ratio;
+		min[1] -= y * ratio;
+		min[2] -= z * ratio;
+	}
+};
+
+struct osg_tree {
+	TileBox bbox;
+	std::string file_name;
+	std::vector<osg_tree> sub_nodes;
+};
 
 class InfoVisitor : public osg::NodeVisitor
 {
@@ -74,10 +101,17 @@ public:
     std::vector<std::string> sub_node_names;
 };
 
-double get_geometric_error(int lvl ){
-    const double pi = std::acos(-1);
-    double round = 2 * pi * 6378137.0 / 128.0;
-    return round / std::pow(2.0, lvl );
+double get_geometric_error(TileBox& bbox){
+#ifdef max
+#undef max
+#endif // max
+
+	double max_err = std::max((bbox.max[0] - bbox.min[0]),(bbox.max[1] - bbox.min[1]));
+	max_err = std::max(max_err, (bbox.max[2] - bbox.min[2]));
+	return max_err / 10.0;
+//     const double pi = std::acos(-1);
+//     double round = 2 * pi * 6378137.0 / 128.0;
+//     return round / std::pow(2.0, lvl );
 }
 
 std::string get_file_name(std::string path) {
@@ -146,31 +180,7 @@ int get_lvl_num(std::string file_name){
     return -1;
 }
 
-struct TileBox
-{
-    std::vector<double> max;
-    std::vector<double> min;
-    
-    void extend(double ratio) {
-        ratio /= 2;
-        double x = max[0] - min[0];
-        double y = max[1] - min[1];
-        double z = max[2] - min[2];
-        max[0] += x * ratio;
-        max[1] += y * ratio;
-        max[2] += z * ratio;
 
-        min[0] -= x * ratio;
-        min[1] -= y * ratio;
-        min[2] -= z * ratio;
-    }
-};
-
-struct osg_tree {
-    TileBox bbox;
-    std::string file_name;
-    std::vector<osg_tree> sub_nodes;
-};
 
 osg_tree get_all_tree(std::string& file_name) {
     osg_tree root_tile;
@@ -1086,7 +1096,7 @@ std::string encode_tile_json(osg_tree& tree, double x, double y) {
     if (lvl == -1) lvl = 10;
     char buf[512];
     sprintf(buf, "{ \"geometricError\":%.2f,", 
-        tree.sub_nodes.empty()? 0 : get_geometric_error(lvl)
+        tree.sub_nodes.empty()? 0 : get_geometric_error(tree.bbox)
         );
     std::string tile = buf;
 	TileBox cBox = tree.bbox;

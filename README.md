@@ -74,8 +74,6 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 
 每个瓦片目录下，必须有个和目录名同名的 osgb 文件，否则无法识别根节点。
 
-osgb 文件名中需要能识别出来是第几级，如 `Tile_001_001_L8.osgb`，程序能根据最后一个L识别出来第8级，否则程序无法辨认，产生的 `geometricError` 会有错误。
-
 **正确的目录结构如下：**
 
 ```
@@ -83,7 +81,6 @@ osgb 文件名中需要能识别出来是第几级，如 `Tile_001_001_L8.osgb`�
 
 --Data\Tile_000_000\Tile_000_000.osgb
 
---Data\Tile_000_000\Tile_000_000_L6.osgb
 ```
 
 
