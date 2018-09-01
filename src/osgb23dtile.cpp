@@ -335,9 +335,10 @@ void fill_4BitImage(vector<unsigned char>& jpeg_buf, osg::Image* img, int& width
 			y_pos += 4;
 		}
 	}
-	if (width > 1024 || height > 1024) {
+	int max_size = 512;
+	if (width > max_size || height > max_size) {
 		int new_w = width, new_h = height;
-		while (new_w > 1024 || new_h > 1024)
+		while (new_w > max_size || new_h > max_size)
 		{
 			new_w /= 2;
 			new_h /= 2;
@@ -354,6 +355,13 @@ struct mesh_info
     std::vector<double> min;
     std::vector<double> max;
 };
+
+template<class T>
+void alignment_buffer(std::vector<T>& buf) {
+	while (buf.size() % 4 != 0) {
+		buf.push_back(0x00);
+	}
+}
 
 bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info>& v_info) {
     vector<string> fileNames = { path };
@@ -386,7 +394,6 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                 osg::Array* va = g->getVertexArray();
                 if (j == 0) {
                     // indc
-                    //for (unsigned int i = 0; i < g->getNumPrimitiveSets(); ++i)
                     {
                         osg::PrimitiveSet* ps = g->getPrimitiveSet(0);
                         osg::PrimitiveSet::Type t = ps->getType();
@@ -439,6 +446,9 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
 								int first = da->getFirst();
 								int count = da->getCount();
 								int max_num = first + count;
+								if (max_num >= 65535) {
+									max_num = 65535; idx_size = 65535;
+								}
 								min_index = first;
 								max_index = max_num - 1;
 								for (int i = first; i < max_num; i++) {
@@ -460,8 +470,8 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                         tinygltf::Accessor acc;
                         acc.bufferView = 0;
                         acc.byteOffset = acc_offset[j];
+						alignment_buffer(buffer.data);
                         acc_offset[j] = buffer.data.size();
-                        //acc.componentType = TINYGLTF_COMPONENT_TYPE_INT;
                         switch (t)
                         {
                             case osg::PrimitiveSet::DrawElementsUBytePrimitiveType:
@@ -478,6 +488,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
 								int first = da->getFirst();
 								int count = da->getCount();
 								int max_num = first + count;
+								if (max_num >= 65535) max_num = 65535;
 								if (max_num < 256) {
 									acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
 								} else if(max_num < 65536) {
@@ -521,6 +532,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                     tinygltf::Accessor acc;
                     acc.bufferView = 1;
                     acc.byteOffset = acc_offset[j];
+					alignment_buffer(buffer.data);
                     acc_offset[j] = buffer.data.size() - buf_offset;
                     acc.count = vec_size;
                     acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
@@ -560,6 +572,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                     tinygltf::Accessor acc;
                     acc.bufferView = 2;
                     acc.byteOffset = acc_offset[j];
+					alignment_buffer(buffer.data);
                     acc_offset[j] = buffer.data.size() - buf_offset;
                     acc.count = normal_size;
                     acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
@@ -604,6 +617,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                     tinygltf::Accessor acc;
                     acc.bufferView = 3;
                     acc.byteOffset = acc_offset[j];
+					alignment_buffer(buffer.data);
                     acc_offset[j] = buffer.data.size() - buf_offset;
                     acc.count = texture_size;
                     acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
@@ -622,9 +636,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                 bfv.target = TINYGLTF_TARGET_ARRAY_BUFFER;
             }
             bfv.byteOffset = buf_offset;
-            while (buffer.data.size() % 4 != 0) {
-                buffer.data.push_back(0x00);
-            }
+			alignment_buffer(buffer.data);
             bfv.byteLength = buffer.data.size() - buf_offset;
             buf_offset = buffer.data.size();
             if (infoVisitor.geometry_array.size() > 1) {
@@ -690,9 +702,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
 				bfv.buffer = 0;
 				bfv.byteOffset = buf_offset;
 				bfv.byteLength = buffer.data.size() - buf_offset;
-				while (buffer.data.size() % 4 != 0) {
-					buffer.data.push_back(0x00);
-				}
+				alignment_buffer(buffer.data);
 				buf_offset = buffer.data.size();
 				model.bufferViews.push_back(bfv);
 			}
@@ -820,9 +830,7 @@ void main(void)
 
 				buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
 				bfv_vs.byteLength = buffer.data.size() - buf_offset;
-				while (buffer.data.size() % 4 != 0) {
-					buffer.data.push_back(0x00);
-				}
+				alignment_buffer(buffer.data);
 				buf_offset = buffer.data.size();
 				model.bufferViews.push_back(bfv_vs);
 
@@ -841,9 +849,7 @@ void main(void)
 )";
 				buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
 				bfv_fs.byteLength = buffer.data.size() - buf_offset;
-				while (buffer.data.size() % 4 != 0) {
-					buffer.data.push_back(0x00);
-				}
+				alignment_buffer(buffer.data);
 				buf_offset = buffer.data.size();
 				model.bufferViews.push_back(bfv_fs);
 			}
@@ -1168,13 +1174,25 @@ std::string encode_tile_json(osg_tree& tree, double x, double y) {
     if (tree.bbox.max.empty() || tree.bbox.min.empty()) {
         return "";
     }
+	
+	std::string file_name = get_file_name(tree.file_name);
+	std::string parent_str = get_parent(tree.file_name);
+	std::string file_path = get_file_name(parent_str);
+
     // Todo:: 获取 Geometric Error
-    int lvl = get_lvl_num(tree.file_name);
-    if (lvl == -1) lvl = 10;
+	double geometricError;
+	if (tree.sub_nodes.empty()) {
+		geometricError = 0.0;
+	}
+	else {
+		geometricError = get_geometric_error(tree.bbox);
+		// 根节点特殊处理
+		if (file_path + ".osgb" == file_name) {
+			geometricError = 1000.0;
+		}
+	}
     char buf[512];
-    sprintf(buf, "{ \"geometricError\":%.2f,", 
-        tree.sub_nodes.empty()? 0 : get_geometric_error(tree.bbox)
-        );
+    sprintf(buf, "{ \"geometricError\":%.2f,", geometricError);
     std::string tile = buf;
 	TileBox cBox = tree.bbox;
 	cBox.extend(0.2);
@@ -1188,11 +1206,6 @@ std::string encode_tile_json(osg_tree& tree, double x, double y) {
     tile += "\"content\":{ \"url\":";
     // Data/Tile_0/Tile_0.b3dm
     std::string url_path = "./";
-    std::string file_name = get_file_name(tree.file_name);
-    std::string parent_str = get_parent(tree.file_name);
-    std::string file_path = get_file_name(parent_str);
-    //url_path += file_path;
-    //url_path += "/";
     url_path += file_name;
     std::string url = replace(url_path,".osgb",".b3dm");
     tile += "\"";
