@@ -58,6 +58,7 @@ struct TileBox
 
 struct osg_tree {
 	TileBox bbox;
+    double geometricError;
 	std::string file_name;
 	std::vector<osg_tree> sub_nodes;
 };
@@ -1170,6 +1171,22 @@ std::string get_boundingRegion(TileBox bbox, double x, double y) {
 	return box_str;
 }
 
+void calc_geometric_error(osg_tree& tree) {
+    // depth first
+    for ( auto& i : tree.sub_nodes ){
+        calc_geometric_error(i);
+    }
+    if (tree.sub_nodes.empty()) {
+        tree.geometricError = 0.0;
+    }
+    else {
+        if(tree.sub_nodes[0].geometricError == 0) 
+            tree.geometricError = get_geometric_error(tree.bbox);
+        else
+            tree.geometricError = tree.sub_nodes[0].geometricError * 2.0;
+    }
+}
+
 std::string encode_tile_json(osg_tree& tree, double x, double y) {
     if (tree.bbox.max.empty() || tree.bbox.min.empty()) {
         return "";
@@ -1179,26 +1196,14 @@ std::string encode_tile_json(osg_tree& tree, double x, double y) {
 	std::string parent_str = get_parent(tree.file_name);
 	std::string file_path = get_file_name(parent_str);
 
-    // Todo:: 获取 Geometric Error
-	double geometricError;
-	if (tree.sub_nodes.empty()) {
-		geometricError = 0.0;
-	}
-	else {
-		geometricError = get_geometric_error(tree.bbox);
-		// 根节点特殊处理
-		if (file_path + ".osgb" == file_name) {
-			geometricError = 1000.0;
-		}
-	}
     char buf[512];
-    sprintf(buf, "{ \"geometricError\":%.2f,", geometricError);
+    sprintf(buf, "{ \"geometricError\":%.2f,", tree.geometricError);
     std::string tile = buf;
 	TileBox cBox = tree.bbox;
-	cBox.extend(0.2);
+	cBox.extend(0.1);
     std::string content_box = get_boundingBox(cBox);
 	TileBox bbox = tree.bbox;
-	bbox.extend(0.2);
+	bbox.extend(0.1);
     std::string tile_box = get_boundingBox(bbox);
 
     tile += tile_box;
@@ -1248,6 +1253,9 @@ extern "C" void* osgb23dtile_path(
         LOG_E( "[%s] bbox is empty!", in_path);
         return NULL;
     }
+    // prevent for root node disappear
+	calc_geometric_error(root);
+    root.geometricError = 1000.0;
     std::string json = encode_tile_json(root,x,y);
 	root.bbox.extend(0.2);
     memcpy(box, root.bbox.max.data(), 3 * sizeof(double));
