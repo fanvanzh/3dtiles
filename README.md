@@ -74,8 +74,6 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 
 每个瓦片目录下，必须有个和目录名同名的 osgb 文件，否则无法识别根节点。
 
-osgb 文件名中需要能识别出来是第几级，如 `Tile_001_001_L8.osgb`，程序能根据最后一个L识别出来第8级，否则程序无法辨认，产生的 `geometricError` 会有错误。
-
 **正确的目录结构如下：**
 
 ```
@@ -83,7 +81,6 @@ osgb 文件名中需要能识别出来是第几级，如 `Tile_001_001_L8.osgb`�
 
 --Data\Tile_000_000\Tile_000_000.osgb
 
---Data\Tile_000_000\Tile_000_000_L6.osgb
 ```
 
 
@@ -93,3 +90,38 @@ osgb 文件名中需要能识别出来是第几级，如 `Tile_001_001_L8.osgb`�
 目前仅支持 shapefile 的面数据，可用于建筑物轮廓批量生成 3dtile。
 
 shapefile 中需要有字段来表示高度信息。
+
+# Who use / Who star
+
+. AnalyticalGraphicsInc
+
+. Geostar
+
+. MapTalks
+
+. Alibaba
+
+. Guangzhou University
+
+. Hopkins University
+
+. 中国铁道科学设计研究院
+
+. 上海华东设计研究院
+
+. 江苏省测绘研究所
+
+. 宁波市测绘设计研究院
+
+. 合肥火星科技有限公司
+
+. 北京五维智能科技
+
+. 北京西部数据科技
+
+# About author
+
+作者不是专业搞三维GIS的，因偶尔有个需求要展示3dtile，一时找不到工具，就写了个轮子，代码多有纰漏，仅供参考。
+
+QQ：954157387
+

@@ -3920,14 +3920,12 @@ std::string TinyGLTF::Serialize(Model *model) {
 
 	// SHADER 
 	{
-		json shaders;
 		for (auto& shader : model->shaders) {
 			json val;
 			val["bufferView"] = shader.bufferView;
 			val["type"] = shader.type;
-			shaders.push_back(val);
+			output["shaders"].push_back(val);
 		}
-		output["shaders"] = shaders;
 	}
 	// PROGREAM
 	{
