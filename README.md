@@ -22,12 +22,16 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 ### 世界上最快的 3dtiles 转换工具，极度节省你的处理时间。
 
 ### 命令行： 
-	3dtile.exe [FLAGS] [OPTIONS] --format <osgb,shape> --input <FILE> --output <FILE>
+	3dtile.exe [FLAGS] [OPTIONS] --format <osgb,shape,gltf> --input <FILE> --output <FILE>
 
 ### 示例：
-	3dtile.exe -f osgb -i E:\Data\倾斜摄影\hgc -o E:\Data\倾斜摄影\hgc_test
+	3dtile.exe -f osgb -i E:\Data\hgc -o E:\Data\hgc_test
 	
-	3dtile.exe -f osgb -i E:\Data\倾斜摄影\dayanta -o E:\Data\倾斜摄影\dayanta_test -c "{\"offset\": 0}"
+	3dtile.exe -f osgb -i E:\Data\dayanta -o E:\Data\dayanta_test -c "{\"offset\": 0}"
+	
+	3dtile.exe -f gltf -i E:\Data\TT\001.osgb -o E:\Data\TT\001.glb
+	
+	3dtile.exe -f gltf -i E:\Data\TT\001.obj -o E:\Data\TT\001.glb
 
 ### 参数说明：
 
@@ -46,7 +50,7 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
      }
 ```
 ```			     
-  -f, --format <osgb,shape> 
+  -f, --format <osgb,shape,gltf> 
   
   -i, --input <FILE> 
 	
@@ -58,9 +62,9 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 ```
 -c 在命令行传入 json 配置的字符串, json 内容为选配，可部分实现。
 
--f 输入数据格式： osgb 为倾斜摄影格式数据。
+-f 输入数据格式： osgb 为倾斜摄影格式数据, shape 为shapefile面数据, gltf 为单一通用模型转gltf。
 
--i 输入数据的目录，截止到 "\Data" 目录的上一级。
+-i 输入数据的目录，osgb数据截止到 "\Data" 目录的上一级，其他格式具体到文件名。
 
 -o 输出目录。最终结果位于输出目录的 "\Data" 目录。
 
@@ -90,6 +94,16 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 目前仅支持 shapefile 的面数据，可用于建筑物轮廓批量生成 3dtile。
 
 shapefile 中需要有字段来表示高度信息。
+
+
+
+**3、通用模型转gltf：**
+
+支持 osg、osgb、obj、fbx、3ds 等单一通用模型数据转为 gltf、glb 格式。
+
+转出格式为 2.0 的gltf，可在以下网址验证查看： https://pissang.github.io/clay-viewer/editor/
+
+
 
 # Who use / Who star
 

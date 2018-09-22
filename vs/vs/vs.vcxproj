@@ -115,6 +115,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\decompress.cpp" />
+    <ClCompile Include="..\..\src\dxt_img.cpp" />
+    <ClCompile Include="..\..\src\make_gltf.cpp" />
     <ClCompile Include="..\..\src\osgb23dtile.cpp" />
     <ClCompile Include="..\..\src\shp23dtile.cpp" />
     <ClCompile Include="..\..\src\tileset.cpp" />

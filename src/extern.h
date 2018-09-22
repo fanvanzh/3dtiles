@@ -4,10 +4,18 @@ extern "C" bool mkdirs(const char* path);
 extern "C" bool write_file(const char* filename, const char* buf, unsigned long buf_len);
 extern "C" void log_error(const char* msg);
 
+
+#ifdef WIN32
 #define LOG_E(fmt,...) \
-		char buf[512];\
-        sprintf(buf,fmt,__VA_ARGS__);\
-        log_error(buf);
+			char buf[512];\
+			sprintf(buf,fmt,__VA_ARGS__);\
+			log_error(buf);
+#else
+#define LOG_E(fmt,...) \
+			char buf[512];\
+			sprintf(buf,fmt,##__VA_ARGS__);\
+			log_error(buf);
+#endif
 
 //// -- others 
 struct Transform

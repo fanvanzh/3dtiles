@@ -72,7 +72,7 @@ fn main() {
             Arg::with_name("format")
                 .short("f")
                 .long("format")
-                .value_name("osgb,shape")
+                .value_name("osgb,shape,gltf")
                 .help("Set input format")
                 .required(true)
                 .takes_value(true),
@@ -128,8 +128,37 @@ fn main() {
         "shape" => {
             convert_shapefile(input, output, height_field);
         }
+        "gltf" => {
+            convert_gltf(input, output);
+        }
         _ => {
             error!("not support now.");
+        }
+    }
+}
+
+// convert any thing to gltf 
+fn convert_gltf(src: &str, dest: &str) {
+    use std::ffi::CString;
+    if !dest.ends_with(".gltf") && !dest.ends_with(".glb") {
+        error!("output format not support now: {}", dest);
+        return
+    }
+    if !src.ends_with(".osgb") && 
+       !src.ends_with(".osg")  && 
+       !src.ends_with(".obj")  &&
+       !src.ends_with(".fbx")  && 
+       !src.ends_with(".3ds")  {
+        error!("input format not support now: {}", src);
+        return
+    }
+    unsafe {
+        let c_str = CString::new(dest).unwrap();
+        let ret = osgb::make_gltf(src.as_ptr(), c_str.as_ptr() as *const u8);
+        if !ret {
+            error!("convert failed");
+        } else {
+            info!("task over");
         }
     }
 }

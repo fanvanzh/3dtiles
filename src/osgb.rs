@@ -12,6 +12,8 @@ use std::path::Path;
 use std::error::Error;
 
 extern "C" {
+    pub fn make_gltf(in_path: *const u8, out_path: *const u8) -> bool;
+
     fn osgb23dtile(name_in: *const u8, name_out: *const u8) -> bool;
 
     fn osgb23dtile_path(
