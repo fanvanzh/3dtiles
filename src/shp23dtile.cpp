@@ -10,6 +10,7 @@
 
 struct bbox
 {
+    bool isAdd = false;
     double minx, maxx, miny, maxy;
     bbox() {}
     bbox(double x0, double x1, double y0, double y1) {
@@ -116,7 +117,10 @@ public:
             return;
         }
         if (_box.maxx - _box.minx < metric) {
-            geo_items.push_back(id);
+            if (!box.isAdd){
+                geo_items.push_back(id);    
+                box.isAdd = true;
+            }
             return;
         }
         if (_box.intersect(box)) {
