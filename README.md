@@ -112,9 +112,15 @@ shapefile 中需要有字段来表示高度信息。
 
 . Geostar
 
+. Geo-compass
+
 . MapTalks
 
 . Alibaba
+
+. SuperEngine
+
+. Data Cloud Co. Ltd.
 
 . Guangzhou University
 
