@@ -9,6 +9,7 @@ extern crate serde_xml_rs;
 extern crate log;
 extern crate chrono;
 extern crate env_logger;
+extern crate byteorder;
 
 mod osgb;
 mod shape;
@@ -131,10 +132,51 @@ fn main() {
         "gltf" => {
             convert_gltf(input, output);
         }
+        "b3dm" => {
+            convert_b3dm(input, output);
+        }
         _ => {
             error!("not support now.");
         }
     }
+}
+
+fn convert_b3dm(src: &str, dest: &str) {
+    use std::path::Path;
+    use std::io::prelude::*;
+    use std::fs::File;
+
+    use std::io::Cursor;
+    use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
+    //use std::io::SeekFrom;
+
+    if !dest.ends_with(".gltf") && !dest.ends_with(".glb") {
+        error!("output format not support now: {}", dest);
+        return
+    }
+    if !src.ends_with(".b3dm") {
+        error!("input format must be b3dm");
+    }
+    if Path::new(src).exists() && Path::new(src).is_file() {
+        if let Ok(mut f) = File::open(src) {
+            let mut buffer = Vec::new();
+            f.read_to_end(&mut buffer).unwrap();
+            let mut rdr = Cursor::new(buffer);
+            let offset = {
+                rdr.set_position(12);
+                let fj_len = rdr.read_u32::<LittleEndian>().unwrap();
+                rdr.read_u32::<LittleEndian>().unwrap();
+                let bj_len = rdr.read_u32::<LittleEndian>().unwrap();
+                let offset = fj_len + bj_len + 28;    
+                offset as usize
+            };
+            if let Ok(mut df) = File::create(dest) {
+                let buf = rdr.get_ref();
+                df.write_all(&buf.as_slice()[offset..]).unwrap();
+            }
+        }
+    }
+    info!("task over");
 }
 
 // convert any thing to gltf 
@@ -298,6 +340,10 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
 }
 
 fn convert_shapefile(src: &str, dest: &str, height: &str) {
+    if height.is_empty() {
+        error!("you must set the height field by --height xxx");
+        return
+    }
     let tick = std::time::SystemTime::now();
 
     let ret = shape::shape_batch_convert(src, dest, height);

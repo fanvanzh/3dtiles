@@ -19,5 +19,7 @@ serde-xml-rs = "0.2.1"
 log = "0.4"
 env_logger = "0.5"
 #
+
+byteorder = "1.2"
 [build-dependencies]
 cc = "1.0.*"

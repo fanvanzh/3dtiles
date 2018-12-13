@@ -30,9 +30,13 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 	
 	3dtile.exe -f osgb -i E:\Data\dayanta -o E:\Data\dayanta_test -c "{\"offset\": 0}"
 	
+    3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
+
 	3dtile.exe -f gltf -i E:\Data\TT\001.osgb -o E:\Data\TT\001.glb
 	
 	3dtile.exe -f gltf -i E:\Data\TT\001.obj -o E:\Data\TT\001.glb
+
+    3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
 
 ### 参数说明：
 
@@ -51,19 +55,20 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
      }
 ```
 ```			     
-  -f, --format <osgb,shape,gltf> 
+  -f, --format <osgb,shape,gltf,b3dm> 
   
   -i, --input <FILE> 
 	
   -o, --output <FILE> 
   
-  --height, 指定shapefile的高度字段
+  --height, 指定shapefile的高度字段 (转shapefile时，必须参数)
+
 ```
 #### 命令行参数详解：
 ```
 -c 在命令行传入 json 配置的字符串, json 内容为选配，可部分实现。
 
--f 输入数据格式： osgb 为倾斜摄影格式数据, shape 为shapefile面数据, gltf 为单一通用模型转gltf。
+-f 输入数据格式： osgb 为倾斜摄影格式数据, shape 为shapefile面数据, gltf 为单一通用模型转gltf, b3dm 为单个3dtile二进制数据转gltf。
 
 -i 输入数据的目录，osgb数据截止到 "\Data" 目录的上一级，其他格式具体到文件名。
 
@@ -104,6 +109,10 @@ shapefile 中需要有字段来表示高度信息。
 
 转出格式为 2.0 的gltf，可在以下网址验证查看： https://pissang.github.io/clay-viewer/editor/
 
+
+
+**4、b3dm 数据转gltf: **
+支持将 b3dm 单个文件转成 glb 格式，便于调试程序和测试数据
 
 
 # Who use / Who star
