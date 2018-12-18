@@ -503,9 +503,9 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
             bfv.byteLength = buffer.data.size() - buf_offset;
             buf_offset = buffer.data.size();
             if (infoVisitor.geometry_array.size() > 1) {
-                if (j == 1) { bfv.byteStride = 4 * 3; } // ¶¥µã
-                if (j == 2) { bfv.byteStride = 4 * 3; } // ·¨Ïß
-                if (j == 3) { bfv.byteStride = 4 * 2; } // ÌùÍ¼
+                if (j == 1) { bfv.byteStride = 4 * 3; } 
+                if (j == 2) { bfv.byteStride = 4 * 3; }
+                if (j == 3) { bfv.byteStride = 4 * 2; } 
             }
             model.bufferViews.push_back(bfv);
         }

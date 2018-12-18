@@ -547,6 +547,16 @@ void put_val(std::string& buf, T val) {
     buf.append((unsigned char*)&val, (unsigned char*)&val + sizeof(T));
 }
 
+template<class T>
+void alignment_buffer(std::vector<T>& buf) {
+	while (buf.size() % 4 != 0) {
+		buf.push_back(0x00);
+	}
+}
+
+#define SET_MIN(x,v) do{ if (x > v) x = v; }while (0);
+#define SET_MAX(x,v) do{ if (x < v) x = v; }while (0);
+
 // convert poly-mesh to glb buffer
 std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     
@@ -565,11 +575,13 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                 // indc
                 int vec_size = meshes[i].vertex.size();
                 int idx_size = meshes[i].index.size();
+				int max_idx = 0;
                 if (vec_size <= 65535) {
                     for (size_t m = 0; m < meshes[i].index.size(); m++)
                     {
                         for (auto idx : meshes[i].index[m]) {
                             put_val(buffer.data, (unsigned short)idx);
+							SET_MAX(max_idx, idx);
                         }
                     }
                 }
@@ -578,12 +590,14 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                     {
                         for (auto idx : meshes[i].index[m]) {
                             put_val(buffer.data, idx);
+							SET_MAX(max_idx, idx);
                         }
                     }
                 }
                 tinygltf::Accessor acc;
                 acc.bufferView = 0;
                 acc.byteOffset = acc_offset[j];
+				alignment_buffer(buffer.data);
                 acc_offset[j] = buffer.data.size();
                 if (vec_size <= 65535)
                     acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
@@ -591,9 +605,11 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                     acc.componentType = TINYGLTF_COMPONENT_TYPE_INT;
                 acc.count = idx_size * 3;
                 acc.type = TINYGLTF_TYPE_SCALAR;
+				acc.maxValues = { (double)max_idx };
+				acc.minValues = { 0.0 };
                 model.accessors.push_back(acc);
                 // as convert to b3dm , we add a BATCH , same as vertex`s count
-                {
+                if(0) {
                     unsigned short batch_id = i;
                     for (auto& vertex : meshes[i].vertex) {
                         put_val(buffer.data, batch_id);
@@ -601,46 +617,67 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                     tinygltf::Accessor acc;
                     acc.bufferView = 0;
                     acc.byteOffset = acc_offset[j];
+					alignment_buffer(buffer.data);
                     acc_offset[j] = buffer.data.size();
                     acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
                     acc.count = vec_size;
                     acc.type = TINYGLTF_TYPE_SCALAR;
+					acc.maxValues = { (double)i };
+					acc.minValues = { (double)i };
                     model.accessors.push_back(acc);
                 }
             }
             else if( j == 1){
+				std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
+				std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
                 int vec_size = meshes[i].vertex.size();
                 for (auto& vertex : meshes[i].vertex) {
                     put_val(buffer.data, vertex[0]);
                     put_val(buffer.data, vertex[1]);
                     put_val(buffer.data, vertex[2]);
+					for (int i = 0; i < 3; i++)
+					{
+						SET_MAX(box_max[i], vertex[i]);
+						SET_MIN(box_min[i], vertex[i]);
+					}
                 }
                 tinygltf::Accessor acc;
                 acc.bufferView = 1;
                 acc.byteOffset = acc_offset[j];
+				alignment_buffer(buffer.data);
                 acc_offset[j] = buffer.data.size() - buf_offset;
                 acc.count = vec_size;
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
                 acc.type = TINYGLTF_TYPE_VEC3;
-                acc.maxValues = meshes[i].box_max;
-                acc.minValues = meshes[i].box_min;
+                acc.maxValues = box_max;
+                acc.minValues = box_min;
                 model.accessors.push_back(acc);
             }
             else if (j == 2) {
                 // normal
+				std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
+				std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
                 int normal_size = meshes[i].normal.size();
                 for (auto& normal : meshes[i].normal) {
                     put_val(buffer.data, normal[0]);
                     put_val(buffer.data, normal[1]);
                     put_val(buffer.data, normal[2]);
+					for (int i = 0; i < 3; i++)
+					{
+						SET_MAX(box_max[i], normal[i]);
+						SET_MIN(box_min[i], normal[i]);
+					}
                 }
                 tinygltf::Accessor acc;
                 acc.bufferView = 2;
                 acc.byteOffset = acc_offset[j];
+				alignment_buffer(buffer.data);
                 acc_offset[j] = buffer.data.size() - buf_offset;
                 acc.count = normal_size;
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
                 acc.type = TINYGLTF_TYPE_VEC3;
+				acc.minValues = box_min;
+				acc.maxValues = box_max;
                 model.accessors.push_back(acc);
             }
         }
@@ -651,11 +688,10 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
         }
         else {
             bfv.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+			bfv.byteStride = 4 * 3;
         }
         bfv.byteOffset = buf_offset;
-        while(buffer.data.size() % 4 != 0) {
-            buffer.data.push_back(0x00);
-        }
+		alignment_buffer(buffer.data);
         bfv.byteLength = buffer.data.size() - buf_offset;
         buf_offset = buffer.data.size();
         model.bufferViews.push_back(bfv);
@@ -667,11 +703,11 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
         mesh.name = meshes[i].mesh_name;
         tinygltf::Primitive primits;
         primits.attributes = { 
-            std::pair<std::string,int>("_BATCHID", 2 * i + 1),
-            std::pair<std::string,int>("POSITION", 2 * meshes.size() + i),
-            std::pair<std::string,int>("NORMAL",   3 * meshes.size() + i),
+            //std::pair<std::string,int>("_BATCHID", 2 * i + 1),
+            std::pair<std::string,int>("POSITION", 1 * meshes.size() + i),
+            std::pair<std::string,int>("NORMAL",   2 * meshes.size() + i),
         };
-        primits.indices = i * 2 ;
+        primits.indices = i;
         primits.material = 0;
         primits.mode = TINYGLTF_MODE_TRIANGLES;
         mesh.primitives = {
@@ -695,12 +731,6 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     model.scenes = { sence };
     model.defaultScene = 0;
 
-    tinygltf::Sampler sample;
-    sample.magFilter = TINYGLTF_TEXTURE_FILTER_LINEAR;
-    sample.minFilter = TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR;
-    sample.wrapS = TINYGLTF_TEXTURE_WRAP_REPEAT;
-    sample.wrapT = TINYGLTF_TEXTURE_WRAP_REPEAT;
-    model.samplers = {sample};
     /// --------------
     tinygltf::Material material;
     material.name = "default";
@@ -740,7 +770,7 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes) {
     feature_json_string += std::to_string(meshes.size());
     feature_json_string += "}";
     while (feature_json_string.size() % 4 != 0 ) {
-        feature_json_string.push_back(' ');
+        feature_json_string.push_back(0x00);
     }
     
     json batch_json;
