@@ -30,13 +30,13 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 	
 	3dtile.exe -f osgb -i E:\Data\dayanta -o E:\Data\dayanta_test -c "{\"offset\": 0}"
 	
-    3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
+	3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
 
 	3dtile.exe -f gltf -i E:\Data\TT\001.osgb -o E:\Data\TT\001.glb
 	
 	3dtile.exe -f gltf -i E:\Data\TT\001.obj -o E:\Data\TT\001.glb
 
-    3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
+	3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
 
 ### 参数说明：
 
@@ -94,13 +94,11 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 ```
 
 
-
 **2、shapefile 数据：**
 
 目前仅支持 shapefile 的面数据，可用于建筑物轮廓批量生成 3dtile。
 
 shapefile 中需要有字段来表示高度信息。
-
 
 
 **3、通用模型转gltf：**
@@ -109,9 +107,8 @@ shapefile 中需要有字段来表示高度信息。
 
 转出格式为 2.0 的gltf，可在以下网址验证查看： https://pissang.github.io/clay-viewer/editor/
 
+**4、b3dm 数据转gltf:**
 
-
-**4、b3dm 数据转gltf: **
 支持将 b3dm 单个文件转成 glb 格式，便于调试程序和测试数据
 
 
