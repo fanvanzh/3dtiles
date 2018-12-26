@@ -735,7 +735,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     tinygltf::Material material;
     material.name = "default";
     tinygltf::Parameter baseColorFactor;
-    baseColorFactor.number_array = {0.5,0.5,0.5,1.0};
+    baseColorFactor.number_array = {0.8,0.8,0.8,1.0};
     material.values["baseColorFactor"] = baseColorFactor;
     tinygltf::Parameter metallicFactor;
     metallicFactor.number_value = 0;
@@ -745,7 +745,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     material.values["roughnessFactor"] = roughnessFactor;
     /// ---------
     tinygltf::Parameter emissiveFactor;
-    emissiveFactor.number_array = { 0.5,0.5,0.5 };
+    emissiveFactor.number_array = { 0.8,0.8,0.8 };
     material.additionalValues["emissiveFactor"] = emissiveFactor;
     tinygltf::Parameter alphaMode;
     alphaMode.string_value = "OPAQUE";
@@ -770,7 +770,7 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes) {
     feature_json_string += std::to_string(meshes.size());
     feature_json_string += "}";
     while (feature_json_string.size() % 4 != 0 ) {
-        feature_json_string.push_back(0x00);
+        feature_json_string.push_back(' ');
     }
     
     json batch_json;
