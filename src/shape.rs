@@ -47,7 +47,7 @@ pub fn shape_batch_convert(from: &str, to: &str, height: &str) -> bool{
         let mut tileset_json = json!({
             "asset":{
                 "version":"0.0",
-                "gltfUpAxis":"Y"
+                "gltfUpAxis":"Z"
             },
             "geometricError":200,
             "root":{

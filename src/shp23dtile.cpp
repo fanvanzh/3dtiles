@@ -4,9 +4,28 @@
 #include "json.hpp"
 #include "extern.h"
 
+#include <osg/Material>
+#include <osg/PagedLOD>
+#include <osgDB/ReadFile>
+#include <osgDB/ConvertUTF>
+#include <osgUtil/Optimizer>
+#include <osgUtil/SmoothingVisitor>
+
+#include <osg/Geometry>
+#include <osg/Geode>
+#include <osgUtil/DelaunayTriangulator>
+#include <osgUtil/Tessellator>
+#include <osgUtil/Optimizer>
+#include <osgUtil/SmoothingVisitor>
+
 #include <vector>
 #include <cmath>
 #include <array>
+
+using namespace std;
+
+using Vextex = vector<array<float, 3>>;
+using Index = vector<array<int, 3>>;
 
 struct bbox
 {
@@ -152,13 +171,29 @@ public:
 struct Polygon_Mesh
 {
     std::string mesh_name; // 模型名称
-    std::vector<double> box_max; // 外包矩形
-    std::vector<double> box_min; // 外包矩形
-    std::vector<std::array<float, 3>> vertex; // 顶点
-    std::vector<std::array<float, 3>> normal; // 面法线
-    std::vector<std::array<float, 2>>  texcoord; // 贴图坐标
-    std::vector<std::array<int, 3>>    index;  // 面
+	Vextex vertex;
+	Index  index;
 };
+
+osg::ref_ptr<osg::Geometry> make_triangle_mesh(Polygon_Mesh& mesh) {
+	osg::ref_ptr<osg::Vec3Array> va = new osg::Vec3Array(mesh.vertex.size());
+	for (int i = 0; i < mesh.vertex.size(); i++) {
+		(*va)[i].set(mesh.vertex[i][0], mesh.vertex[i][1], mesh.vertex[i][2]);
+	}
+	osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
+	geometry->setVertexArray(va);
+	geometry->setNormalArray(new osg::Vec3Array);
+	geometry->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
+	osg::DrawElementsUShort* _set = new osg::DrawElementsUShort(osg::DrawArrays::TRIANGLES);
+	for (int i = 0; i < mesh.index.size(); i++) {
+		_set->addElement(mesh.index[i][0]);
+		_set->addElement(mesh.index[i][1]);
+		_set->addElement(mesh.index[i][2]);
+	}
+	geometry->addPrimitiveSet(_set);	osgUtil::SmoothingVisitor::smooth(*geometry);	osgUtil::Optimizer optimizer;
+	optimizer.optimize(geometry);
+	return geometry;
+}
 
 /**
 @brief: convet polygon to mesh
@@ -174,210 +209,85 @@ Polygon_Mesh convert_polygon(
     ) {
     double bottom = 0.0;
     Polygon_Mesh mesh;
-    OGREnvelope geo_box;
-    polyon->getEnvelope(&geo_box);
-    mesh.box_min = {
-        longti_to_meter(degree2rad(geo_box.MinX - center_x), degree2rad( center_y )),
-        bottom, 
-        lati_to_meter(degree2rad(geo_box.MinY - center_y))
-    };
-    mesh.box_max = { 
-        longti_to_meter(degree2rad(geo_box.MaxX - center_x), degree2rad(center_y)),
-        height, 
-        lati_to_meter(degree2rad(geo_box.MaxY - center_y))
-    };
-    {
-        OGRLinearRing* pRing = polyon->getExteriorRing();
-        int ptNum = pRing->getNumPoints();
-        if(ptNum < 4) {
-            return mesh;
-        }
-        OGRPoint last_pt;
-        std::vector<std::array<float, 3>> pt_normal;
-        OGRPoint pt0, pt1;
-        pRing->getPoint(0, &pt0);
-        pRing->getPoint(ptNum - 2, &pt1); // 闭合面用倒数第二个
-        double dx = pt0.getX() - pt1.getX();
-        double dy = pt0.getY() - pt1.getY();
-        double lenght = std::sqrt(dx*dx + dy*dy);
-        float nx = -dy / lenght;
-        float ny = dx / lenght;
-        pt_normal.push_back({ nx,0,ny });
+	OGRLinearRing* pRing = polyon->getExteriorRing();
+	int ptNum = pRing->getNumPoints();
+	if (ptNum < 4) {
+		return mesh;
+	}
+	int pt_count = 0;
+	for (int i = 0; i < ptNum; i++) {
+		OGRPoint pt;
+		pRing->getPoint(i, &pt);
+		float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
+		float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
+		mesh.vertex.push_back({ point_x , point_y, (float)bottom });
+		mesh.vertex.push_back({ point_x , point_y, (float)height });
+		if (i != ptNum - 1) {
+			mesh.index.push_back({ 2 * i,2 * i + 1,2 * (i + 1) + 1 });
+			mesh.index.push_back({ 2 * (i + 1),2 * i,2 * (i + 1) + 1 });
+		}
+	}
+	pt_count += 2 * ptNum;
 
-        for (int i = 0; i < ptNum; i++)
-        {
-            OGRPoint pt;
-            pRing->getPoint(i, &pt);
-
-            mesh.vertex.push_back({
-                (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
-                (float)bottom , 
-                -(float)lati_to_meter(degree2rad(pt.getY() - center_y))
-            });
-            mesh.vertex.push_back({
-                (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
-                (float)height ,
-                -(float)lati_to_meter(degree2rad(pt.getY() - center_y))
-            });
-
-            int point_cnt = mesh.vertex.size();
-            if (i > 0) {
-                int a = point_cnt - 4;
-                int b = point_cnt - 3;
-                int c = point_cnt - 2;
-                int d = point_cnt - 1;
-                // 计算斜率
-                double dx = pt.getX() - last_pt.getX();
-                double dy = pt.getY() - last_pt.getY();
-                double lenght = std::sqrt(dx*dx + dy*dy);
-                float nx = -dy / lenght;
-                float ny = dx / lenght;
-                pt_normal.push_back({ nx,0,ny });
-                // 添加两个面
-                mesh.index.push_back({ a, c, b });
-                mesh.index.push_back({ b, c, d });
-            }
-            last_pt = pt;
-        }
-        pt_normal.push_back(pt_normal[1]);
-        for (int i = 0; i < ptNum; i++) {
-            // 平均法线
-            for (size_t j = 0; j < 2; j++)
-            {
-                std::array<float, 3> n0 = pt_normal[i];
-                std::array<float, 3> n1 = pt_normal[i + 1];
-                std::array<float, 3> n2 = { 0, -1, 0 };
-                if (j == 1) n2[1] = 1;
-                std::array<float, 3> normal = {
-                    (n0[0] + n1[0] + n2[0]) / 3,
-                    (n0[1] + n1[1] + n2[1]) / 3,
-                    (n0[2] + n1[2] + n2[2]) / 3
-                };
-                double lenght = std::sqrt(normal[0]*normal[0] + normal[1]*normal[1] + normal[2]*normal[2] );
-                normal[0] /= lenght;
-                normal[1] /= lenght;
-                normal[2] /= lenght;
-                mesh.normal.push_back(normal);
-            }
-        }
-    }
-    // innor ring
-    {
-        int inner_count = polyon->getNumInteriorRings();
-        for (int j = 0; j < inner_count; j++)
-        {
-            OGRLinearRing* pRing = polyon->getInteriorRing(j);
-            int ptNum = pRing->getNumPoints();
-            if(ptNum < 4) {
-                continue;
-            }
-            OGRPoint last_pt;
-            std::vector<std::array<float, 3>> pt_normal;
-            // 计算最后一个法线 ( 换 osg 计算吧)
-            OGRPoint pt0, pt1;
-            pRing->getPoint(0, &pt0);
-            pRing->getPoint(ptNum - 2, &pt1); // 闭合面用倒数第二个
-            double dx = pt0.getX() - pt1.getX();
-            double dy = pt0.getY() - pt1.getY();
-            double lenght = std::sqrt(dx*dx + dy*dy);
-            float nx = -dy / lenght;
-            float ny = dx / lenght;
-            pt_normal.push_back({ nx,0,ny });
-            for (int i = 0; i < ptNum; i++)
-            {
-                OGRPoint pt;
-                pRing->getPoint(i, &pt);
-                mesh.vertex.push_back({
-                    (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
-                    (float)bottom ,
-                    -(float)lati_to_meter(degree2rad(pt.getY() - center_y))
-                });
-                mesh.vertex.push_back({
-                    (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y)),
-                    (float)height ,
-                    -(float)lati_to_meter(degree2rad(pt.getY() - center_y))
-                });
-                int point_cnt = mesh.vertex.size();
-                if (i > 0) {
-                    int a = point_cnt - 4;
-                    int b = point_cnt - 3;
-                    int c = point_cnt - 2;
-                    int d = point_cnt - 1;
-                    // 计算斜率
-                    double dx = pt.getX() - last_pt.getX();
-                    double dy = pt.getY() - last_pt.getY();
-                    double lenght = std::sqrt(dx*dx + dy*dy);
-                    float nx = -dy / lenght;
-                    float ny = dx / lenght;
-                    // 添加两个面
-                    pt_normal.push_back({ nx,0,ny });
-                    mesh.index.push_back({ a, c, b });
-                    mesh.index.push_back({ b, c, d });
-                }
-                last_pt = pt;
-            }
-            pt_normal.push_back(pt_normal[1]);
-            for (int i = 0; i < ptNum; i++) {
-                // 平均法线
-                for (size_t j = 0; j < 2; j++)
-                {
-                    std::array<float, 3> n0 = pt_normal[i];
-                    std::array<float, 3> n1 = pt_normal[i + 1];
-                    std::array<float, 3> n2 = { 0, -1, 0 };
-                    if (j == 1) n2[1] = 1;
-                    std::array<float, 3> normal = {
-                        (n0[0] + n1[0] + n2[0]) / 3,
-                        (n0[1] + n1[1] + n2[1]) / 3,
-                        (n0[2] + n1[2] + n2[2]) / 3
-                    };
-                    double lenght = std::sqrt(normal[0]*normal[0] + normal[1]*normal[1] + normal[2]*normal[2] );
-                    normal[0] /= lenght;
-                    normal[1] /= lenght;
-                    normal[2] /= lenght;
-                    mesh.normal.push_back(normal);
-                }
-            }
-        }
-    }
-    // 封顶、底
-    {
-        using Point = std::array<double, 2>;
-        std::vector<std::vector<Point>> polygon(1);
-        {
-            OGRLinearRing* pRing = polyon->getExteriorRing();
-            int ptNum = pRing->getNumPoints();
-            for (int i = 0; i < ptNum; i++)
-            {
-                OGRPoint pt;
-                pRing->getPoint(i, &pt);
-                polygon[0].push_back({ pt.getX(), pt.getY() });
-            }
-        }
-        int inner_count = polyon->getNumInteriorRings();
-        for (int j = 0; j < inner_count; j++)
-        {
-            polygon.resize( polygon.size() + 1 );
-            OGRLinearRing* pRing = polyon->getInteriorRing(j);
-            int ptNum = pRing->getNumPoints();
-            for (int i = 0; i < ptNum; i++)
-            {
-                OGRPoint pt;
-                pRing->getPoint(i, &pt);
-                polygon[j].push_back({ pt.getX(), pt.getY() });
-            }
-        }
-        std::vector<int> indices = mapbox::earcut<int>(polygon);
-        // 剖分三角形
-        for (int idx = 0; idx < indices.size(); idx += 3) {
-            mesh.index.push_back({ 2 * indices[idx] - 1, 2 * indices[idx + 2] - 1, 2 * indices[idx + 1] - 1 });
-        }
-        for (int idx = 0; idx < indices.size(); idx += 3) {
-            mesh.index.push_back({ 2 * indices[idx], 2 * indices[idx + 1], 2 * indices[idx + 2] });
-        }
-    }
+	int inner_count = polyon->getNumInteriorRings();
+	for (int j = 0; j < inner_count; j++) {
+		OGRLinearRing* pRing = polyon->getInteriorRing(j);
+		int ptNum = pRing->getNumPoints();
+		if (ptNum < 4) {
+			continue;
+		}
+		for (int i = 0; i < ptNum; i++) {
+			OGRPoint pt;
+			pRing->getPoint(i, &pt);
+			float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
+			float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
+			mesh.vertex.push_back({ point_x , point_y, (float)bottom });
+			mesh.vertex.push_back({ point_x , point_y, (float)height });
+			if (i != ptNum - 1) {
+				mesh.index.push_back({ pt_count + 2 * i, pt_count + 2 * i + 1, pt_count + 2 * (i + 1) + 1 });
+				mesh.index.push_back({ pt_count + 2 * (i + 1), pt_count + 2 * i, pt_count + 2 * (i + 1) + 1 });
+			}
+		}
+		pt_count += 2 * ptNum;
+	}
+	// top and bottom
+	{
+		using Point = std::array<double, 2>;
+		std::vector<std::vector<Point>> polygon(1);
+		{
+			OGRLinearRing* pRing = polyon->getExteriorRing();
+			int ptNum = pRing->getNumPoints();
+			for (int i = 0; i < ptNum; i++)
+			{
+				OGRPoint pt;
+				pRing->getPoint(i, &pt);
+				polygon[0].push_back({ pt.getX(), pt.getY() });
+			}
+		}
+		int inner_count = polyon->getNumInteriorRings();
+		for (int j = 0; j < inner_count; j++)
+		{
+			polygon.resize(polygon.size() + 1);
+			OGRLinearRing* pRing = polyon->getInteriorRing(j);
+			int ptNum = pRing->getNumPoints();
+			for (int i = 0; i < ptNum; i++)
+			{
+				OGRPoint pt;
+				pRing->getPoint(i, &pt);
+				polygon[j].push_back({ pt.getX(), pt.getY() });
+			}
+		}
+		std::vector<int> indices = mapbox::earcut<int>(polygon);
+		// 剖分三角形
+		for (int idx = 0; idx < indices.size(); idx += 3) {
+			mesh.index.push_back({ 2 * indices[idx], 2 * indices[idx + 2], 2 * indices[idx + 1] });
+		}
+		for (int idx = 0; idx < indices.size(); idx += 3) {
+			mesh.index.push_back({ 2 * indices[idx] + 1, 2 * indices[idx + 1] + 1, 2 * indices[idx + 2] + 1});
+		}
+	}
     return mesh;
 }
-
 
 std::string make_polymesh(std::vector<Polygon_Mesh>& meshes);
 std::string make_b3dm(std::vector<Polygon_Mesh>& meshes);
@@ -559,7 +469,10 @@ void alignment_buffer(std::vector<T>& buf) {
 
 // convert poly-mesh to glb buffer
 std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
-    
+	vector<osg::ref_ptr<osg::Geometry>> osg_Geoms;
+	for (auto& mesh : meshes) {
+		osg_Geoms.push_back(make_triangle_mesh(mesh));
+	}
     tinygltf::TinyGLTF gltf;
     tinygltf::Model model;
     // model.name = model_name;
@@ -571,72 +484,46 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     for (int j = 0; j < 3; j++)
     {
         for (int i = 0; i < meshes.size(); i++) {
+			if (osg_Geoms[i]->getNumPrimitiveSets() == 0) continue;
             if (j == 0) {
                 // indc
-                int vec_size = meshes[i].vertex.size();
-                int idx_size = meshes[i].index.size();
+				osg::PrimitiveSet* ps = osg_Geoms[i]->getPrimitiveSet(0);
+				int idx_size = ps->getNumIndices();
 				int max_idx = 0;
-                if (vec_size <= 65535) {
-                    for (size_t m = 0; m < meshes[i].index.size(); m++)
-                    {
-                        for (auto idx : meshes[i].index[m]) {
-                            put_val(buffer.data, (unsigned short)idx);
-							SET_MAX(max_idx, idx);
-                        }
-                    }
-                }
-                else {
-                    for (size_t m = 0; m < meshes[i].index.size(); m++)
-                    {
-                        for (auto idx : meshes[i].index[m]) {
-                            put_val(buffer.data, idx);
-							SET_MAX(max_idx, idx);
-                        }
-                    }
-                }
+
+				const osg::DrawElementsUShort* drawElements = static_cast<const osg::DrawElementsUShort*>(ps);
+				int IndNum = drawElements->getNumIndices();
+				for (int m = 0; m < IndNum; m++)
+				{
+					unsigned short idx = drawElements->at(m);
+					put_val(buffer.data, idx);
+					SET_MAX(max_idx, idx);
+				}
+					
                 tinygltf::Accessor acc;
                 acc.bufferView = 0;
                 acc.byteOffset = acc_offset[j];
 				alignment_buffer(buffer.data);
                 acc_offset[j] = buffer.data.size();
-                if (vec_size <= 65535)
-                    acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
-                else
-                    acc.componentType = TINYGLTF_COMPONENT_TYPE_INT;
-                acc.count = idx_size * 3;
+                acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+                acc.count = idx_size;
                 acc.type = TINYGLTF_TYPE_SCALAR;
 				acc.maxValues = { (double)max_idx };
 				acc.minValues = { 0.0 };
                 model.accessors.push_back(acc);
-                // as convert to b3dm , we add a BATCH , same as vertex`s count
-                if(0) {
-                    unsigned short batch_id = i;
-                    for (auto& vertex : meshes[i].vertex) {
-                        put_val(buffer.data, batch_id);
-                    }
-                    tinygltf::Accessor acc;
-                    acc.bufferView = 0;
-                    acc.byteOffset = acc_offset[j];
-					alignment_buffer(buffer.data);
-                    acc_offset[j] = buffer.data.size();
-                    acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
-                    acc.count = vec_size;
-                    acc.type = TINYGLTF_TYPE_SCALAR;
-					acc.maxValues = { (double)i };
-					acc.minValues = { (double)i };
-                    model.accessors.push_back(acc);
-                }
             }
             else if( j == 1){
+				osg::Array* va = osg_Geoms[i]->getVertexArray();
+				osg::Vec3Array* v3f = (osg::Vec3Array*)va;
+				int vec_size = v3f->size();
 				std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
 				std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
-                int vec_size = meshes[i].vertex.size();
-                for (auto& vertex : meshes[i].vertex) {
-                    put_val(buffer.data, vertex[0]);
-                    put_val(buffer.data, vertex[1]);
-                    put_val(buffer.data, vertex[2]);
+				for (int vidx = 0; vidx < vec_size; vidx++) {
+					osg::Vec3f point = v3f->at(vidx);
+					vector<float> vertex = { point.x(), point.y(), point.z()};
 					for (int i = 0; i < 3; i++)
 					{
+						put_val(buffer.data, vertex[i]);
 						SET_MAX(box_max[i], vertex[i]);
 						SET_MIN(box_min[i], vertex[i]);
 					}
@@ -655,19 +542,22 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
             }
             else if (j == 2) {
                 // normal
+				osg::Array* na = osg_Geoms[i]->getNormalArray();
+				osg::Vec3Array* v3f = (osg::Vec3Array*)na;
 				std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
 				std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
-                int normal_size = meshes[i].normal.size();
-                for (auto& normal : meshes[i].normal) {
-                    put_val(buffer.data, normal[0]);
-                    put_val(buffer.data, normal[1]);
-                    put_val(buffer.data, normal[2]);
+				int normal_size = v3f->size();
+				for (int vidx = 0; vidx < normal_size; vidx++)
+				{
+					osg::Vec3f point = v3f->at(vidx);
+					vector<float> normal = { point.x(), point.y(), point.z() };
 					for (int i = 0; i < 3; i++)
 					{
+						put_val(buffer.data, normal[i]);
 						SET_MAX(box_max[i], normal[i]);
 						SET_MIN(box_min[i], normal[i]);
 					}
-                }
+				}
                 tinygltf::Accessor acc;
                 acc.bufferView = 2;
                 acc.byteOffset = acc_offset[j];
@@ -735,17 +625,18 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     tinygltf::Material material;
     material.name = "default";
     tinygltf::Parameter baseColorFactor;
-    baseColorFactor.number_array = {0.8,0.8,0.8,1.0};
+    baseColorFactor.number_array = { 1,1,1,1 };
     material.values["baseColorFactor"] = baseColorFactor;
     tinygltf::Parameter metallicFactor;
-    metallicFactor.number_value = 0;
+    metallicFactor.number_value = 0.0;
     material.values["metallicFactor"] = metallicFactor;
     tinygltf::Parameter roughnessFactor;
-    roughnessFactor.number_value = 1;
+    roughnessFactor.number_value = 1.0;
+	
     material.values["roughnessFactor"] = roughnessFactor;
     /// ---------
     tinygltf::Parameter emissiveFactor;
-    emissiveFactor.number_array = { 0.8,0.8,0.8 };
+    emissiveFactor.number_array = { 0.3,0.3,0.3 };
     material.additionalValues["emissiveFactor"] = emissiveFactor;
     tinygltf::Parameter alphaMode;
     alphaMode.string_value = "OPAQUE";
