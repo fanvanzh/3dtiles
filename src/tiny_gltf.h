@@ -335,8 +335,25 @@ TINYGLTF_VALUE_GET(Value::Object, object_value_)
 using ColorValue = std::array<double, 4>;
 
  struct Parameter {
-  bool bool_value;
-  int number_value = -1;
+	~Parameter() {
+		if (bool_value) { 
+			//delete bool_value; 
+			//bool_value = 0;
+		}
+		if (number_value) {
+			//delete number_value;
+			//number_value = 0;
+		}
+	 }
+	Parameter() {}
+	Parameter(const Parameter& other) {
+		if (other.bool_value)
+			bool_value = new bool(*other.bool_value);
+		if (other.number_value)
+			number_value = new double(*other.number_value);
+	}
+  bool *bool_value = 0;
+  double *number_value = 0;
   std::string string_value;
   std::vector<double> number_array;
   std::map<std::string, double> json_double_value;
@@ -2060,7 +2077,7 @@ static bool ParseParameterProperty(Parameter *param, std::string *err,
   } else if (ParseJSONProperty(&param->json_double_value, err, o, prop,
                                false)) {
     return true;
-  } else if (ParseBooleanProperty(&param->bool_value, err, o, prop, false)) {
+  } else if (ParseBooleanProperty(param->bool_value, err, o, prop, false)) {
     return true;
   } else {
     if (required) {
@@ -3319,11 +3336,11 @@ static void SerializeParameterMap(ParameterMap &param, json &o) {
 	else if (!paramIt->second.string_value.empty()) {
       SerializeStringProperty(paramIt->first, paramIt->second.string_value, o);
 	}
-	else if (paramIt->second.number_value > -1) {
-		o[paramIt->first] = paramIt->second.number_value;
+	else if (paramIt->second.number_value) {
+		o[paramIt->first] = *paramIt->second.number_value;
 	}
-	else {
-      o[paramIt->first] = paramIt->second.bool_value;
+	else if (paramIt->second.bool_value){
+      o[paramIt->first] = *paramIt->second.bool_value;
     }
   }
 }

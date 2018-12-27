@@ -25,6 +25,7 @@
 using namespace std;
 
 using Vextex = vector<array<float, 3>>;
+using Normal = vector<array<float, 3>>;
 using Index = vector<array<int, 3>>;
 
 struct bbox
@@ -173,26 +174,81 @@ struct Polygon_Mesh
     std::string mesh_name; // 模型名称
 	Vextex vertex;
 	Index  index;
+	Normal normal;
 };
+
+osg::ref_ptr<osg::Geometry> make_triangle_mesh_auto(Polygon_Mesh& mesh) {
+	osg::ref_ptr<osg::Vec3Array> va = new osg::Vec3Array(mesh.vertex.size());
+	for (int i = 0; i < mesh.vertex.size(); i++) {
+		(*va)[i].set(mesh.vertex[i][0], mesh.vertex[i][1], mesh.vertex[i][2]);
+	}
+	osg::ref_ptr<osgUtil::DelaunayTriangulator> trig = new osgUtil::DelaunayTriangulator();
+	trig->setInputPointArray(va);
+	osg::Vec3Array *norms = new osg::Vec3Array;
+	trig->setOutputNormalArray(norms);
+	//三角化处理
+	trig->triangulate();
+	osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
+	geometry->setVertexArray(va);
+	geometry->setNormalArray(norms);
+	auto* uIntId = trig->getTriangles();
+	osg::DrawElementsUShort* _set = new osg::DrawElementsUShort(osg::DrawArrays::TRIANGLES);
+	for (int i = 0; i < uIntId->getNumPrimitives(); i++) {
+		_set->addElement(uIntId->getElement(i));
+	}
+	geometry->addPrimitiveSet(_set);
+	return geometry;
+}
 
 osg::ref_ptr<osg::Geometry> make_triangle_mesh(Polygon_Mesh& mesh) {
 	osg::ref_ptr<osg::Vec3Array> va = new osg::Vec3Array(mesh.vertex.size());
 	for (int i = 0; i < mesh.vertex.size(); i++) {
 		(*va)[i].set(mesh.vertex[i][0], mesh.vertex[i][1], mesh.vertex[i][2]);
 	}
+	osg::ref_ptr<osg::Vec3Array> vn = new osg::Vec3Array(mesh.normal.size());
+	for (int i = 0; i < mesh.normal.size(); i++) {
+		(*vn)[i].set(mesh.normal[i][0], mesh.normal[i][1], mesh.normal[i][2]);
+	}
 	osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
 	geometry->setVertexArray(va);
-	geometry->setNormalArray(new osg::Vec3Array);
-	geometry->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
+	geometry->setNormalArray(vn);
 	osg::DrawElementsUShort* _set = new osg::DrawElementsUShort(osg::DrawArrays::TRIANGLES);
 	for (int i = 0; i < mesh.index.size(); i++) {
 		_set->addElement(mesh.index[i][0]);
 		_set->addElement(mesh.index[i][1]);
 		_set->addElement(mesh.index[i][2]);
 	}
-	geometry->addPrimitiveSet(_set);	osgUtil::SmoothingVisitor::smooth(*geometry);	osgUtil::Optimizer optimizer;
-	optimizer.optimize(geometry);
+	geometry->addPrimitiveSet(_set);
+	osgUtil::SmoothingVisitor::smooth(*geometry);
 	return geometry;
+}
+
+void calc_normal(int baseCnt, int ptNum, Polygon_Mesh &mesh)
+{
+	for (int i = 0; i < ptNum; i++) {
+		osg::Vec2 *nor1 = 0, *nor2 = 0;
+		if (i == 0) {
+			nor2 = new osg::Vec2(0, 0);
+		}
+		else if (i == ptNum - 1) {
+			nor1 = new osg::Vec2(0, 0);
+		}
+		if (!nor1) {
+			nor1 = new osg::Vec2(mesh.vertex[baseCnt + 2 * (i + 1)][0], mesh.vertex[baseCnt + 2 * (i + 1)][1]);
+			*nor1 = *nor1 - osg::Vec2(mesh.vertex[baseCnt + 2 * i][0], mesh.vertex[baseCnt + 2 * i][1]);
+		}
+		if (!nor2) {
+			nor2 = new osg::Vec2(mesh.vertex[baseCnt + 2 * i][0], mesh.vertex[baseCnt + 2 * i][1]);
+			*nor2 = *nor2 - osg::Vec2(mesh.vertex[baseCnt + 2 * (i - 1)][0], mesh.vertex[baseCnt + 2 * (i - 1)][1]);
+		}
+		osg::Vec3 nor3 = osg::Vec3(-nor1->y(), nor1->x(), 0) + osg::Vec3(-nor2->y(), nor2->x(), 0) + osg::Vec3(0, 0, -1);
+		nor3.normalize();
+		osg::Vec3 nor4 = osg::Vec3(-nor1->y(), nor1->x(), 0) + osg::Vec3(-nor2->y(), nor2->x(), 0) + osg::Vec3(0, 0, 0.2);
+		nor4.normalize();
+		delete nor1; delete nor2;
+		mesh.normal.push_back({ nor3.x(), nor3.y(), nor3.z() });
+		mesh.normal.push_back({ nor4.x(), nor4.y(), nor4.z() });
+	}
 }
 
 /**
@@ -222,12 +278,16 @@ Polygon_Mesh convert_polygon(
 		float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
 		mesh.vertex.push_back({ point_x , point_y, (float)bottom });
 		mesh.vertex.push_back({ point_x , point_y, (float)height });
-		if (i != ptNum - 1) {
+	}
+	int vertex_num = mesh.vertex.size() / 2;
+	for (int i = 0; i < vertex_num; i++) {
+		if (i != vertex_num - 1) {
 			mesh.index.push_back({ 2 * i,2 * i + 1,2 * (i + 1) + 1 });
 			mesh.index.push_back({ 2 * (i + 1),2 * i,2 * (i + 1) + 1 });
 		}
 	}
-	pt_count += 2 * ptNum;
+	calc_normal(0, vertex_num, mesh);
+	pt_count += 2 * vertex_num;
 
 	int inner_count = polyon->getNumInteriorRings();
 	for (int j = 0; j < inner_count; j++) {
@@ -244,11 +304,12 @@ Polygon_Mesh convert_polygon(
 			mesh.vertex.push_back({ point_x , point_y, (float)bottom });
 			mesh.vertex.push_back({ point_x , point_y, (float)height });
 			if (i != ptNum - 1) {
-				mesh.index.push_back({ pt_count + 2 * i, pt_count + 2 * i + 1, pt_count + 2 * (i + 1) + 1 });
-				mesh.index.push_back({ pt_count + 2 * (i + 1), pt_count + 2 * i, pt_count + 2 * (i + 1) + 1 });
+				mesh.index.push_back({ pt_count + 2 * i, pt_count + 2 * i + 1, pt_count + 2 * (i + 1) });
+				mesh.index.push_back({ pt_count + 2 * (i + 1), pt_count + 2 * i, pt_count + 2 * (i + 1) });
 			}
 		}
-		pt_count += 2 * ptNum;
+		calc_normal(pt_count, ptNum, mesh);
+		pt_count = mesh.vertex.size();
 	}
 	// top and bottom
 	{
@@ -261,7 +322,9 @@ Polygon_Mesh convert_polygon(
 			{
 				OGRPoint pt;
 				pRing->getPoint(i, &pt);
-				polygon[0].push_back({ pt.getX(), pt.getY() });
+				float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
+				float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
+				polygon[0].push_back({ point_x, point_y });
 			}
 		}
 		int inner_count = polyon->getNumInteriorRings();
@@ -543,6 +606,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
             else if (j == 2) {
                 // normal
 				osg::Array* na = osg_Geoms[i]->getNormalArray();
+				if (!na) continue;
 				osg::Vec3Array* v3f = (osg::Vec3Array*)na;
 				std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
 				std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
@@ -551,6 +615,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
 				{
 					osg::Vec3f point = v3f->at(vidx);
 					vector<float> normal = { point.x(), point.y(), point.z() };
+					
 					for (int i = 0; i < 3; i++)
 					{
 						put_val(buffer.data, normal[i]);
@@ -586,7 +651,6 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
         buf_offset = buffer.data.size();
         model.bufferViews.push_back(bfv);
     }
-    model.buffers.push_back(std::move(buffer));
 
     for (int i = 0; i < meshes.size(); i++) {
         tinygltf::Mesh mesh;
@@ -622,30 +686,171 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     model.defaultScene = 0;
 
     /// --------------
-    tinygltf::Material material;
-    material.name = "default";
-    tinygltf::Parameter baseColorFactor;
-    baseColorFactor.number_array = { 1,1,1,1 };
-    material.values["baseColorFactor"] = baseColorFactor;
-    tinygltf::Parameter metallicFactor;
-    metallicFactor.number_value = 0.0;
-    material.values["metallicFactor"] = metallicFactor;
-    tinygltf::Parameter roughnessFactor;
-    roughnessFactor.number_value = 1.0;
-	
-    material.values["roughnessFactor"] = roughnessFactor;
-    /// ---------
-    tinygltf::Parameter emissiveFactor;
-    emissiveFactor.number_array = { 0.3,0.3,0.3 };
-    material.additionalValues["emissiveFactor"] = emissiveFactor;
-    tinygltf::Parameter alphaMode;
-    alphaMode.string_value = "OPAQUE";
-    material.additionalValues["alphaMode"] = alphaMode;
-    tinygltf::Parameter doubleSided;
-    doubleSided.bool_value = false;
-    material.additionalValues["doubleSided"] = doubleSided;
-    model.materials = { material };
+	if (1) {
+		tinygltf::Material material;
+		material.name = "default";
+// 		tinygltf::Parameter baseColorFactor;
+// 		baseColorFactor.number_array = { 1,1,1,1 };
+// 		material.values["baseColorFactor"] = baseColorFactor;
+		tinygltf::Parameter metallicFactor;
+		metallicFactor.number_value = new double(0.3);
+		material.values["metallicFactor"] = metallicFactor;
+		tinygltf::Parameter roughnessFactor;
+		roughnessFactor.number_value = new double(0.7);
+		material.values["roughnessFactor"] = roughnessFactor;
+		/// ---------
+// 		tinygltf::Parameter emissiveFactor;
+// 		emissiveFactor.number_array = { 0,0,0 };
+// 		material.additionalValues["emissiveFactor"] = emissiveFactor;
+// 		tinygltf::Parameter alphaMode;
+// 		alphaMode.string_value = "OPAQUE";
+// 		material.additionalValues["alphaMode"] = alphaMode;
+// 		tinygltf::Parameter doubleSided;
+// 		doubleSided.bool_value = false;
+// 		material.additionalValues["doubleSided"] = doubleSided;
+		model.materials = { material };
+	}
+	else {
+		model.extensionsRequired = { "KHR_technique_webgl" };
+		model.extensionsUsed = { "KHR_technique_webgl" };
+		// add shader buffer view
+		{
+			tinygltf::BufferView bfv_vs;
+			bfv_vs.buffer = 0;
+			bfv_vs.byteOffset = buf_offset;
+			bfv_vs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+			std::string vs_shader = R"(
+precision highp float;
+uniform mat4 u_modelViewMatrix;
+uniform mat4 u_projectionMatrix;
+attribute vec3 a_position;
+attribute float a_batchid;
+//attribute vec2 a_texcoord0;
+//varying vec2 v_texcoord0;
+void main(void)
+{   
+    gl_Position = u_projectionMatrix * u_modelViewMatrix * vec4(a_position, 1.0);
+}
+)";
 
+			buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
+			bfv_vs.byteLength = buffer.data.size() - buf_offset;
+			alignment_buffer(buffer.data);
+			buf_offset = buffer.data.size();
+			model.bufferViews.push_back(bfv_vs);
+
+			tinygltf::BufferView bfv_fs;
+			bfv_fs.buffer = 0;
+			bfv_fs.byteOffset = buf_offset;
+			bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+			std::string fs_shader = R"(
+precision highp float;
+//varying vec2 v_texcoord0;
+//uniform sampler2D u_diffuse;
+void main(void)
+{
+  gl_FragColor = vec4(0.8,0.8,0.8,1.0);
+}
+)";
+			buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
+			bfv_fs.byteLength = buffer.data.size() - buf_offset;
+			alignment_buffer(buffer.data);
+			buf_offset = buffer.data.size();
+			model.bufferViews.push_back(bfv_fs);
+		}
+		// shader
+		{
+			int buf_view = 3;
+			{
+				tinygltf::Shader shader;
+				shader.bufferView = buf_view++;
+				shader.type = TINYGLTF_SHADER_TYPE_VERTEX_SHADER;
+				model.shaders.push_back(shader);
+			}
+			{
+				tinygltf::Shader shader;
+				shader.bufferView = buf_view++;
+				shader.type = TINYGLTF_SHADER_TYPE_FRAGMENT_SHADER;
+				model.shaders.push_back(shader);
+			}
+		}
+		// tech
+		{
+			tinygltf::Technique tech;
+			tech.tech_string = R"(
+{
+      "attributes": {
+		"a_batchid": "batchid",
+        "a_position": "position"
+      },
+      "parameters": {
+        "batchid": {
+          "semantic": "_BATCHID",
+          "type": 5123
+        },
+        "modelViewMatrix": {
+          "semantic": "MODELVIEW",
+          "type": 35676
+        },
+        "position": {
+          "semantic": "POSITION",
+          "type": 35665
+        },
+        "projectionMatrix": {
+          "semantic": "PROJECTION",
+          "type": 35676
+        }
+      },
+      "program": 0,
+      "states": {
+        "enable": [
+          2884,
+          2929
+        ]
+      },
+      "uniforms": {
+        "u_modelViewMatrix": "modelViewMatrix",
+        "u_projectionMatrix": "projectionMatrix"
+      }
+    })";
+			model.techniques = { tech };
+		}
+		// program
+		{
+			tinygltf::Program prog;
+			prog.prog_string = R"(
+    {
+      "attributes": [
+        "a_position"
+      ],
+      "vertexShader": 0,
+      "fragmentShader": 1
+    }
+)";
+			model.programs = { prog };
+		}
+
+		{
+			tinygltf::Material material;
+			material.name = "shapefile";
+			//material.values[""]
+			char shaderBuffer[512];
+			sprintf(shaderBuffer, R"(
+            {
+      "extensions": {
+        "KHR_technique_webgl": {
+          "technique": 0,
+          "values": {
+            "diffuse": 0
+          }
+        }
+      },
+      "technique": 0})");
+			material.shaderMaterial = shaderBuffer;
+			model.materials.push_back(material);
+		}
+	}
+	model.buffers.push_back(std::move(buffer));
     model.asset.version = "2.0";
     model.asset.generator = "fanfan";
     

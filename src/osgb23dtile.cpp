@@ -647,21 +647,21 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                 material.values["baseColorTexture"] = baseColorTexture;
 
                 tinygltf::Parameter metallicFactor;
-                metallicFactor.number_value = 0;
+                metallicFactor.number_value = new double(0);
                 material.values["metallicFactor"] = metallicFactor;
                 tinygltf::Parameter roughnessFactor;
-                roughnessFactor.number_value = 1;
+                roughnessFactor.number_value = new double(1);
                 material.values["roughnessFactor"] = roughnessFactor;
                 /// ---------
-                tinygltf::Parameter emissiveFactor;
-                emissiveFactor.number_array = { 0.0,0.0,0.0 };
-                material.additionalValues["emissiveFactor"] = emissiveFactor;
-                tinygltf::Parameter alphaMode;
-                alphaMode.string_value = "OPAQUE";
-                material.additionalValues["alphaMode"] = alphaMode;
-                tinygltf::Parameter doubleSided;
-                doubleSided.bool_value = false;
-                material.additionalValues["doubleSided"] = doubleSided;
+//                 tinygltf::Parameter emissiveFactor;
+//                 emissiveFactor.number_array = { 0.0,0.0,0.0 };
+//                 material.additionalValues["emissiveFactor"] = emissiveFactor;
+//                 tinygltf::Parameter alphaMode;
+//                 alphaMode.string_value = "OPAQUE";
+//                 material.additionalValues["alphaMode"] = alphaMode;
+//                 tinygltf::Parameter doubleSided;
+//                 doubleSided.bool_value = false;
+//                 material.additionalValues["doubleSided"] = doubleSided;
                 //
                 model.materials.push_back(material);
             }

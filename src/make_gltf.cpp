@@ -528,10 +528,10 @@ bool make_glb_buf(std::string path, std::string& glb_buff) {
                 material.values["baseColorTexture"] = baseColorTexture;
 
                 tinygltf::Parameter metallicFactor;
-                metallicFactor.number_value = 0;
+                metallicFactor.number_value = new double(0.3);
                 material.values["metallicFactor"] = metallicFactor;
                 tinygltf::Parameter roughnessFactor;
-                roughnessFactor.number_value = 1;
+                roughnessFactor.number_value = new double(0.7);
                 material.values["roughnessFactor"] = roughnessFactor;
                 /// ---------
                 tinygltf::Parameter emissiveFactor;
@@ -541,7 +541,7 @@ bool make_glb_buf(std::string path, std::string& glb_buff) {
                 alphaMode.string_value = "OPAQUE";
                 material.additionalValues["alphaMode"] = alphaMode;
                 tinygltf::Parameter doubleSided;
-                doubleSided.bool_value = false;
+                doubleSided.bool_value = new bool(false);
                 material.additionalValues["doubleSided"] = doubleSided;
                 //
                 model.materials.push_back(material);
