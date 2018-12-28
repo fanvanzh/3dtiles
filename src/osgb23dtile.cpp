@@ -1062,10 +1062,10 @@ std::string encode_tile_json(osg_tree& tree, double x, double y) {
     sprintf(buf, "{ \"geometricError\":%.2f,", tree.geometricError);
     std::string tile = buf;
     TileBox cBox = tree.bbox;
-    cBox.extend(0.1);
+    //cBox.extend(0.1);
     std::string content_box = get_boundingBox(cBox);
     TileBox bbox = tree.bbox;
-    bbox.extend(0.1);
+    //bbox.extend(0.1);
     std::string tile_box = get_boundingBox(bbox);
 
     tile += tile_box;
