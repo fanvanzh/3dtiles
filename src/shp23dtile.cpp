@@ -172,83 +172,72 @@ public:
 struct Polygon_Mesh
 {
     std::string mesh_name; // 模型名称
-	Vextex vertex;
-	Index  index;
-	Normal normal;
+    Vextex vertex;
+    Index  index;
+    Normal normal;
 };
 
 osg::ref_ptr<osg::Geometry> make_triangle_mesh_auto(Polygon_Mesh& mesh) {
-	osg::ref_ptr<osg::Vec3Array> va = new osg::Vec3Array(mesh.vertex.size());
-	for (int i = 0; i < mesh.vertex.size(); i++) {
-		(*va)[i].set(mesh.vertex[i][0], mesh.vertex[i][1], mesh.vertex[i][2]);
-	}
-	osg::ref_ptr<osgUtil::DelaunayTriangulator> trig = new osgUtil::DelaunayTriangulator();
-	trig->setInputPointArray(va);
-	osg::Vec3Array *norms = new osg::Vec3Array;
-	trig->setOutputNormalArray(norms);
-	//三角化处理
-	trig->triangulate();
-	osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
-	geometry->setVertexArray(va);
-	geometry->setNormalArray(norms);
-	auto* uIntId = trig->getTriangles();
-	osg::DrawElementsUShort* _set = new osg::DrawElementsUShort(osg::DrawArrays::TRIANGLES);
-	for (int i = 0; i < uIntId->getNumPrimitives(); i++) {
-		_set->addElement(uIntId->getElement(i));
-	}
-	geometry->addPrimitiveSet(_set);
-	return geometry;
+    osg::ref_ptr<osg::Vec3Array> va = new osg::Vec3Array(mesh.vertex.size());
+    for (int i = 0; i < mesh.vertex.size(); i++) {
+        (*va)[i].set(mesh.vertex[i][0], mesh.vertex[i][1], mesh.vertex[i][2]);
+    }
+    osg::ref_ptr<osgUtil::DelaunayTriangulator> trig = new osgUtil::DelaunayTriangulator();
+    trig->setInputPointArray(va);
+    osg::Vec3Array *norms = new osg::Vec3Array;
+    trig->setOutputNormalArray(norms);
+    //三角化处理
+    trig->triangulate();
+    osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
+    geometry->setVertexArray(va);
+    geometry->setNormalArray(norms);
+    auto* uIntId = trig->getTriangles();
+    osg::DrawElementsUShort* _set = new osg::DrawElementsUShort(osg::DrawArrays::TRIANGLES);
+    for (int i = 0; i < uIntId->getNumPrimitives(); i++) {
+        _set->addElement(uIntId->getElement(i));
+    }
+    geometry->addPrimitiveSet(_set);
+    return geometry;
 }
 
 osg::ref_ptr<osg::Geometry> make_triangle_mesh(Polygon_Mesh& mesh) {
-	osg::ref_ptr<osg::Vec3Array> va = new osg::Vec3Array(mesh.vertex.size());
-	for (int i = 0; i < mesh.vertex.size(); i++) {
-		(*va)[i].set(mesh.vertex[i][0], mesh.vertex[i][1], mesh.vertex[i][2]);
-	}
-	osg::ref_ptr<osg::Vec3Array> vn = new osg::Vec3Array(mesh.normal.size());
-	for (int i = 0; i < mesh.normal.size(); i++) {
-		(*vn)[i].set(mesh.normal[i][0], mesh.normal[i][1], mesh.normal[i][2]);
-	}
-	osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
-	geometry->setVertexArray(va);
-	geometry->setNormalArray(vn);
-	osg::DrawElementsUShort* _set = new osg::DrawElementsUShort(osg::DrawArrays::TRIANGLES);
-	for (int i = 0; i < mesh.index.size(); i++) {
-		_set->addElement(mesh.index[i][0]);
-		_set->addElement(mesh.index[i][1]);
-		_set->addElement(mesh.index[i][2]);
-	}
-	geometry->addPrimitiveSet(_set);
-	osgUtil::SmoothingVisitor::smooth(*geometry);
-	return geometry;
+    osg::ref_ptr<osg::Vec3Array> va = new osg::Vec3Array(mesh.vertex.size());
+    for (int i = 0; i < mesh.vertex.size(); i++) {
+        (*va)[i].set(mesh.vertex[i][0], mesh.vertex[i][1], mesh.vertex[i][2]);
+    }
+    osg::ref_ptr<osg::Vec3Array> vn = new osg::Vec3Array(mesh.normal.size());
+    for (int i = 0; i < mesh.normal.size(); i++) {
+        (*vn)[i].set(mesh.normal[i][0], mesh.normal[i][1], mesh.normal[i][2]);
+    }
+    osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
+    geometry->setVertexArray(va);
+    geometry->setNormalArray(vn);
+    osg::DrawElementsUShort* _set = new osg::DrawElementsUShort(osg::DrawArrays::TRIANGLES);
+    for (int i = 0; i < mesh.index.size(); i++) {
+        _set->addElement(mesh.index[i][0]);
+        _set->addElement(mesh.index[i][1]);
+        _set->addElement(mesh.index[i][2]);
+    }
+    geometry->addPrimitiveSet(_set);
+    //osgUtil::SmoothingVisitor::smooth(*geometry);
+    return geometry;
 }
 
 void calc_normal(int baseCnt, int ptNum, Polygon_Mesh &mesh)
 {
-	for (int i = 0; i < ptNum; i++) {
-		osg::Vec2 *nor1 = 0, *nor2 = 0;
-		if (i == 0) {
-			nor2 = new osg::Vec2(0, 0);
-		}
-		else if (i == ptNum - 1) {
-			nor1 = new osg::Vec2(0, 0);
-		}
-		if (!nor1) {
-			nor1 = new osg::Vec2(mesh.vertex[baseCnt + 2 * (i + 1)][0], mesh.vertex[baseCnt + 2 * (i + 1)][1]);
-			*nor1 = *nor1 - osg::Vec2(mesh.vertex[baseCnt + 2 * i][0], mesh.vertex[baseCnt + 2 * i][1]);
-		}
-		if (!nor2) {
-			nor2 = new osg::Vec2(mesh.vertex[baseCnt + 2 * i][0], mesh.vertex[baseCnt + 2 * i][1]);
-			*nor2 = *nor2 - osg::Vec2(mesh.vertex[baseCnt + 2 * (i - 1)][0], mesh.vertex[baseCnt + 2 * (i - 1)][1]);
-		}
-		osg::Vec3 nor3 = osg::Vec3(-nor1->y(), nor1->x(), 0) + osg::Vec3(-nor2->y(), nor2->x(), 0) + osg::Vec3(0, 0, -1);
-		nor3.normalize();
-		osg::Vec3 nor4 = osg::Vec3(-nor1->y(), nor1->x(), 0) + osg::Vec3(-nor2->y(), nor2->x(), 0) + osg::Vec3(0, 0, 0.2);
-		nor4.normalize();
-		delete nor1; delete nor2;
-		mesh.normal.push_back({ nor3.x(), nor3.y(), nor3.z() });
-		mesh.normal.push_back({ nor4.x(), nor4.y(), nor4.z() });
-	}
+    // normal stand for one triangle
+    for (int i = 0; i < ptNum; i+=2) {
+        osg::Vec2 *nor1 = 0;
+        nor1 = new osg::Vec2(mesh.vertex[baseCnt + 2 * (i + 1)][0], mesh.vertex[baseCnt + 2 * (i + 1)][1]);
+        *nor1 = *nor1 - osg::Vec2(mesh.vertex[baseCnt + 2 * i][0], mesh.vertex[baseCnt + 2 * i][1]);
+        osg::Vec3 nor3 = osg::Vec3(-nor1->y(), nor1->x(), 0);
+        nor3.normalize();
+        delete nor1;
+        mesh.normal.push_back({ nor3.x(), nor3.y(), nor3.z() });
+        mesh.normal.push_back({ nor3.x(), nor3.y(), nor3.z() });
+        mesh.normal.push_back({ nor3.x(), nor3.y(), nor3.z() });
+        mesh.normal.push_back({ nor3.x(), nor3.y(), nor3.z() });
+    }
 }
 
 /**
@@ -265,90 +254,119 @@ Polygon_Mesh convert_polygon(
     ) {
     double bottom = 0.0;
     Polygon_Mesh mesh;
-	OGRLinearRing* pRing = polyon->getExteriorRing();
-	int ptNum = pRing->getNumPoints();
-	if (ptNum < 4) {
-		return mesh;
-	}
-	int pt_count = 0;
-	for (int i = 0; i < ptNum; i++) {
-		OGRPoint pt;
-		pRing->getPoint(i, &pt);
-		float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
-		float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
-		mesh.vertex.push_back({ point_x , point_y, (float)bottom });
-		mesh.vertex.push_back({ point_x , point_y, (float)height });
-	}
-	int vertex_num = mesh.vertex.size() / 2;
-	for (int i = 0; i < vertex_num; i++) {
-		if (i != vertex_num - 1) {
-			mesh.index.push_back({ 2 * i,2 * i + 1,2 * (i + 1) + 1 });
-			mesh.index.push_back({ 2 * (i + 1),2 * i,2 * (i + 1) + 1 });
-		}
-	}
-	calc_normal(0, vertex_num, mesh);
-	pt_count += 2 * vertex_num;
+    OGRLinearRing* pRing = polyon->getExteriorRing();
+    int ptNum = pRing->getNumPoints();
+    if (ptNum < 4) {
+        return mesh;
+    }
+    int pt_count = 0;
+    for (int i = 0; i < ptNum; i++) {
+        OGRPoint pt;
+        pRing->getPoint(i, &pt);
+        float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
+        float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
+        mesh.vertex.push_back({ point_x , point_y, (float)bottom });
+        mesh.vertex.push_back({ point_x , point_y, (float)height });
+        // double vertex
+        if (i != 0 && i != ptNum - 1) {
+            mesh.vertex.push_back({ point_x , point_y, (float)bottom });
+            mesh.vertex.push_back({ point_x , point_y, (float)height });
+        }
+    }
+    int vertex_num = mesh.vertex.size() / 2;
+    for (int i = 0; i < vertex_num; i += 2) {
+        if (i != vertex_num - 1) {
+            mesh.index.push_back({ 2 * i,2 * i + 1,2 * (i + 1) + 1 });
+            mesh.index.push_back({ 2 * (i + 1),2 * i,2 * (i + 1) + 1 });
+        }
+    }
+    calc_normal(0, vertex_num, mesh);
+    pt_count += 2 * vertex_num;
 
-	int inner_count = polyon->getNumInteriorRings();
-	for (int j = 0; j < inner_count; j++) {
-		OGRLinearRing* pRing = polyon->getInteriorRing(j);
-		int ptNum = pRing->getNumPoints();
-		if (ptNum < 4) {
-			continue;
-		}
-		for (int i = 0; i < ptNum; i++) {
-			OGRPoint pt;
-			pRing->getPoint(i, &pt);
-			float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
-			float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
-			mesh.vertex.push_back({ point_x , point_y, (float)bottom });
-			mesh.vertex.push_back({ point_x , point_y, (float)height });
-			if (i != ptNum - 1) {
-				mesh.index.push_back({ pt_count + 2 * i, pt_count + 2 * i + 1, pt_count + 2 * (i + 1) });
-				mesh.index.push_back({ pt_count + 2 * (i + 1), pt_count + 2 * i, pt_count + 2 * (i + 1) });
-			}
-		}
-		calc_normal(pt_count, ptNum, mesh);
-		pt_count = mesh.vertex.size();
-	}
-	// top and bottom
-	{
-		using Point = std::array<double, 2>;
-		std::vector<std::vector<Point>> polygon(1);
-		{
-			OGRLinearRing* pRing = polyon->getExteriorRing();
-			int ptNum = pRing->getNumPoints();
-			for (int i = 0; i < ptNum; i++)
-			{
-				OGRPoint pt;
-				pRing->getPoint(i, &pt);
-				float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
-				float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
-				polygon[0].push_back({ point_x, point_y });
-			}
-		}
-		int inner_count = polyon->getNumInteriorRings();
-		for (int j = 0; j < inner_count; j++)
-		{
-			polygon.resize(polygon.size() + 1);
-			OGRLinearRing* pRing = polyon->getInteriorRing(j);
-			int ptNum = pRing->getNumPoints();
-			for (int i = 0; i < ptNum; i++)
-			{
-				OGRPoint pt;
-				pRing->getPoint(i, &pt);
-				polygon[j].push_back({ pt.getX(), pt.getY() });
-			}
-		}
-		std::vector<int> indices = mapbox::earcut<int>(polygon);
-		// 剖分三角形
-		for (int idx = 0; idx < indices.size(); idx += 3) {
-			mesh.index.push_back({ 2 * indices[idx], 2 * indices[idx + 2], 2 * indices[idx + 1] });
-		}
-		for (int idx = 0; idx < indices.size(); idx += 3) {
-			mesh.index.push_back({ 2 * indices[idx] + 1, 2 * indices[idx + 1] + 1, 2 * indices[idx + 2] + 1});
-		}
-	}
+    int inner_count = polyon->getNumInteriorRings();
+    for (int j = 0; j < inner_count; j++) {
+        OGRLinearRing* pRing = polyon->getInteriorRing(j);
+        int ptNum = pRing->getNumPoints();
+        if (ptNum < 4) {
+            continue;
+        }
+        for (int i = 0; i < ptNum; i++) {
+            OGRPoint pt;
+            pRing->getPoint(i, &pt);
+            float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
+            float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
+            mesh.vertex.push_back({ point_x , point_y, (float)bottom });
+            mesh.vertex.push_back({ point_x , point_y, (float)height });
+            // double vertex
+            if (i != 0 && i != ptNum - 1) {
+                mesh.vertex.push_back({ point_x , point_y, (float)bottom });
+                mesh.vertex.push_back({ point_x , point_y, (float)height });
+            }
+        }
+        vertex_num = mesh.vertex.size() / 2 - pt_count;
+        for (int i = 0; i < vertex_num; i += 2) {
+            if (i != vertex_num - 1) {
+                mesh.index.push_back({ pt_count + 2 * i, pt_count + 2 * i + 1, pt_count + 2 * (i + 1) });
+                mesh.index.push_back({ pt_count + 2 * (i + 1), pt_count + 2 * i, pt_count + 2 * (i + 1) });
+            }
+        }
+        calc_normal(pt_count, ptNum, mesh);
+        pt_count = mesh.vertex.size();
+    }
+    // top and bottom
+    {
+        using Point = std::array<double, 2>;
+        std::vector<std::vector<Point>> polygon(1);
+        {
+            OGRLinearRing* pRing = polyon->getExteriorRing();
+            int ptNum = pRing->getNumPoints();
+            for (int i = 0; i < ptNum; i++)
+            {
+                OGRPoint pt;
+                pRing->getPoint(i, &pt);
+                float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
+                float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
+                polygon[0].push_back({ point_x, point_y });
+                mesh.vertex.push_back({ point_x , point_y, (float)bottom });
+                mesh.vertex.push_back({ point_x , point_y, (float)height });
+                mesh.normal.push_back({ 0,0,-1 });
+                mesh.normal.push_back({ 0,0,1 });
+            }
+        }
+        int inner_count = polyon->getNumInteriorRings();
+        for (int j = 0; j < inner_count; j++)
+        {
+            polygon.resize(polygon.size() + 1);
+            OGRLinearRing* pRing = polyon->getInteriorRing(j);
+            int ptNum = pRing->getNumPoints();
+            for (int i = 0; i < ptNum; i++)
+            {
+                OGRPoint pt;
+                pRing->getPoint(i, &pt);
+                float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
+                float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
+                polygon[j].push_back({ point_x, point_y });
+                mesh.vertex.push_back({ point_x , point_y, (float)bottom });
+                mesh.vertex.push_back({ point_x , point_y, (float)height });
+                mesh.normal.push_back({ 0,0,-1 });
+                mesh.normal.push_back({ 0,0,1 });
+            }
+        }
+        std::vector<int> indices = mapbox::earcut<int>(polygon);
+        // 剖分三角形
+        for (int idx = 0; idx < indices.size(); idx += 3) {
+            mesh.index.push_back({ 
+                pt_count + 2 * indices[idx], 
+                pt_count + 2 * indices[idx + 2], 
+                pt_count + 2 * indices[idx + 1] });
+        }
+        for (int idx = 0; idx < indices.size(); idx += 3) {
+            mesh.index.push_back({ 
+                pt_count + 2 * indices[idx] + 1, 
+                pt_count + 2 * indices[idx + 1] + 1, 
+                pt_count + 2 * indices[idx + 2] + 1});
+        }
+    }
     return mesh;
 }
 
@@ -522,9 +540,9 @@ void put_val(std::string& buf, T val) {
 
 template<class T>
 void alignment_buffer(std::vector<T>& buf) {
-	while (buf.size() % 4 != 0) {
-		buf.push_back(0x00);
-	}
+    while (buf.size() % 4 != 0) {
+        buf.push_back(0x00);
+    }
 }
 
 #define SET_MIN(x,v) do{ if (x > v) x = v; }while (0);
@@ -532,10 +550,10 @@ void alignment_buffer(std::vector<T>& buf) {
 
 // convert poly-mesh to glb buffer
 std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
-	vector<osg::ref_ptr<osg::Geometry>> osg_Geoms;
-	for (auto& mesh : meshes) {
-		osg_Geoms.push_back(make_triangle_mesh(mesh));
-	}
+    vector<osg::ref_ptr<osg::Geometry>> osg_Geoms;
+    for (auto& mesh : meshes) {
+        osg_Geoms.push_back(make_triangle_mesh(mesh));
+    }
     tinygltf::TinyGLTF gltf;
     tinygltf::Model model;
     // model.name = model_name;
@@ -547,54 +565,54 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     for (int j = 0; j < 3; j++)
     {
         for (int i = 0; i < meshes.size(); i++) {
-			if (osg_Geoms[i]->getNumPrimitiveSets() == 0) continue;
+            if (osg_Geoms[i]->getNumPrimitiveSets() == 0) continue;
             if (j == 0) {
                 // indc
-				osg::PrimitiveSet* ps = osg_Geoms[i]->getPrimitiveSet(0);
-				int idx_size = ps->getNumIndices();
-				int max_idx = 0;
+                osg::PrimitiveSet* ps = osg_Geoms[i]->getPrimitiveSet(0);
+                int idx_size = ps->getNumIndices();
+                int max_idx = 0;
 
-				const osg::DrawElementsUShort* drawElements = static_cast<const osg::DrawElementsUShort*>(ps);
-				int IndNum = drawElements->getNumIndices();
-				for (int m = 0; m < IndNum; m++)
-				{
-					unsigned short idx = drawElements->at(m);
-					put_val(buffer.data, idx);
-					SET_MAX(max_idx, idx);
-				}
-					
+                const osg::DrawElementsUShort* drawElements = static_cast<const osg::DrawElementsUShort*>(ps);
+                int IndNum = drawElements->getNumIndices();
+                for (int m = 0; m < IndNum; m++)
+                {
+                    unsigned short idx = drawElements->at(m);
+                    put_val(buffer.data, idx);
+                    SET_MAX(max_idx, idx);
+                }
+                    
                 tinygltf::Accessor acc;
                 acc.bufferView = 0;
                 acc.byteOffset = acc_offset[j];
-				alignment_buffer(buffer.data);
+                alignment_buffer(buffer.data);
                 acc_offset[j] = buffer.data.size();
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
                 acc.count = idx_size;
                 acc.type = TINYGLTF_TYPE_SCALAR;
-				acc.maxValues = { (double)max_idx };
-				acc.minValues = { 0.0 };
+                acc.maxValues = { (double)max_idx };
+                acc.minValues = { 0.0 };
                 model.accessors.push_back(acc);
             }
             else if( j == 1){
-				osg::Array* va = osg_Geoms[i]->getVertexArray();
-				osg::Vec3Array* v3f = (osg::Vec3Array*)va;
-				int vec_size = v3f->size();
-				std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
-				std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
-				for (int vidx = 0; vidx < vec_size; vidx++) {
-					osg::Vec3f point = v3f->at(vidx);
-					vector<float> vertex = { point.x(), point.y(), point.z()};
-					for (int i = 0; i < 3; i++)
-					{
-						put_val(buffer.data, vertex[i]);
-						SET_MAX(box_max[i], vertex[i]);
-						SET_MIN(box_min[i], vertex[i]);
-					}
+                osg::Array* va = osg_Geoms[i]->getVertexArray();
+                osg::Vec3Array* v3f = (osg::Vec3Array*)va;
+                int vec_size = v3f->size();
+                std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
+                std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
+                for (int vidx = 0; vidx < vec_size; vidx++) {
+                    osg::Vec3f point = v3f->at(vidx);
+                    vector<float> vertex = { point.x(), point.y(), point.z()};
+                    for (int i = 0; i < 3; i++)
+                    {
+                        put_val(buffer.data, vertex[i]);
+                        SET_MAX(box_max[i], vertex[i]);
+                        SET_MIN(box_min[i], vertex[i]);
+                    }
                 }
                 tinygltf::Accessor acc;
                 acc.bufferView = 1;
                 acc.byteOffset = acc_offset[j];
-				alignment_buffer(buffer.data);
+                alignment_buffer(buffer.data);
                 acc_offset[j] = buffer.data.size() - buf_offset;
                 acc.count = vec_size;
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
@@ -605,34 +623,34 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
             }
             else if (j == 2) {
                 // normal
-				osg::Array* na = osg_Geoms[i]->getNormalArray();
-				if (!na) continue;
-				osg::Vec3Array* v3f = (osg::Vec3Array*)na;
-				std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
-				std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
-				int normal_size = v3f->size();
-				for (int vidx = 0; vidx < normal_size; vidx++)
-				{
-					osg::Vec3f point = v3f->at(vidx);
-					vector<float> normal = { point.x(), point.y(), point.z() };
-					
-					for (int i = 0; i < 3; i++)
-					{
-						put_val(buffer.data, normal[i]);
-						SET_MAX(box_max[i], normal[i]);
-						SET_MIN(box_min[i], normal[i]);
-					}
-				}
+                osg::Array* na = osg_Geoms[i]->getNormalArray();
+                if (!na) continue;
+                osg::Vec3Array* v3f = (osg::Vec3Array*)na;
+                std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
+                std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
+                int normal_size = v3f->size();
+                for (int vidx = 0; vidx < normal_size; vidx++)
+                {
+                    osg::Vec3f point = v3f->at(vidx);
+                    vector<float> normal = { point.x(), point.y(), point.z() };
+                    
+                    for (int i = 0; i < 3; i++)
+                    {
+                        put_val(buffer.data, normal[i]);
+                        SET_MAX(box_max[i], normal[i]);
+                        SET_MIN(box_min[i], normal[i]);
+                    }
+                }
                 tinygltf::Accessor acc;
                 acc.bufferView = 2;
                 acc.byteOffset = acc_offset[j];
-				alignment_buffer(buffer.data);
+                alignment_buffer(buffer.data);
                 acc_offset[j] = buffer.data.size() - buf_offset;
                 acc.count = normal_size;
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
                 acc.type = TINYGLTF_TYPE_VEC3;
-				acc.minValues = box_min;
-				acc.maxValues = box_max;
+                acc.minValues = box_min;
+                acc.maxValues = box_max;
                 model.accessors.push_back(acc);
             }
         }
@@ -643,10 +661,10 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
         }
         else {
             bfv.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-			bfv.byteStride = 4 * 3;
+            bfv.byteStride = 4 * 3;
         }
         bfv.byteOffset = buf_offset;
-		alignment_buffer(buffer.data);
+        alignment_buffer(buffer.data);
         bfv.byteLength = buffer.data.size() - buf_offset;
         buf_offset = buffer.data.size();
         model.bufferViews.push_back(bfv);
@@ -686,40 +704,40 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     model.defaultScene = 0;
 
     /// --------------
-	if (1) {
-		tinygltf::Material material;
-		material.name = "default";
-// 		tinygltf::Parameter baseColorFactor;
-// 		baseColorFactor.number_array = { 1,1,1,1 };
-// 		material.values["baseColorFactor"] = baseColorFactor;
-		tinygltf::Parameter metallicFactor;
-		metallicFactor.number_value = new double(0.3);
-		material.values["metallicFactor"] = metallicFactor;
-		tinygltf::Parameter roughnessFactor;
-		roughnessFactor.number_value = new double(0.7);
-		material.values["roughnessFactor"] = roughnessFactor;
-		/// ---------
-// 		tinygltf::Parameter emissiveFactor;
-// 		emissiveFactor.number_array = { 0,0,0 };
-// 		material.additionalValues["emissiveFactor"] = emissiveFactor;
-// 		tinygltf::Parameter alphaMode;
-// 		alphaMode.string_value = "OPAQUE";
-// 		material.additionalValues["alphaMode"] = alphaMode;
-// 		tinygltf::Parameter doubleSided;
-// 		doubleSided.bool_value = false;
-// 		material.additionalValues["doubleSided"] = doubleSided;
-		model.materials = { material };
-	}
-	else {
-		model.extensionsRequired = { "KHR_technique_webgl" };
-		model.extensionsUsed = { "KHR_technique_webgl" };
-		// add shader buffer view
-		{
-			tinygltf::BufferView bfv_vs;
-			bfv_vs.buffer = 0;
-			bfv_vs.byteOffset = buf_offset;
-			bfv_vs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-			std::string vs_shader = R"(
+    if (1) {
+        tinygltf::Material material;
+        material.name = "default";
+//      tinygltf::Parameter baseColorFactor;
+//      baseColorFactor.number_array = { 1,1,1,1 };
+//      material.values["baseColorFactor"] = baseColorFactor;
+        tinygltf::Parameter metallicFactor;
+        metallicFactor.number_value = new double(0.3);
+        material.values["metallicFactor"] = metallicFactor;
+        tinygltf::Parameter roughnessFactor;
+        roughnessFactor.number_value = new double(0.7);
+        material.values["roughnessFactor"] = roughnessFactor;
+        /// ---------
+//      tinygltf::Parameter emissiveFactor;
+//      emissiveFactor.number_array = { 0,0,0 };
+//      material.additionalValues["emissiveFactor"] = emissiveFactor;
+//      tinygltf::Parameter alphaMode;
+//      alphaMode.string_value = "OPAQUE";
+//      material.additionalValues["alphaMode"] = alphaMode;
+//      tinygltf::Parameter doubleSided;
+//      doubleSided.bool_value = false;
+//      material.additionalValues["doubleSided"] = doubleSided;
+        model.materials = { material };
+    }
+    else {
+        model.extensionsRequired = { "KHR_technique_webgl" };
+        model.extensionsUsed = { "KHR_technique_webgl" };
+        // add shader buffer view
+        {
+            tinygltf::BufferView bfv_vs;
+            bfv_vs.buffer = 0;
+            bfv_vs.byteOffset = buf_offset;
+            bfv_vs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+            std::string vs_shader = R"(
 precision highp float;
 uniform mat4 u_modelViewMatrix;
 uniform mat4 u_projectionMatrix;
@@ -733,17 +751,17 @@ void main(void)
 }
 )";
 
-			buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
-			bfv_vs.byteLength = buffer.data.size() - buf_offset;
-			alignment_buffer(buffer.data);
-			buf_offset = buffer.data.size();
-			model.bufferViews.push_back(bfv_vs);
+            buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
+            bfv_vs.byteLength = buffer.data.size() - buf_offset;
+            alignment_buffer(buffer.data);
+            buf_offset = buffer.data.size();
+            model.bufferViews.push_back(bfv_vs);
 
-			tinygltf::BufferView bfv_fs;
-			bfv_fs.buffer = 0;
-			bfv_fs.byteOffset = buf_offset;
-			bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-			std::string fs_shader = R"(
+            tinygltf::BufferView bfv_fs;
+            bfv_fs.buffer = 0;
+            bfv_fs.byteOffset = buf_offset;
+            bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+            std::string fs_shader = R"(
 precision highp float;
 //varying vec2 v_texcoord0;
 //uniform sampler2D u_diffuse;
@@ -752,35 +770,35 @@ void main(void)
   gl_FragColor = vec4(0.8,0.8,0.8,1.0);
 }
 )";
-			buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
-			bfv_fs.byteLength = buffer.data.size() - buf_offset;
-			alignment_buffer(buffer.data);
-			buf_offset = buffer.data.size();
-			model.bufferViews.push_back(bfv_fs);
-		}
-		// shader
-		{
-			int buf_view = 3;
-			{
-				tinygltf::Shader shader;
-				shader.bufferView = buf_view++;
-				shader.type = TINYGLTF_SHADER_TYPE_VERTEX_SHADER;
-				model.shaders.push_back(shader);
-			}
-			{
-				tinygltf::Shader shader;
-				shader.bufferView = buf_view++;
-				shader.type = TINYGLTF_SHADER_TYPE_FRAGMENT_SHADER;
-				model.shaders.push_back(shader);
-			}
-		}
-		// tech
-		{
-			tinygltf::Technique tech;
-			tech.tech_string = R"(
+            buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
+            bfv_fs.byteLength = buffer.data.size() - buf_offset;
+            alignment_buffer(buffer.data);
+            buf_offset = buffer.data.size();
+            model.bufferViews.push_back(bfv_fs);
+        }
+        // shader
+        {
+            int buf_view = 3;
+            {
+                tinygltf::Shader shader;
+                shader.bufferView = buf_view++;
+                shader.type = TINYGLTF_SHADER_TYPE_VERTEX_SHADER;
+                model.shaders.push_back(shader);
+            }
+            {
+                tinygltf::Shader shader;
+                shader.bufferView = buf_view++;
+                shader.type = TINYGLTF_SHADER_TYPE_FRAGMENT_SHADER;
+                model.shaders.push_back(shader);
+            }
+        }
+        // tech
+        {
+            tinygltf::Technique tech;
+            tech.tech_string = R"(
 {
       "attributes": {
-		"a_batchid": "batchid",
+        "a_batchid": "batchid",
         "a_position": "position"
       },
       "parameters": {
@@ -813,12 +831,12 @@ void main(void)
         "u_projectionMatrix": "projectionMatrix"
       }
     })";
-			model.techniques = { tech };
-		}
-		// program
-		{
-			tinygltf::Program prog;
-			prog.prog_string = R"(
+            model.techniques = { tech };
+        }
+        // program
+        {
+            tinygltf::Program prog;
+            prog.prog_string = R"(
     {
       "attributes": [
         "a_position"
@@ -827,15 +845,15 @@ void main(void)
       "fragmentShader": 1
     }
 )";
-			model.programs = { prog };
-		}
+            model.programs = { prog };
+        }
 
-		{
-			tinygltf::Material material;
-			material.name = "shapefile";
-			//material.values[""]
-			char shaderBuffer[512];
-			sprintf(shaderBuffer, R"(
+        {
+            tinygltf::Material material;
+            material.name = "shapefile";
+            //material.values[""]
+            char shaderBuffer[512];
+            sprintf(shaderBuffer, R"(
             {
       "extensions": {
         "KHR_technique_webgl": {
@@ -846,11 +864,11 @@ void main(void)
         }
       },
       "technique": 0})");
-			material.shaderMaterial = shaderBuffer;
-			model.materials.push_back(material);
-		}
-	}
-	model.buffers.push_back(std::move(buffer));
+            material.shaderMaterial = shaderBuffer;
+            model.materials.push_back(material);
+        }
+    }
+    model.buffers.push_back(std::move(buffer));
     model.asset.version = "2.0";
     model.asset.generator = "fanfan";
     
