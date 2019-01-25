@@ -417,6 +417,10 @@ extern "C" bool shp23dtile(
         LOG_E("no extent found in shapefile");
         return false;
     }
+    if (envelop.MaxX > 180 || envelop.MinX < -180 || envelop.MaxY > 90 || envelop.MinY < -90) {
+        LOG_E("only support WGS-84 now");
+        return false;
+    }
 
     bbox bound(envelop.MinX, envelop.MaxX, envelop.MinY, envelop.MaxY);
     node root(bound);
