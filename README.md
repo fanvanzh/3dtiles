@@ -100,6 +100,8 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 
 shapefile 中需要有字段来表示高度信息。
 
+仅支持WGS84坐标系的矢量数据。
+
 
 **3、通用模型转gltf：**
 
