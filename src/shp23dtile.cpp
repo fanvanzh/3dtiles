@@ -430,7 +430,10 @@ extern "C" bool shp23dtile(
     {
         OGRGeometry *poGeometry;
         poGeometry = poFeature->GetGeometryRef();
-
+        if (poGeometry == NULL) {
+            OGRFeature::DestroyFeature(poFeature);
+            continue;
+        }
         OGREnvelope envelop;
         poGeometry->getEnvelope(&envelop);
         bbox bound(envelop.MinX, envelop.MaxX, envelop.MinY, envelop.MaxY);
