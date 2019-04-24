@@ -127,7 +127,7 @@ void fill_4BitImage(vector<unsigned char>& jpeg_buf, osg::Image* img, int& width
             y_pos += 4;
         }
     }
-    int max_size = 512;
+    int max_size = 2048;
     if (width > max_size || height > max_size) {
         int new_w = width, new_h = height;
         while (new_w > max_size || new_h > max_size)

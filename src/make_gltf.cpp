@@ -113,6 +113,20 @@ void alignment_buffer(std::vector<T>& buf) {
     }
 }
 
+void write_jpegbuf(tinygltf::Buffer &buffer, int width, int height, int comp, std::vector<unsigned char> &jpeg_buf)
+{
+	int buf_size = buffer.data.size();
+	buffer.data.reserve(buffer.data.size() + width * height * comp);
+	stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, comp, jpeg_buf.data(), 80);
+}
+
+void write_pngbuf(tinygltf::Buffer &buffer, int width, int height, int comp, std::vector<unsigned char> &png_buf)
+{
+	int buf_size = buffer.data.size();
+	buffer.data.reserve(buffer.data.size() + width * height * comp);
+	stbi_write_png_to_func(write_buf, &buffer.data, width, height, comp, png_buf.data(), 4*width);
+}
+
 bool make_glb_buf(std::string path, std::string& glb_buff) {
     path = osg_string(path.c_str());
     vector<string> fileNames = { path };
@@ -396,60 +410,68 @@ bool make_glb_buf(std::string path, std::string& glb_buff) {
         {
             int buf_view = 4;
             for (auto tex : infoVisitor.texture_array) {
-                std::vector<unsigned char> jpeg_buf;
-                jpeg_buf.reserve(512 * 512 * 3);
+                std::vector<unsigned char> image_buf;
+                image_buf.reserve(512 * 512 * 3);
                 int width, height, comp;
-                {
-                    if (tex) {
-                        if (tex->getNumImages() > 0) {
-                            osg::Image* img = tex->getImage(0);
-                            if (img) {
-                                width = img->s();
-                                height = img->t();
-                                comp = img->getPixelSizeInBits();
-                                if (comp == 8) comp = 1;
-                                if (comp == 24) comp = 3;
-                                if (comp == 4) {
-                                    comp = 3;
-                                    fill_4BitImage(jpeg_buf, img, width, height);
-                                }
-                                else
-                                {
-                                    unsigned row_step = img->getRowStepInBytes();
-                                    unsigned row_size = img->getRowSizeInBytes();
-                                    for (size_t i = 0; i < height; i++)
-                                    {
-                                        jpeg_buf.insert(jpeg_buf.end(),
-                                            img->data() + row_step * i,
-                                            img->data() + row_step * i + row_size);
-                                    }
-                                }
-                            }
-                        }
-                    }
+				if (!tex) continue;
+				int numImages = tex->getNumImages();
+				for (int i=0; i < numImages; i++)
+				{
+					osg::Image* img = tex->getImage(i);
+					if (!img) continue;
+					width = img->s();
+					height = img->t();
+					comp = img->getPixelSizeInBits();
+					if (comp == 8) comp = 1;
+					if (comp == 24) comp = 3;
+					if (comp == 4) {
+						comp = 3;
+						fill_4BitImage(image_buf, img, width, height);
+						write_jpegbuf(buffer, width, height, comp, image_buf);
+					}
+					else if(comp == 1 || comp == 3)
+					{
+						unsigned row_step = img->getRowStepInBytes();
+						unsigned row_size = img->getRowSizeInBytes();
+						for (size_t i = 0; i < height; i++)
+						{
+							image_buf.insert(image_buf.end(),
+								img->data() + row_step * i,
+								img->data() + row_step * i + row_size);
+						}
+						write_jpegbuf(buffer, width, height, comp, image_buf);
+					}
+					else if(comp == 32){
+						// write png file
+						unsigned row_step = img->getRowStepInBytes();
+						unsigned row_size = img->getRowSizeInBytes();
+						for (size_t i = 0; i < height; i++)
+						{
+							image_buf.insert(image_buf.end(),
+								img->data() + row_step * i,
+								img->data() + row_step * i + row_size);
+						}
+						write_pngbuf(buffer, width, height, 4, image_buf);
+						//LOG_E("%s","does not support png image");
+					}
+					// save the image to bufferview
+					tinygltf::Image image;
+					if (comp == 32) {
+						image.mimeType = "image/png";
+					}
+					else {
+						image.mimeType = "image/jpeg";
+					}
+					image.bufferView = buf_view++;
+					model.images.push_back(image);
+					tinygltf::BufferView bfv;
+					bfv.buffer = 0;
+					bfv.byteOffset = buf_offset;
+					bfv.byteLength = buffer.data.size() - buf_offset;
+					alignment_buffer(buffer.data);
+					buf_offset = buffer.data.size();
+					model.bufferViews.push_back(bfv);
                 }
-                if (!jpeg_buf.empty()) {
-                    int buf_size = buffer.data.size();
-                    buffer.data.reserve(buffer.data.size() + width * height * comp);
-                    stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, comp, jpeg_buf.data(), 80);
-                }
-                else {
-                    std::vector<char> v_data;
-                    width = height = 256;
-                    v_data.resize(width * height * 3);
-                    stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, v_data.data(), 80);
-                }
-                tinygltf::Image image;
-                image.mimeType = "image/jpeg";
-                image.bufferView = buf_view++;
-                model.images.push_back(image);
-                tinygltf::BufferView bfv;
-                bfv.buffer = 0;
-                bfv.byteOffset = buf_offset;
-                bfv.byteLength = buffer.data.size() - buf_offset;
-                alignment_buffer(buffer.data);
-                buf_offset = buffer.data.size();
-                model.bufferViews.push_back(bfv);
             }
         }
         // mesh 
@@ -470,14 +492,19 @@ bool make_glb_buf(std::string path, std::string& glb_buff) {
                 if (infoVisitor.texture_array.size() > 1) {
                     auto geomtry = infoVisitor.geometry_array[i];
                     auto tex = infoVisitor.texture_map[geomtry];
-                    for (auto texture : infoVisitor.texture_array) {
-                        if (tex != texture) {
-                            primits.material++;
-                        }
-                        else {
-                            break;
-                        }
-                    }
+					if (tex != 0) {
+						for (auto texture : infoVisitor.texture_array) {
+							if (tex != texture) {
+								primits.material++;
+							}
+							else {
+								break;
+							}
+						}
+					}
+					else { // 不存在纹理，采用第一张纹理
+						primits.material = 0;
+					}
                 }
                 primits.mode = TINYGLTF_MODE_TRIANGLES;
                 mesh.primitives = {
@@ -485,7 +512,6 @@ bool make_glb_buf(std::string path, std::string& glb_buff) {
                 };
                 model.meshes.push_back(mesh);
             }
-
             // 加载所有的模型
             for (int i = 0; i < MeshNum; i++) {
                 tinygltf::Node node;
@@ -528,21 +554,21 @@ bool make_glb_buf(std::string path, std::string& glb_buff) {
                 material.values["baseColorTexture"] = baseColorTexture;
 
                 tinygltf::Parameter metallicFactor;
-                metallicFactor.number_value = new double(0.3);
+                metallicFactor.number_value = new double(0);
                 material.values["metallicFactor"] = metallicFactor;
                 tinygltf::Parameter roughnessFactor;
-                roughnessFactor.number_value = new double(0.7);
+                roughnessFactor.number_value = new double(1);
                 material.values["roughnessFactor"] = roughnessFactor;
                 /// ---------
-                tinygltf::Parameter emissiveFactor;
-                emissiveFactor.number_array = { 0.0,0.0,0.0 };
-                material.additionalValues["emissiveFactor"] = emissiveFactor;
-                tinygltf::Parameter alphaMode;
-                alphaMode.string_value = "OPAQUE";
-                material.additionalValues["alphaMode"] = alphaMode;
-                tinygltf::Parameter doubleSided;
-                doubleSided.bool_value = new bool(false);
-                material.additionalValues["doubleSided"] = doubleSided;
+                //tinygltf::Parameter emissiveFactor;
+                //emissiveFactor.number_array = { 0.0,0.0,0.0 };
+                //material.additionalValues["emissiveFactor"] = emissiveFactor;
+                //tinygltf::Parameter alphaMode;
+                //alphaMode.string_value = "OPAQUE";
+                //material.additionalValues["alphaMode"] = alphaMode;
+                //tinygltf::Parameter doubleSided;
+                //doubleSided.bool_value = new bool(false);
+                //material.additionalValues["doubleSided"] = doubleSided;
                 //
                 model.materials.push_back(material);
             }
@@ -563,7 +589,7 @@ bool make_glb_buf(std::string path, std::string& glb_buff) {
             }
         }
         model.asset.version = "2.0";
-        model.asset.generator = "fanfan";
+        model.asset.generator = "fanvanzh";
 
         glb_buff = gltf.Serialize(&model);
     }

@@ -351,6 +351,10 @@ using ColorValue = std::array<double, 4>;
       bool_value = new bool(*other.bool_value);
     if (other.number_value)
       number_value = new double(*other.number_value);
+	string_value = other.string_value;
+	number_array = other.number_array;
+	json_double_value = other.json_double_value;
+	json_int_value = other.json_int_value;
   }
   bool *bool_value = 0;
   double *number_value = 0;
