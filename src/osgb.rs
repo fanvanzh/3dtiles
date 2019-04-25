@@ -245,9 +245,9 @@ pub fn osgb_batch_convert(
 
     let out_dir: String = dir_dest.to_string_lossy().into();
     for x in tile_array {
-        let mut path = x.path;
-        let mut json_val : serde_json::Value = serde_json::from_str(&x.json).unwrap();
-        let mut tile_box = json_val["boundingVolume"]["box"].as_array().unwrap();
+        let path = x.path;
+        let json_val : serde_json::Value = serde_json::from_str(&x.json).unwrap();
+        let tile_box = json_val["boundingVolume"]["box"].as_array().unwrap();
         let tile_object = json!(
             {
                 "boundingVolume": {

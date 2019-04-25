@@ -1,5 +1,4 @@
 extern crate cc;
-use std::fs;
 use std::env;
 use std::process::{Command, Stdio};
 
@@ -94,7 +93,6 @@ fn build_linux_unkonw() {
 }
 
 fn main() {
-    use std::env;
     match env::var("TARGET") {
         Ok(val) => {
             match val.as_str() {
