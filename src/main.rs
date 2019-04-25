@@ -147,7 +147,7 @@ fn convert_b3dm(src: &str, dest: &str) {
     use std::fs::File;
 
     use std::io::Cursor;
-    use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
+    use byteorder::{LittleEndian, ReadBytesExt};
     //use std::io::SeekFrom;
 
     if !dest.ends_with(".gltf") && !dest.ends_with(".glb") {
@@ -205,6 +205,7 @@ fn convert_gltf(src: &str, dest: &str) {
     }
 }
 
+#[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 struct ModelMetadata {
     pub version: String,

@@ -11,9 +11,11 @@ use osgb::rayon::prelude::*;
 use std::path::Path;
 use std::error::Error;
 
+
 extern "C" {
     pub fn make_gltf(in_path: *const u8, out_path: *const u8) -> bool;
 
+    #[allow(dead_code)]
     fn osgb23dtile(name_in: *const u8, name_out: *const u8) -> bool;
 
     fn osgb23dtile_path(
@@ -26,6 +28,7 @@ extern "C" {
         max_lvl: i32,
     ) -> *mut libc::c_void;
 
+    #[allow(dead_code)]
     fn osgb2glb(name_in: *const u8, name_out: *const u8) -> bool;
 
     fn transform_c(radian_x: f64, radian_y: f64, height_min: f64, ptr: *mut f64);
@@ -34,11 +37,14 @@ extern "C" {
 
     fn degree2rad( val:f64 ) -> f64;
 
+    #[allow(dead_code)]
     fn meter_to_lati(m:f64) -> f64;
 
+    #[allow(dead_code)]
     fn meter_to_longti(m:f64, lati:f64) -> f64;
 }
 
+#[allow(dead_code)]
 fn walk_path(dir: &Path, cb: &mut FnMut(&str)) -> io::Result<()> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
@@ -58,6 +64,7 @@ fn walk_path(dir: &Path, cb: &mut FnMut(&str)) -> io::Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn osgv_convert(dir_osgb: &str, dir_from: &str, dir_dest: &str) -> Result<(), Box<Error>> {
     unsafe {
         let mut source_vec = dir_osgb.to_string().as_bytes_mut().to_vec();
@@ -107,7 +114,6 @@ pub fn osgb_batch_convert(
 ) -> Result<(), Box<Error>> {
     use std::fs::File;
     use std::io::prelude::*;
-    use std::thread;
     use std::sync::mpsc::channel;
 
     let path = dir.join("Data");
@@ -272,6 +278,7 @@ pub fn osgb_batch_convert(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn get_geometric_error(center_y: f64, lvl: i32) -> f64 {
     use std::f64;
     let x = center_y * f64::consts::PI / 180.0;
