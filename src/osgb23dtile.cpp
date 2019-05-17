@@ -1070,13 +1070,13 @@ std::string encode_tile_json(osg_tree& tree, double x, double y) {
 
     tile += tile_box;
     tile += ",";
-    tile += "\"content\":{ \"url\":";
+    tile += "\"content\":{ \"uri\":";
     // Data/Tile_0/Tile_0.b3dm
-    std::string url_path = "./";
-    url_path += file_name;
-    std::string url = replace(url_path,".osgb",".b3dm");
+    std::string uri_path = "./";
+    uri_path += file_name;
+    std::string uri = replace(uri_path,".osgb",".b3dm");
     tile += "\"";
-    tile += url;
+    tile += uri;
     tile += "\",";
     tile += content_box;
     tile += "},\"children\":[";

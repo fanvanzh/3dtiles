@@ -156,7 +156,7 @@ bool write_tileset_box(
         sprintf(last_buf,"]},\"geometricError\": %f,\
             \"refine\": \"REPLACE\",\
             \"content\": {\
-                \"url\": \"%s\"}}}", geometricError, b3dm_file);
+                \"uri\": \"%s\"}}}", geometricError, b3dm_file);
 
         json_txt += last_buf;
 
@@ -206,7 +206,7 @@ bool write_tileset_box(
             sprintf(last_buf,"]},\"geometricError\": %f,\
                 \"refine\": \"REPLACE\",\
                 \"content\": {\
-                    \"url\": \"%s\"}}}", geometricError, b3dm_file);
+                    \"uri\": \"%s\"}}}", geometricError, b3dm_file);
 
             json_txt += last_buf;
 
@@ -318,7 +318,7 @@ bool write_tileset_box(
                     sprintf(last_buf,"]},\"geometricError\": %f,\
                         \"refine\": \"REPLACE\",\
                         \"content\": {\
-                            \"url\": \"%s\"}}}", geometricError, filename);
+                            \"uri\": \"%s\"}}}", geometricError, filename);
 
                     json_txt += last_buf;
 
