@@ -9,14 +9,10 @@ struct Color {
 };
 
 Color RGB565_RGB(unsigned short color0) {
-    unsigned long temp;
-    temp = (color0 >> 11) * 255 + 16;
-    unsigned char r0 = (unsigned char)((temp / 32 + temp) / 32);
-    temp = ((color0 & 0x07E0) >> 5) * 255 + 32;
-    unsigned char g0 = (unsigned char)((temp / 64 + temp) / 64);
-    temp = (color0 & 0x001F) * 255 + 16;
-    unsigned char b0 = (unsigned char)((temp / 32 + temp) / 32);
-    return Color{ r0,g0,b0 };
+	unsigned char r0 = ((color0 >> 11) & 0x1F) << 3;
+	unsigned char g0 = ((color0 >> 5) & 0x3F) << 2;
+	unsigned char b0 = (color0 & 0x1F) << 3;
+	return Color{ r0, g0, b0 };
 }
 
 Color Mix_Color(
@@ -104,10 +100,10 @@ void fill_4BitImage(vector<unsigned char>& jpeg_buf, osg::Image* img, int& width
         for (size_t i = 0; i < 4; i++)
         {
             unsigned char idx[4];
-            idx[0] = (*pData >> 6) & 0x03;
-            idx[1] = (*pData >> 4) & 0x03;
-            idx[2] = (*pData >> 2) & 0x03;
-            idx[3] = (*pData) & 0x03;
+            idx[3] = (*pData >> 6) & 0x03;
+            idx[2] = (*pData >> 4) & 0x03;
+            idx[1] = (*pData >> 2) & 0x03;
+            idx[0] = (*pData) & 0x03;
             // 4 pixel color
             for (size_t pixel_idx = 0; pixel_idx < 4; pixel_idx++)
             {
