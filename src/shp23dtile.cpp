@@ -175,6 +175,8 @@ struct Polygon_Mesh
     Vextex vertex;
     Index  index;
     Normal normal;
+    // add some addition 
+    float height;
 };
 
 osg::ref_ptr<osg::Geometry> make_triangle_mesh_auto(Polygon_Mesh& mesh) {
@@ -371,7 +373,7 @@ Polygon_Mesh convert_polygon(
 }
 
 std::string make_polymesh(std::vector<Polygon_Mesh>& meshes);
-std::string make_b3dm(std::vector<Polygon_Mesh>& meshes);
+std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool);
 //
 extern "C" bool shp23dtile(
     const char* filename, int layer_id, 
@@ -497,6 +499,7 @@ extern "C" bool shp23dtile(
                 OGRPolygon* polyon = (OGRPolygon*)poGeometry;
                 Polygon_Mesh mesh = convert_polygon(polyon, center_x, center_y, height);
                 mesh.mesh_name = "mesh_" + std::to_string(id);
+                mesh.height = height;
                 v_meshes.push_back(mesh);
             }
             else if (wkbFlatten(poGeometry->getGeometryType()) == wkbMultiPolygon) {
@@ -506,6 +509,7 @@ extern "C" bool shp23dtile(
                     OGRPolygon * polyon = (OGRPolygon*)_multi->getGeometryRef(j);
                     Polygon_Mesh mesh = convert_polygon(polyon, center_x, center_y, height);
                     mesh.mesh_name = "mesh_" + std::to_string(id);
+                    mesh.height = height;
                     v_meshes.push_back(mesh);
                 }
             }
@@ -513,8 +517,13 @@ extern "C" bool shp23dtile(
         }
 
         sprintf(b3dm_file, "%s\\tile\\%d\\%d\\%d.b3dm", dest, _node->_z, _node->_x, _node->_y);
-        std::string b3dm_buf = make_b3dm(v_meshes);
+        std::string b3dm_buf = make_b3dm(v_meshes, true);
         write_file(b3dm_file, b3dm_buf.data(), b3dm_buf.size());
+        // test
+        //sprintf(b3dm_file, "%s\\tile\\%d\\%d\\%d.glb", dest, _node->_z, _node->_x, _node->_y);
+        //std::string glb_buf = make_polymesh(v_meshes);
+        //write_file(b3dm_file, glb_buf.data(), glb_buf.size());
+        //
 
         char b3dm_name[512], tile_json_path[512];
         sprintf(b3dm_name,"./tile/%d/%d/%d.b3dm",_node->_z,_node->_x,_node->_y);
@@ -555,6 +564,23 @@ void alignment_buffer(std::vector<T>& buf) {
 #define SET_MIN(x,v) do{ if (x > v) x = v; }while (0);
 #define SET_MAX(x,v) do{ if (x < v) x = v; }while (0);
 
+tinygltf::Material make_color_material(double r, double g, double b) {
+    tinygltf::Material material;
+    char buf[512];
+    sprintf(buf,"default_%.1f_%.1f_%.1f",r,g,b);
+    material.name = buf;
+    tinygltf::Parameter baseColorFactor;
+    baseColorFactor.number_array = { r,g,b,1 };
+    material.values["baseColorFactor"] = baseColorFactor;
+    tinygltf::Parameter metallicFactor;
+    metallicFactor.number_value = new double(0.3);
+    material.values["metallicFactor"] = metallicFactor;
+    tinygltf::Parameter roughnessFactor;
+    roughnessFactor.number_value = new double(0.7);
+    material.values["roughnessFactor"] = roughnessFactor;
+    return material;
+}
+
 // convert poly-mesh to glb buffer
 std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     vector<osg::ref_ptr<osg::Geometry>> osg_Geoms;
@@ -568,8 +594,9 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     tinygltf::Buffer buffer;
     // buffer_view {index,vertex,normal(texcoord,image)}
     uint32_t buf_offset = 0;
-    uint32_t acc_offset[3] = {0,0,0};
-    for (int j = 0; j < 3; j++)
+    uint32_t acc_offset[4] = {0,0,0,0};
+    int buf_times = 4;
+    for (int j = 0; j < buf_times; j++)
     {
         for (int i = 0; i < meshes.size(); i++) {
             if (osg_Geoms[i]->getNumPrimitiveSets() == 0) continue;
@@ -599,8 +626,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                 acc.maxValues = { (double)max_idx };
                 acc.minValues = { 0.0 };
                 model.accessors.push_back(acc);
-            }
-            else if( j == 1){
+            }else if ( j == 1) {
                 osg::Array* va = osg_Geoms[i]->getVertexArray();
                 osg::Vec3Array* v3f = (osg::Vec3Array*)va;
                 int vec_size = v3f->size();
@@ -627,8 +653,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                 acc.maxValues = box_max;
                 acc.minValues = box_min;
                 model.accessors.push_back(acc);
-            }
-            else if (j == 2) {
+            }else if ( j == 2) {
                 // normal
                 osg::Array* na = osg_Geoms[i]->getNormalArray();
                 if (!na) continue;
@@ -659,11 +684,28 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                 acc.minValues = box_min;
                 acc.maxValues = box_max;
                 model.accessors.push_back(acc);
+            }else if ( j == 3) {
+                // batch id
+                unsigned short batch_id = i;
+                for (auto& vertex : meshes[i].vertex) {
+                    put_val(buffer.data, batch_id);
+                }
+                tinygltf::Accessor acc;
+                acc.bufferView = 3;
+                acc.byteOffset = acc_offset[j];
+                alignment_buffer(buffer.data);
+                acc_offset[j] = buffer.data.size() - buf_offset;
+                acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+                acc.count = meshes[i].vertex.size();
+                acc.type = TINYGLTF_TYPE_SCALAR;
+                acc.maxValues = { (double)i };
+                acc.minValues = { (double)batch_id };
+                model.accessors.push_back(acc);
             }
         }
         tinygltf::BufferView bfv;
         bfv.buffer = 0;
-        if (j == 0) {
+        if (j == 0 || j == 3) {
             bfv.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
         }
         else {
@@ -677,17 +719,25 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
         model.bufferViews.push_back(bfv);
     }
 
+    bool use_multi_material = false;
     for (int i = 0; i < meshes.size(); i++) {
         tinygltf::Mesh mesh;
         mesh.name = meshes[i].mesh_name;
         tinygltf::Primitive primits;
         primits.attributes = { 
-            //std::pair<std::string,int>("_BATCHID", 2 * i + 1),
             std::pair<std::string,int>("POSITION", 1 * meshes.size() + i),
             std::pair<std::string,int>("NORMAL",   2 * meshes.size() + i),
+            std::pair<std::string,int>("_BATCHID", 3 * meshes.size() + i),
         };
         primits.indices = i;
-        primits.material = 0;
+        if(use_multi_material) {
+            //TODO: turn height to rgb(r,g,b)
+            tinygltf::Material material =  make_color_material(1.0, 0.0, 0.0);
+            model.materials.push_back(material);
+            primits.material = i;
+        } else {
+            primits.material = 0;
+        }
         primits.mode = TINYGLTF_MODE_TRIANGLES;
         mesh.primitives = {
             primits
@@ -709,172 +759,176 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     // 所有场景
     model.scenes = { sence };
     model.defaultScene = 0;
-
     /// --------------
-    if (1) {
-        tinygltf::Material material;
-        material.name = "default";
-//      tinygltf::Parameter baseColorFactor;
-//      baseColorFactor.number_array = { 1,1,1,1 };
-//      material.values["baseColorFactor"] = baseColorFactor;
-        tinygltf::Parameter metallicFactor;
-        metallicFactor.number_value = new double(0.3);
-        material.values["metallicFactor"] = metallicFactor;
-        tinygltf::Parameter roughnessFactor;
-        roughnessFactor.number_value = new double(0.7);
-        material.values["roughnessFactor"] = roughnessFactor;
-        /// ---------
-//      tinygltf::Parameter emissiveFactor;
-//      emissiveFactor.number_array = { 0,0,0 };
-//      material.additionalValues["emissiveFactor"] = emissiveFactor;
-//      tinygltf::Parameter alphaMode;
-//      alphaMode.string_value = "OPAQUE";
-//      material.additionalValues["alphaMode"] = alphaMode;
-//      tinygltf::Parameter doubleSided;
-//      doubleSided.bool_value = false;
-//      material.additionalValues["doubleSided"] = doubleSided;
-        model.materials = { material };
-    }
-    else {
-        model.extensionsRequired = { "KHR_technique_webgl" };
-        model.extensionsUsed = { "KHR_technique_webgl" };
-        // add shader buffer view
-        {
-            tinygltf::BufferView bfv_vs;
-            bfv_vs.buffer = 0;
-            bfv_vs.byteOffset = buf_offset;
-            bfv_vs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-            std::string vs_shader = R"(
-precision highp float;
-uniform mat4 u_modelViewMatrix;
-uniform mat4 u_projectionMatrix;
-attribute vec3 a_position;
-attribute float a_batchid;
-//attribute vec2 a_texcoord0;
-//varying vec2 v_texcoord0;
-void main(void)
-{   
-    gl_Position = u_projectionMatrix * u_modelViewMatrix * vec4(a_position, 1.0);
-}
-)";
-
-            buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
-            bfv_vs.byteLength = buffer.data.size() - buf_offset;
-            alignment_buffer(buffer.data);
-            buf_offset = buffer.data.size();
-            model.bufferViews.push_back(bfv_vs);
-
-            tinygltf::BufferView bfv_fs;
-            bfv_fs.buffer = 0;
-            bfv_fs.byteOffset = buf_offset;
-            bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-            std::string fs_shader = R"(
-precision highp float;
-//varying vec2 v_texcoord0;
-//uniform sampler2D u_diffuse;
-void main(void)
-{
-  gl_FragColor = vec4(0.8,0.8,0.8,1.0);
-}
-)";
-            buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
-            bfv_fs.byteLength = buffer.data.size() - buf_offset;
-            alignment_buffer(buffer.data);
-            buf_offset = buffer.data.size();
-            model.bufferViews.push_back(bfv_fs);
-        }
-        // shader
-        {
-            int buf_view = 3;
-            {
-                tinygltf::Shader shader;
-                shader.bufferView = buf_view++;
-                shader.type = TINYGLTF_SHADER_TYPE_VERTEX_SHADER;
-                model.shaders.push_back(shader);
-            }
-            {
-                tinygltf::Shader shader;
-                shader.bufferView = buf_view++;
-                shader.type = TINYGLTF_SHADER_TYPE_FRAGMENT_SHADER;
-                model.shaders.push_back(shader);
-            }
-        }
-        // tech
-        {
-            tinygltf::Technique tech;
-            tech.tech_string = R"(
-{
-      "attributes": {
-        "a_batchid": "batchid",
-        "a_position": "position"
-      },
-      "parameters": {
-        "batchid": {
-          "semantic": "_BATCHID",
-          "type": 5123
-        },
-        "modelViewMatrix": {
-          "semantic": "MODELVIEW",
-          "type": 35676
-        },
-        "position": {
-          "semantic": "POSITION",
-          "type": 35665
-        },
-        "projectionMatrix": {
-          "semantic": "PROJECTION",
-          "type": 35676
-        }
-      },
-      "program": 0,
-      "states": {
-        "enable": [
-          2884,
-          2929
-        ]
-      },
-      "uniforms": {
-        "u_modelViewMatrix": "modelViewMatrix",
-        "u_projectionMatrix": "projectionMatrix"
-      }
-    })";
-            model.techniques = { tech };
-        }
-        // program
-        {
-            tinygltf::Program prog;
-            prog.prog_string = R"(
-    {
-      "attributes": [
-        "a_position"
-      ],
-      "vertexShader": 0,
-      "fragmentShader": 1
-    }
-)";
-            model.programs = { prog };
-        }
-
-        {
+    if (use_multi_material) {
+        // code has realized about
+    } else {
+            if (1) {
             tinygltf::Material material;
-            material.name = "shapefile";
-            //material.values[""]
-            char shaderBuffer[512];
-            sprintf(shaderBuffer, R"(
-            {
-      "extensions": {
-        "KHR_technique_webgl": {
-          "technique": 0,
-          "values": {
-            "diffuse": 0
-          }
+            material.name = "default";
+    //      tinygltf::Parameter baseColorFactor;
+    //      baseColorFactor.number_array = { 1,1,1,1 };
+    //      material.values["baseColorFactor"] = baseColorFactor;
+            tinygltf::Parameter metallicFactor;
+            metallicFactor.number_value = new double(0.3);
+            material.values["metallicFactor"] = metallicFactor;
+            tinygltf::Parameter roughnessFactor;
+            roughnessFactor.number_value = new double(0.7);
+            material.values["roughnessFactor"] = roughnessFactor;
+            /// ---------
+    //      tinygltf::Parameter emissiveFactor;
+    //      emissiveFactor.number_array = { 0,0,0 };
+    //      material.additionalValues["emissiveFactor"] = emissiveFactor;
+    //      tinygltf::Parameter alphaMode;
+    //      alphaMode.string_value = "OPAQUE";
+    //      material.additionalValues["alphaMode"] = alphaMode;
+    //      tinygltf::Parameter doubleSided;
+    //      doubleSided.bool_value = false;
+    //      material.additionalValues["doubleSided"] = doubleSided;
+            model.materials = { material };
         }
-      },
-      "technique": 0})");
-            material.shaderMaterial = shaderBuffer;
-            model.materials.push_back(material);
+        else {
+            model.extensionsRequired = { "KHR_technique_webgl" };
+            model.extensionsUsed = { "KHR_technique_webgl" };
+            // add shader buffer view
+            {
+                tinygltf::BufferView bfv_vs;
+                bfv_vs.buffer = 0;
+                bfv_vs.byteOffset = buf_offset;
+                bfv_vs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+                std::string vs_shader = R"(
+    precision highp float;
+    uniform mat4 u_modelViewMatrix;
+    uniform mat4 u_projectionMatrix;
+    attribute vec3 a_position;
+    attribute float a_batchid;
+    //attribute vec2 a_texcoord0;
+    //varying vec2 v_texcoord0;
+    void main(void)
+    {   
+        gl_Position = u_projectionMatrix * u_modelViewMatrix * vec4(a_position, 1.0);
+    }
+    )";
+
+                buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
+                bfv_vs.byteLength = buffer.data.size() - buf_offset;
+                alignment_buffer(buffer.data);
+                buf_offset = buffer.data.size();
+                model.bufferViews.push_back(bfv_vs);
+
+                tinygltf::BufferView bfv_fs;
+                bfv_fs.buffer = 0;
+                bfv_fs.byteOffset = buf_offset;
+                bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+                std::string fs_shader = R"(
+    precision highp float;
+    //varying vec2 v_texcoord0;
+    //uniform sampler2D u_diffuse;
+    void main(void)
+    {
+    gl_FragColor = vec4(0.8,0.8,0.8,1.0);
+    }
+    )";
+                buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
+                bfv_fs.byteLength = buffer.data.size() - buf_offset;
+                alignment_buffer(buffer.data);
+                buf_offset = buffer.data.size();
+                model.bufferViews.push_back(bfv_fs);
+            }
+            // shader
+            {
+                int buf_view = 3;
+                {
+                    tinygltf::Shader shader;
+                    shader.bufferView = buf_view++;
+                    shader.type = TINYGLTF_SHADER_TYPE_VERTEX_SHADER;
+                    model.shaders.push_back(shader);
+                }
+                {
+                    tinygltf::Shader shader;
+                    shader.bufferView = buf_view++;
+                    shader.type = TINYGLTF_SHADER_TYPE_FRAGMENT_SHADER;
+                    model.shaders.push_back(shader);
+                }
+            }
+            // tech
+            {
+                tinygltf::Technique tech;
+                tech.tech_string = R"(
+    {
+        "attributes": {
+            "a_batchid": "batchid",
+            "a_position": "position"
+        },
+        "parameters": {
+            "batchid": {
+            "semantic": "_BATCHID",
+            "type": 5123
+            },
+            "modelViewMatrix": {
+            "semantic": "MODELVIEW",
+            "type": 35676
+            },
+            "position": {
+            "semantic": "POSITION",
+            "type": 35665
+            },
+            "projectionMatrix": {
+            "semantic": "PROJECTION",
+            "type": 35676
+            }
+        },
+        "program": 0,
+        "states": {
+            "enable": [
+            2884,
+            2929
+            ]
+        },
+        "uniforms": {
+            "u_modelViewMatrix": "modelViewMatrix",
+            "u_projectionMatrix": "projectionMatrix"
+        }
+        })";
+                model.techniques = { tech };
+            }
+            // program
+            {
+                tinygltf::Program prog;
+                prog.prog_string = R"(
+        {
+        "attributes": [
+            "a_position"
+        ],
+        "vertexShader": 0,
+        "fragmentShader": 1
+        }
+    )";
+                model.programs = { prog };
+            }
+
+            {
+                tinygltf::Material material;
+                material.name = "shapefile";
+                //material.values[""]
+                char shaderBuffer[512];
+                sprintf(shaderBuffer, R"(
+                {
+        "extensions": {
+            "KHR_technique_webgl": {
+            "technique": 0,
+            "values": {
+                "diffuse": 0
+            }
+            }
+        },
+        "technique": 0})");
+                material.shaderMaterial = shaderBuffer;
+                model.materials.push_back(material);
+            }
         }
     }
+
     model.buffers.push_back(std::move(buffer));
     model.asset.version = "2.0";
     model.asset.generator = "fanfan";
@@ -883,7 +937,7 @@ void main(void)
     return buf;
 }
 
-std::string make_b3dm(std::vector<Polygon_Mesh>& meshes) {
+std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = false) {
     using nlohmann::json;
     
     std::string feature_json_string;
@@ -905,6 +959,15 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes) {
     }
     batch_json["batchId"] = ids;
     batch_json["name"] = names;
+
+    if (with_height) {
+        std::vector<float> heights;
+        for (int i = 0; i < meshes.size(); ++i) {
+            heights.push_back(meshes[i].height);
+        }
+        batch_json["height"] = heights;
+    }
+
     std::string batch_json_string = batch_json.dump();
     while (batch_json_string.size() % 4 != 0 ) {
         batch_json_string.push_back(' ');
