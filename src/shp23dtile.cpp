@@ -594,6 +594,9 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     tinygltf::Buffer buffer;
     // buffer_view {index,vertex,normal(texcoord,image)}
     uint32_t buf_offset = 0;
+    auto calc_offset = [&]() -> int{
+        return buffer.data.size() - buf_offset;
+    };
     uint32_t acc_offset[4] = {0,0,0,0};
     int buf_times = 4;
     for (int j = 0; j < buf_times; j++)
@@ -619,7 +622,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                 acc.bufferView = 0;
                 acc.byteOffset = acc_offset[j];
                 alignment_buffer(buffer.data);
-                acc_offset[j] = buffer.data.size();
+                acc_offset[j] = calc_offset();
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
                 acc.count = idx_size;
                 acc.type = TINYGLTF_TYPE_SCALAR;
@@ -646,7 +649,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                 acc.bufferView = 1;
                 acc.byteOffset = acc_offset[j];
                 alignment_buffer(buffer.data);
-                acc_offset[j] = buffer.data.size() - buf_offset;
+                acc_offset[j] = calc_offset();
                 acc.count = vec_size;
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
                 acc.type = TINYGLTF_TYPE_VEC3;
@@ -677,7 +680,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                 acc.bufferView = 2;
                 acc.byteOffset = acc_offset[j];
                 alignment_buffer(buffer.data);
-                acc_offset[j] = buffer.data.size() - buf_offset;
+                acc_offset[j] = calc_offset();
                 acc.count = normal_size;
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
                 acc.type = TINYGLTF_TYPE_VEC3;
@@ -694,7 +697,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                 acc.bufferView = 3;
                 acc.byteOffset = acc_offset[j];
                 alignment_buffer(buffer.data);
-                acc_offset[j] = buffer.data.size() - buf_offset;
+                acc_offset[j] = calc_offset();
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
                 acc.count = meshes[i].vertex.size();
                 acc.type = TINYGLTF_TYPE_SCALAR;
@@ -714,7 +717,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
         }
         bfv.byteOffset = buf_offset;
         alignment_buffer(buffer.data);
-        bfv.byteLength = buffer.data.size() - buf_offset;
+        bfv.byteLength = calc_offset();
         buf_offset = buffer.data.size();
         model.bufferViews.push_back(bfv);
     }
@@ -811,7 +814,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     )";
 
                 buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
-                bfv_vs.byteLength = buffer.data.size() - buf_offset;
+                bfv_vs.byteLength = calc_offset();
                 alignment_buffer(buffer.data);
                 buf_offset = buffer.data.size();
                 model.bufferViews.push_back(bfv_vs);
@@ -830,7 +833,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     }
     )";
                 buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
-                bfv_fs.byteLength = buffer.data.size() - buf_offset;
+                bfv_fs.byteLength = calc_offset();
                 alignment_buffer(buffer.data);
                 buf_offset = buffer.data.size();
                 model.bufferViews.push_back(bfv_fs);
