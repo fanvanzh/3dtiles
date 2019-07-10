@@ -116,25 +116,31 @@ shapefile 中需要有字段来表示高度信息。
 
 # Who use / Who star
 
-. AnalyticalGraphicsInc
+. AnalyticalGraphicsInc (kring)
 
-. Esri
+. NVIDIA (Vinjn Zhang)
 
-. Geostar
+. Ubisoft (Cmdu76)
 
-. Geo-compass
+. Baidu (hinikai)
 
-. MapTalks
+. Esri (suny323)
 
-. Alibaba
+. Geostar (hekaikai\shitao1988)
 
-. SuperEngine
+. Geo-compass (wucangeo)
 
-. Data Cloud Co. Ltd.
+. MapTalks (brucin\fuzhenn\axmand)
 
-. Guangzhou University
+. Alibaba (luxueyan)
 
-. Hopkins University
+. Data Cloud Co. Ltd. (liujin834)
+
+. Wuhan University (chenguanzhou)
+
+. Guangzhou University (LreeLenn)
+
+. Hopkins University (AndrewAnnex)
 
 . 中国铁道科学设计研究院
 
@@ -144,11 +150,13 @@ shapefile 中需要有字段来表示高度信息。
 
 . 宁波市测绘设计研究院
 
-. 合肥火星科技有限公司
+. 合肥火星科技有限公司 (muyao1987)
 
 . 北京五维智能科技
 
-. 北京西部数据科技
+. 北京西部数据科技 (vtxf\elfc2000)
+
+. 图鲸科技 (bingqixuan)
 
 # About author
 
