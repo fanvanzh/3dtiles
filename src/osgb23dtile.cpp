@@ -320,8 +320,7 @@ R"(
 })";
 }
 
-void make_gltf1_shader(tinygltf::Model& model, int mat_size, uint32_t &buf_offset) {
-    tinygltf::Buffer buffer;
+void make_gltf1_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& buffer, uint32_t &buf_offset) {
     model.extensionsRequired = { "KHR_technique_webgl" };
     model.extensionsUsed = { "KHR_technique_webgl" };
     // add vs shader
@@ -351,7 +350,6 @@ void make_gltf1_shader(tinygltf::Model& model, int mat_size, uint32_t &buf_offse
         bfv_fs.byteOffset = buf_offset;
         bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
         std::string fs_shader = fs_str();
-
         buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
         bfv_fs.byteLength = fs_shader.size();
         alignment_buffer(buffer.data);
@@ -846,7 +844,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
         }
         // use shader material
         else {
-            make_gltf1_shader(model, infoVisitor.texture_array.size(), buf_offset);
+            make_gltf1_shader(model, infoVisitor.texture_array.size(), buffer, buf_offset);
         }
         // finish buffer
         model.buffers.push_back(std::move(buffer));
