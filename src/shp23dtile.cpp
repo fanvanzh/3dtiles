@@ -766,170 +766,28 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     if (use_multi_material) {
         // code has realized about
     } else {
-            if (1) {
-            tinygltf::Material material;
-            material.name = "default";
-    //      tinygltf::Parameter baseColorFactor;
-    //      baseColorFactor.number_array = { 1,1,1,1 };
-    //      material.values["baseColorFactor"] = baseColorFactor;
-            tinygltf::Parameter metallicFactor;
-            metallicFactor.number_value = new double(0.3);
-            material.values["metallicFactor"] = metallicFactor;
-            tinygltf::Parameter roughnessFactor;
-            roughnessFactor.number_value = new double(0.7);
-            material.values["roughnessFactor"] = roughnessFactor;
-            /// ---------
-    //      tinygltf::Parameter emissiveFactor;
-    //      emissiveFactor.number_array = { 0,0,0 };
-    //      material.additionalValues["emissiveFactor"] = emissiveFactor;
-    //      tinygltf::Parameter alphaMode;
-    //      alphaMode.string_value = "OPAQUE";
-    //      material.additionalValues["alphaMode"] = alphaMode;
-    //      tinygltf::Parameter doubleSided;
-    //      doubleSided.bool_value = false;
-    //      material.additionalValues["doubleSided"] = doubleSided;
-            model.materials = { material };
-        }
-        else {
-            model.extensionsRequired = { "KHR_technique_webgl" };
-            model.extensionsUsed = { "KHR_technique_webgl" };
-            // add shader buffer view
-            {
-                tinygltf::BufferView bfv_vs;
-                bfv_vs.buffer = 0;
-                bfv_vs.byteOffset = buf_offset;
-                bfv_vs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-                std::string vs_shader = R"(
-    precision highp float;
-    uniform mat4 u_modelViewMatrix;
-    uniform mat4 u_projectionMatrix;
-    attribute vec3 a_position;
-    attribute float a_batchid;
-    //attribute vec2 a_texcoord0;
-    //varying vec2 v_texcoord0;
-    void main(void)
-    {   
-        gl_Position = u_projectionMatrix * u_modelViewMatrix * vec4(a_position, 1.0);
-    }
-    )";
-
-                buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
-                bfv_vs.byteLength = calc_offset();
-                alignment_buffer(buffer.data);
-                buf_offset = buffer.data.size();
-                model.bufferViews.push_back(bfv_vs);
-
-                tinygltf::BufferView bfv_fs;
-                bfv_fs.buffer = 0;
-                bfv_fs.byteOffset = buf_offset;
-                bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-                std::string fs_shader = R"(
-    precision highp float;
-    //varying vec2 v_texcoord0;
-    //uniform sampler2D u_diffuse;
-    void main(void)
-    {
-    gl_FragColor = vec4(0.8,0.8,0.8,1.0);
-    }
-    )";
-                buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
-                bfv_fs.byteLength = calc_offset();
-                alignment_buffer(buffer.data);
-                buf_offset = buffer.data.size();
-                model.bufferViews.push_back(bfv_fs);
-            }
-            // shader
-            {
-                int buf_view = 3;
-                {
-                    tinygltf::Shader shader;
-                    shader.bufferView = buf_view++;
-                    shader.type = TINYGLTF_SHADER_TYPE_VERTEX_SHADER;
-                    model.shaders.push_back(shader);
-                }
-                {
-                    tinygltf::Shader shader;
-                    shader.bufferView = buf_view++;
-                    shader.type = TINYGLTF_SHADER_TYPE_FRAGMENT_SHADER;
-                    model.shaders.push_back(shader);
-                }
-            }
-            // tech
-            {
-                tinygltf::Technique tech;
-                tech.tech_string = R"(
-    {
-        "attributes": {
-            "a_batchid": "batchid",
-            "a_position": "position"
-        },
-        "parameters": {
-            "batchid": {
-            "semantic": "_BATCHID",
-            "type": 5123
-            },
-            "modelViewMatrix": {
-            "semantic": "MODELVIEW",
-            "type": 35676
-            },
-            "position": {
-            "semantic": "POSITION",
-            "type": 35665
-            },
-            "projectionMatrix": {
-            "semantic": "PROJECTION",
-            "type": 35676
-            }
-        },
-        "program": 0,
-        "states": {
-            "enable": [
-            2884,
-            2929
-            ]
-        },
-        "uniforms": {
-            "u_modelViewMatrix": "modelViewMatrix",
-            "u_projectionMatrix": "projectionMatrix"
-        }
-        })";
-                model.techniques = { tech };
-            }
-            // program
-            {
-                tinygltf::Program prog;
-                prog.prog_string = R"(
-        {
-        "attributes": [
-            "a_position"
-        ],
-        "vertexShader": 0,
-        "fragmentShader": 1
-        }
-    )";
-                model.programs = { prog };
-            }
-
-            {
-                tinygltf::Material material;
-                material.name = "shapefile";
-                //material.values[""]
-                char shaderBuffer[512];
-                sprintf(shaderBuffer, R"(
-                {
-        "extensions": {
-            "KHR_technique_webgl": {
-            "technique": 0,
-            "values": {
-                "diffuse": 0
-            }
-            }
-        },
-        "technique": 0})");
-                material.shaderMaterial = shaderBuffer;
-                model.materials.push_back(material);
-            }
-        }
+        tinygltf::Material material;
+        material.name = "default";
+//      tinygltf::Parameter baseColorFactor;
+//      baseColorFactor.number_array = { 1,1,1,1 };
+//      material.values["baseColorFactor"] = baseColorFactor;
+        tinygltf::Parameter metallicFactor;
+        metallicFactor.number_value = new double(0.3);
+        material.values["metallicFactor"] = metallicFactor;
+        tinygltf::Parameter roughnessFactor;
+        roughnessFactor.number_value = new double(0.7);
+        material.values["roughnessFactor"] = roughnessFactor;
+        /// ---------
+//      tinygltf::Parameter emissiveFactor;
+//      emissiveFactor.number_array = { 0,0,0 };
+//      material.additionalValues["emissiveFactor"] = emissiveFactor;
+//      tinygltf::Parameter alphaMode;
+//      alphaMode.string_value = "OPAQUE";
+//      material.additionalValues["alphaMode"] = alphaMode;
+//      tinygltf::Parameter doubleSided;
+//      doubleSided.bool_value = false;
+//      material.additionalValues["doubleSided"] = doubleSided;
+        model.materials = { material };
     }
 
     model.buffers.push_back(std::move(buffer));

@@ -185,8 +185,6 @@ int get_lvl_num(std::string file_name){
     return -1;
 }
 
-
-
 osg_tree get_all_tree(std::string& file_name) {
     osg_tree root_tile;
     vector<string> fileNames = { file_name };
@@ -225,6 +223,208 @@ void alignment_buffer(std::vector<T>& buf) {
         buf.push_back(0x00);
     }
 }
+
+std::string vs_str() {
+    return 
+R"(
+precision highp float;
+uniform mat4 u_modelViewMatrix;
+uniform mat4 u_projectionMatrix;
+attribute vec3 a_position;
+attribute vec2 a_texcoord0;
+attribute float a_batchid;
+varying vec2 v_texcoord0;
+void main(void)
+{   
+    v_texcoord0 = a_texcoord0;
+    gl_Position = u_projectionMatrix * u_modelViewMatrix * vec4(a_position, 1.0);
+}
+)";
+}
+
+std::string fs_str() {
+    return
+R"(
+precision highp float;
+varying vec2 v_texcoord0;
+uniform sampler2D u_diffuse;
+void main(void)
+{
+  gl_FragColor = texture2D(u_diffuse, v_texcoord0);
+}
+)";
+}
+
+std::string program(int vs, int fs) {
+    char buf[512];
+std::string fmt = R"(
+{
+"attributes": [
+"a_position",
+"a_texcoord0"
+],
+"vertexShader": %d,
+"fragmentShader": %d
+}
+)";
+    sprintf(buf, fmt.data(), vs, fs);
+    return buf;
+}
+
+std::string tech_string() {
+    return
+R"(
+{
+"attributes": {
+"a_batchid": "batchid",
+"a_position": "position",
+"a_texcoord0": "texcoord0"
+},
+"parameters": {
+"batchid": {
+    "semantic": "_BATCHID",
+    "type": 5123
+},
+"diffuse": {
+    "type": 35678
+},
+"modelViewMatrix": {
+    "semantic": "MODELVIEW",
+    "type": 35676
+},
+"position": {
+    "semantic": "POSITION",
+    "type": 35665
+},
+"projectionMatrix": {
+    "semantic": "PROJECTION",
+    "type": 35676
+},
+"texcoord0": {
+    "semantic": "TEXCOORD_0",
+    "type": 35664
+}
+},
+"program": 0,
+"states": {
+"enable": [
+    2884,
+    2929
+]
+},
+"uniforms": {
+"u_diffuse": "diffuse",
+"u_modelViewMatrix": "modelViewMatrix",
+"u_projectionMatrix": "projectionMatrix"
+}
+})";
+}
+
+void make_gltf1_shader(tinygltf::Model& model, int mat_size, uint32_t &buf_offset) {
+    tinygltf::Buffer buffer;
+    model.extensionsRequired = { "KHR_technique_webgl" };
+    model.extensionsUsed = { "KHR_technique_webgl" };
+    // add vs shader
+    {
+        tinygltf::BufferView bfv_vs;
+        bfv_vs.buffer = 0;
+        bfv_vs.byteOffset = buf_offset;
+        bfv_vs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+
+        std::string vs_shader = vs_str();
+
+        buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
+        bfv_vs.byteLength = vs_shader.size();
+        alignment_buffer(buffer.data);
+        buf_offset = buffer.data.size();
+        model.bufferViews.push_back(bfv_vs);
+
+        tinygltf::Shader shader;
+        shader.bufferView = model.bufferViews.size() - 1;
+        shader.type = TINYGLTF_SHADER_TYPE_VERTEX_SHADER;
+        model.shaders.push_back(shader);
+    }
+    // add fs shader
+    {
+        tinygltf::BufferView bfv_fs;
+        bfv_fs.buffer = 0;
+        bfv_fs.byteOffset = buf_offset;
+        bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+        std::string fs_shader = fs_str();
+
+        buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
+        bfv_fs.byteLength = fs_shader.size();
+        alignment_buffer(buffer.data);
+        buf_offset = buffer.data.size();
+        model.bufferViews.push_back(bfv_fs);
+
+        tinygltf::Shader shader;
+        shader.bufferView = model.bufferViews.size() - 1;
+        shader.type = TINYGLTF_SHADER_TYPE_FRAGMENT_SHADER;
+        model.shaders.push_back(shader);
+    }
+    // tech
+    {
+        tinygltf::Technique tech;
+        tech.tech_string = tech_string();
+        model.techniques = { tech };
+    }
+    // program
+    {
+        tinygltf::Program prog;
+        prog.prog_string = program(0, 1);
+        model.programs = { prog };
+    }
+
+    for (int i = 0; i < mat_size; i++)
+    {
+        tinygltf::Material material;
+        material.name = "osgb";
+        char shaderBuffer[512];
+        sprintf(shaderBuffer, R"(
+    {
+"extensions": {
+"KHR_technique_webgl": {
+    "technique": 0,
+    "values": {
+    "diffuse": 0
+    }
+}
+},
+"technique": 0,
+"values": {
+"diffuse": {
+    "index": %d,
+    "texCoord": 0
+}
+}
+    })", i);
+        material.shaderMaterial = shaderBuffer;
+        model.materials.push_back(material);
+    }
+}
+
+void make_gltf2_shader() {
+
+}
+
+tinygltf::Material make_color_material_osgb(double r, double g, double b) {
+    tinygltf::Material material;
+    material.name = "default";
+    tinygltf::Parameter baseColorFactor;
+    baseColorFactor.number_array = { r, g, b, 1.0 };
+    material.values["baseColorFactor"] = baseColorFactor;
+
+    tinygltf::Parameter metallicFactor;
+    metallicFactor.number_value = new double(0);
+    material.values["metallicFactor"] = metallicFactor;
+    tinygltf::Parameter roughnessFactor;
+    roughnessFactor.number_value = new double(1);
+    material.values["roughnessFactor"] = roughnessFactor;
+    //
+    return material;
+}
+
 
 bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info>& v_info) {
     vector<string> fileNames = { path };
@@ -636,200 +836,20 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
         {
             for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
             {
-                tinygltf::Material material;
-                material.name = "default";
-                tinygltf::Parameter baseColorFactor;
-                baseColorFactor.number_array = { 1.0,1.0,1.0,1.0 };
-                material.values["baseColorFactor"] = baseColorFactor;
+                tinygltf::Material mat = make_color_material_osgb(1.0, 1.0, 1.0);
                 // 可能会出现多材质的情况
                 tinygltf::Parameter baseColorTexture;
                 baseColorTexture.json_int_value = { std::pair<string,int>("index",i) };
-                material.values["baseColorTexture"] = baseColorTexture;
-
-                tinygltf::Parameter metallicFactor;
-                metallicFactor.number_value = new double(0);
-                material.values["metallicFactor"] = metallicFactor;
-                tinygltf::Parameter roughnessFactor;
-                roughnessFactor.number_value = new double(1);
-                material.values["roughnessFactor"] = roughnessFactor;
-                /// ---------
-//                 tinygltf::Parameter emissiveFactor;
-//                 emissiveFactor.number_array = { 0.0,0.0,0.0 };
-//                 material.additionalValues["emissiveFactor"] = emissiveFactor;
-//                 tinygltf::Parameter alphaMode;
-//                 alphaMode.string_value = "OPAQUE";
-//                 material.additionalValues["alphaMode"] = alphaMode;
-//                 tinygltf::Parameter doubleSided;
-//                 doubleSided.bool_value = false;
-//                 material.additionalValues["doubleSided"] = doubleSided;
-                //
-                model.materials.push_back(material);
+                mat.values["baseColorTexture"] = baseColorTexture;
+                model.materials.push_back(mat);
             }
         }
         // use shader material
         else {
-            model.extensionsRequired = { "KHR_technique_webgl" };
-            model.extensionsUsed = { "KHR_technique_webgl" };
-            // add shader buffer view
-            {
-                tinygltf::BufferView bfv_vs;
-                bfv_vs.buffer = 0;
-                bfv_vs.byteOffset = buf_offset;
-                bfv_vs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-                std::string vs_shader = R"(
-precision highp float;
-uniform mat4 u_modelViewMatrix;
-uniform mat4 u_projectionMatrix;
-attribute vec3 a_position;
-attribute vec2 a_texcoord0;
-attribute float a_batchid;
-varying vec2 v_texcoord0;
-void main(void)
-{   
-    v_texcoord0 = a_texcoord0;
-    gl_Position = u_projectionMatrix * u_modelViewMatrix * vec4(a_position, 1.0);
-}
-)";
-
-                buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
-                bfv_vs.byteLength = buffer.data.size() - buf_offset;
-                alignment_buffer(buffer.data);
-                buf_offset = buffer.data.size();
-                model.bufferViews.push_back(bfv_vs);
-
-                tinygltf::BufferView bfv_fs;
-                bfv_fs.buffer = 0;
-                bfv_fs.byteOffset = buf_offset;
-                bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-                std::string fs_shader = R"(
-precision highp float;
-varying vec2 v_texcoord0;
-uniform sampler2D u_diffuse;
-void main(void)
-{
-  gl_FragColor = texture2D(u_diffuse, v_texcoord0);
-}
-)";
-                buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
-                bfv_fs.byteLength = buffer.data.size() - buf_offset;
-                alignment_buffer(buffer.data);
-                buf_offset = buffer.data.size();
-                model.bufferViews.push_back(bfv_fs);
-            }
-            // shader
-            {
-                int buf_view = 4 + infoVisitor.texture_array.size();
-                {
-                    tinygltf::Shader shader;
-                    shader.bufferView = buf_view++;
-                    shader.type = TINYGLTF_SHADER_TYPE_VERTEX_SHADER;
-                    model.shaders.push_back(shader);
-                }
-                {
-                    tinygltf::Shader shader;
-                    shader.bufferView = buf_view++;
-                    shader.type = TINYGLTF_SHADER_TYPE_FRAGMENT_SHADER;
-                    model.shaders.push_back(shader);
-                }
-            }
-            // tech
-            {
-                tinygltf::Technique tech;
-                tech.tech_string = R"(
-{
-      "attributes": {
-        "a_batchid": "batchid",
-        "a_position": "position",
-        "a_texcoord0": "texcoord0"
-      },
-      "parameters": {
-        "batchid": {
-          "semantic": "_BATCHID",
-          "type": 5123
-        },
-        "diffuse": {
-          "type": 35678
-        },
-        "modelViewMatrix": {
-          "semantic": "MODELVIEW",
-          "type": 35676
-        },
-        "position": {
-          "semantic": "POSITION",
-          "type": 35665
-        },
-        "projectionMatrix": {
-          "semantic": "PROJECTION",
-          "type": 35676
-        },
-        "texcoord0": {
-          "semantic": "TEXCOORD_0",
-          "type": 35664
-        }
-      },
-      "program": 0,
-      "states": {
-        "enable": [
-          2884,
-          2929
-        ]
-      },
-      "uniforms": {
-        "u_diffuse": "diffuse",
-        "u_modelViewMatrix": "modelViewMatrix",
-        "u_projectionMatrix": "projectionMatrix"
-      }
-    })";
-                model.techniques = { tech };
-            }
-            // program
-            {
-                tinygltf::Program prog;
-                prog.prog_string = R"(
-    {
-      "attributes": [
-        "a_position",
-        "a_texcoord0"
-      ],
-      "vertexShader": 0,
-      "fragmentShader": 1
-    }
-)";
-                model.programs = { prog };
-            }
-
-            for (int i = 0; i < infoVisitor.texture_array.size(); i++)
-            {
-                tinygltf::Material material;
-                material.name = "osgb";
-                //material.values[""]
-                char shaderBuffer[512];
-                sprintf(shaderBuffer, R"(
-            {
-      "extensions": {
-        "KHR_technique_webgl": {
-          "technique": 0,
-          "values": {
-            "diffuse": 0
-          }
-        }
-      },
-      "technique": 0,
-      "values": {
-        "diffuse": {
-          "index": %d,
-          "texCoord": 0
-        }
-      }
-            })", i);
-                material.shaderMaterial = shaderBuffer;
-                model.materials.push_back(material);
-            }
+            make_gltf1_shader(model, infoVisitor.texture_array.size(), buf_offset);
         }
         // finish buffer
         model.buffers.push_back(std::move(buffer));
-
-        /// ----------------------
         // texture
         {
             int texture_index = 0;
