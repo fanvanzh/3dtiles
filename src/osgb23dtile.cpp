@@ -272,57 +272,49 @@ std::string fmt = R"(
 }
 
 std::string tech_string() {
-    return
+return
 R"(
 {
-"attributes": {
-"a_batchid": "batchid",
-"a_position": "position",
-"a_texcoord0": "texcoord0"
-},
-"parameters": {
-"batchid": {
-    "semantic": "_BATCHID",
-    "type": 5123
-},
-"diffuse": {
-    "type": 35678
-},
-"modelViewMatrix": {
-    "semantic": "MODELVIEW",
-    "type": 35676
-},
-"position": {
-    "semantic": "POSITION",
-    "type": 35665
-},
-"projectionMatrix": {
-    "semantic": "PROJECTION",
-    "type": 35676
-},
-"texcoord0": {
-    "semantic": "TEXCOORD_0",
-    "type": 35664
-}
-},
-"program": 0,
-"states": {
-"enable": [
-    2884,
-    2929
-]
-},
-"uniforms": {
-"u_diffuse": "diffuse",
-"u_modelViewMatrix": "modelViewMatrix",
-"u_projectionMatrix": "projectionMatrix"
-}
+  "attributes": {
+    "a_batchid": {
+      "semantic": "_BATCHID",
+      "type": 5123
+    },
+    "a_position": {
+      "semantic": "POSITION",
+      "type": 35665
+    },
+    "a_texcoord0": {
+      "semantic": "TEXCOORD_0",
+      "type": 35664
+    }
+  },
+  "program": 0,
+  "states": {
+    "enable": [
+      2884,
+      2929
+    ]
+  },
+  "uniforms": {
+    "u_diffuse": {
+      "type": 35678
+    },
+    "u_modelViewMatrix": {
+      "semantic": "MODELVIEW",
+      "type": 35676
+    },
+    "u_projectionMatrix": {
+      "semantic": "PROJECTION",
+      "type": 35676
+    }
+  }
 })";
 }
 
-void make_gltf1_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& buffer, uint32_t &buf_offset) {
-    model.extensionsRequired = { "KHR_technique_webgl" };
-    model.extensionsUsed = { "KHR_technique_webgl" };
+void make_gltf2_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& buffer, uint32_t &buf_offset) {
+    model.extensionsRequired = { "KHR_techniques_webgl" };
+    model.extensionsUsed = { "KHR_techniques_webgl" };
     // add vs shader
     {
         tinygltf::BufferView bfv_vs;
@@ -341,7 +333,7 @@ void make_gltf1_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& b
         tinygltf::Shader shader;
         shader.bufferView = model.bufferViews.size() - 1;
         shader.type = TINYGLTF_SHADER_TYPE_VERTEX_SHADER;
-        model.shaders.push_back(shader);
+        model.extensions.KHR_techniques_webgl.shaders.push_back(shader);
     }
     // add fs shader
     {
@@ -359,19 +351,19 @@ void make_gltf1_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& b
         tinygltf::Shader shader;
         shader.bufferView = model.bufferViews.size() - 1;
         shader.type = TINYGLTF_SHADER_TYPE_FRAGMENT_SHADER;
-        model.shaders.push_back(shader);
+        model.extensions.KHR_techniques_webgl.shaders.push_back(shader);
     }
     // tech
     {
         tinygltf::Technique tech;
         tech.tech_string = tech_string();
-        model.techniques = { tech };
+        model.extensions.KHR_techniques_webgl.techniques = { tech };
     }
     // program
     {
         tinygltf::Program prog;
         prog.prog_string = program(0, 1);
-        model.programs = { prog };
+        model.extensions.KHR_techniques_webgl.programs = { prog };
     }
 
     for (int i = 0; i < mat_size; i++)
@@ -380,30 +372,23 @@ void make_gltf1_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& b
         material.name = "osgb";
         char shaderBuffer[512];
         sprintf(shaderBuffer, R"(
-    {
+{
 "extensions": {
-"KHR_technique_webgl": {
-    "technique": 0,
-    "values": {
-    "diffuse": 0
-    }
-}
-},
+"KHR_techniques_webgl": {
 "technique": 0,
 "values": {
-"diffuse": {
-    "index": %d,
-    "texCoord": 0
+"u_diffuse": {
+"index": %d,
+"texCoord": 0
 }
 }
-    })", i);
+}
+}
+}
+)", i);
         material.shaderMaterial = shaderBuffer;
         model.materials.push_back(material);
     }
-}
-
-void make_gltf2_shader() {
-
 }
 
 tinygltf::Material make_color_material_osgb(double r, double g, double b) {
@@ -844,7 +829,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
         }
         // use shader material
         else {
-            make_gltf1_shader(model, infoVisitor.texture_array.size(), buffer, buf_offset);
+            make_gltf2_shader(model, infoVisitor.texture_array.size(), buffer, buf_offset);
         }
         // finish buffer
         model.buffers.push_back(std::move(buffer));
@@ -979,11 +964,11 @@ void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl) {
         write_file(out_file.c_str(), b3dm_buf.data(), b3dm_buf.size());
     }
     // test
-    //std::string glb_buf;
-    //std::vector<mesh_info> v_info;
-    //osgb2glb_buf(tree.file_name, glb_buf, v_info);
-    //out_file = replace(out_file, ".b3dm", ".glb");
-    //write_file(out_file.c_str(), glb_buf.data(), glb_buf.size());
+    // std::string glb_buf;
+    // std::vector<mesh_info> v_info;
+    // osgb2glb_buf(tree.file_name, glb_buf, v_info);
+    // out_file = replace(out_file, ".b3dm", ".glb");
+    // write_file(out_file.c_str(), glb_buf.data(), glb_buf.size());
     // end test
     for (auto& i : tree.sub_nodes) {
         do_tile_job(i,out_path,max_lvl);
