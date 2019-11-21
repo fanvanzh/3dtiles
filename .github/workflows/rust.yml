@@ -19,4 +19,4 @@ jobs:
         # Artifact name
         name: 3dtile
         # Directory containing files to upload
-        path: /target/release/
+        path: bin/
