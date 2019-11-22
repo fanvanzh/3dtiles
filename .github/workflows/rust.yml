@@ -10,7 +10,10 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Build
-      run: cargo build --verbose --release
+      run: |
+        cargo build --verbose --release
+        cp target/release/3dtile.exe bin/
+    
     - name: Run tests
       run: cargo test --verbose
     - name: Upload artifact
