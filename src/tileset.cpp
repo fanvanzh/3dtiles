@@ -28,6 +28,22 @@ extern "C" bool epsg_convert(int insrs, double* val, char* path) {
     return false;
 } 
 
+extern "C" bool wkt_convert(char* wkt, double* val, char* path) {
+    CPLSetConfigOption("GDAL_DATA", path);
+    OGRSpatialReference inRs,outRs;
+    inRs.importFromWkt(&wkt);
+    outRs.importFromEPSG(4326);
+    OGRCoordinateTransformation *poCT = OGRCreateCoordinateTransformation( &inRs, &outRs );
+    if (poCT) {
+        if (poCT->Transform( 1, val, val + 1)) {
+            delete poCT;
+            return true;
+        }
+        delete poCT;
+    }
+    return false;
+}
+
 extern "C"
 {
 	double degree2rad(double val) {

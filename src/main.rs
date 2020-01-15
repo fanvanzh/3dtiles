@@ -7,18 +7,18 @@ extern crate serde_derive;
 extern crate serde_xml_rs;
 #[macro_use]
 extern crate log;
+extern crate byteorder;
 extern crate chrono;
 extern crate env_logger;
-extern crate byteorder;
 
+pub mod fun_c;
 mod osgb;
 mod shape;
-pub mod fun_c;
 
-use std::io::Write;
-use clap::{Arg, App};
 use chrono::prelude::*;
+use clap::{App, Arg};
 use log::{Level, LevelFilter};
+use std::io::Write;
 
 fn main() {
     use std::env;
@@ -142,17 +142,17 @@ fn main() {
 }
 
 fn convert_b3dm(src: &str, dest: &str) {
-    use std::path::Path;
-    use std::io::prelude::*;
     use std::fs::File;
+    use std::io::prelude::*;
+    use std::path::Path;
 
-    use std::io::Cursor;
     use byteorder::{LittleEndian, ReadBytesExt};
+    use std::io::Cursor;
     //use std::io::SeekFrom;
 
     if !dest.ends_with(".gltf") && !dest.ends_with(".glb") {
         error!("output format not support now: {}", dest);
-        return
+        return;
     }
     if !src.ends_with(".b3dm") {
         error!("input format must be b3dm");
@@ -167,7 +167,7 @@ fn convert_b3dm(src: &str, dest: &str) {
                 let fj_len = rdr.read_u32::<LittleEndian>().unwrap();
                 rdr.read_u32::<LittleEndian>().unwrap();
                 let bj_len = rdr.read_u32::<LittleEndian>().unwrap();
-                let offset = fj_len + bj_len + 28;    
+                let offset = fj_len + bj_len + 28;
                 offset as usize
             };
             if let Ok(mut df) = File::create(dest) {
@@ -179,20 +179,21 @@ fn convert_b3dm(src: &str, dest: &str) {
     info!("task over");
 }
 
-// convert any thing to gltf 
+// convert any thing to gltf
 fn convert_gltf(src: &str, dest: &str) {
     use std::ffi::CString;
     if !dest.ends_with(".gltf") && !dest.ends_with(".glb") {
         error!("output format not support now: {}", dest);
-        return
+        return;
     }
-    if !src.ends_with(".osgb") && 
-       !src.ends_with(".osg")  && 
-       !src.ends_with(".obj")  &&
-       !src.ends_with(".fbx")  && 
-       !src.ends_with(".3ds")  {
+    if !src.ends_with(".osgb")
+        && !src.ends_with(".osg")
+        && !src.ends_with(".obj")
+        && !src.ends_with(".fbx")
+        && !src.ends_with(".3ds")
+    {
         error!("input format not support now: {}", src);
-        return
+        return;
     }
     unsafe {
         let c_str = CString::new(dest).unwrap();
@@ -214,10 +215,10 @@ struct ModelMetadata {
 }
 
 fn convert_osgb(src: &str, dest: &str, config: &str) {
-    use std::time;
     use serde_json::Value;
     use std::fs::File;
     use std::io::prelude::*;
+    use std::time;
 
     let dir = std::path::Path::new(src);
     let dir_dest = std::path::Path::new(dest);
@@ -235,7 +236,9 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
             let mut buffer = String::new();
             if let Ok(_) = f.read_to_string(&mut buffer) {
                 //
-                if let Ok(metadata) = serde_xml_rs::deserialize::<_,ModelMetadata>(buffer.as_bytes()) {
+                if let Ok(metadata) =
+                    serde_xml_rs::deserialize::<_, ModelMetadata>(buffer.as_bytes())
+                {
                     //println!("{:?}", metadata);
                     let v: Vec<&str> = metadata.SRS.split(":").collect();
                     if v.len() > 1 {
@@ -253,45 +256,84 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                             } else {
                                 error!("ENU point is not enough");
                             }
-                        }
-                        else if v[0] == "EPSG" {
+                        } else if v[0] == "EPSG" {
                             // call gdal to convert
                             if let Ok(srs) = v[1].parse::<i32>() {
-                                let mut pt: Vec<f64> = metadata.SRSOrigin
+                                let mut pt: Vec<f64> = metadata
+                                    .SRSOrigin
                                     .split(",")
                                     .map(|v| v.parse().unwrap())
                                     .collect();
                                 if pt.len() >= 2 {
-                                        let gdal_data: String =  {
-                                            use std::path::Path;
-                                            let exe_dir = ::std::env::current_exe().unwrap();
-                                            Path::new(&exe_dir).parent().unwrap()
-                                            .join("gdal_data").to_str().unwrap().into()
-                                        };
+                                    let gdal_data: String = {
+                                        use std::path::Path;
+                                        let exe_dir = ::std::env::current_exe().unwrap();
+                                        Path::new(&exe_dir)
+                                            .parent()
+                                            .unwrap()
+                                            .join("gdal_data")
+                                            .to_str()
+                                            .unwrap()
+                                            .into()
+                                    };
                                     unsafe {
                                         use std::ffi::CString;
-                                        let c_str = CString::new(gdal_data).unwrap();;
+                                        let c_str = CString::new(gdal_data).unwrap();
                                         let ptr = c_str.as_ptr();
-                                        if osgb::epsg_convert(srs, pt.as_mut_ptr(),ptr) {
+                                        if osgb::epsg_convert(srs, pt.as_mut_ptr(), ptr) {
                                             center_x = pt[0];
                                             center_y = pt[1];
                                             info!("epsg: x->{}, y->{}", pt[0], pt[1]);
                                         } else {
                                             error!("epsg convert failed!");
                                         }
-                                    }    
+                                    }
                                 } else {
                                     error!("epsg point is not enough");
                                 }
                             } else {
                                 error!("parse EPSG failed");
                             }
-                            //
+                        //
                         } else {
                             error!("EPSG or ENU is expected in SRS");
                         }
                     } else {
-                        error!("SRS content error");
+                        // error!("SRS content error");
+                        // treat as wkt
+                        let mut pt: Vec<f64> = metadata
+                            .SRSOrigin
+                            .split(",")
+                            .map(|v| v.parse().unwrap())
+                            .collect();
+                        if pt.len() >= 2 {
+                            let gdal_data: String = {
+                                use std::path::Path;
+                                let exe_dir = ::std::env::current_exe().unwrap();
+                                Path::new(&exe_dir)
+                                    .parent()
+                                    .unwrap()
+                                    .join("gdal_data")
+                                    .to_str()
+                                    .unwrap()
+                                    .into()
+                            };
+                            unsafe {
+                                use std::ffi::CString;
+                                let wkt: String = metadata.SRS;
+                                // println!("{:?}", wkt);
+                                let c_str = CString::new(gdal_data).unwrap();
+                                let ptr = c_str.as_ptr();
+                                let wkt_ptr = wkt.as_ptr();
+                                if osgb::wkt_convert(wkt_ptr, pt.as_mut_ptr(), ptr) {
+                                    center_x = pt[0];
+                                    center_y = pt[1];
+                                    info!("wkt: x->{}, y->{}", pt[0], pt[1]);
+                                } else {
+                                    error!("wkt convert failed!");
+                                }
+                            }
+                        }
                     }
                 } else {
                     error!("parse {} failed", metadata_file.display());
@@ -302,8 +344,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
         } else {
             error!("open {} failed", metadata_file.display());
         }
-    }
-    else {
+    } else {
         error!("{} is missing", metadata_file.display());
     }
     if let Ok(v) = serde_json::from_str::<Value>(config) {
@@ -323,14 +364,8 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
         error!("config error --> {}", config);
     }
     let tick = time::SystemTime::now();
-    if let Err(e) = osgb::osgb_batch_convert(
-        &dir,
-        &dir_dest,
-        max_lvl,
-        center_x,
-        center_y,
-        trans_region,
-    )
+    if let Err(e) =
+        osgb::osgb_batch_convert(&dir, &dir_dest, max_lvl, center_x, center_y, trans_region)
     {
         error!("{}", e.description());
         return;
@@ -343,17 +378,16 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
 fn convert_shapefile(src: &str, dest: &str, height: &str) {
     if height.is_empty() {
         error!("you must set the height field by --height xxx");
-        return
+        return;
     }
     let tick = std::time::SystemTime::now();
 
     let ret = shape::shape_batch_convert(src, dest, height);
     if !ret {
         error!("convert shapefile failed");
-    }
-    else {
+    } else {
         let elap_sec = tick.elapsed().unwrap();
         let tick_num = elap_sec.as_secs() as f64 + elap_sec.subsec_nanos() as f64 * 1e-9;
-        info!("task over, cost {:.2} s.", tick_num);   
+        info!("task over, cost {:.2} s.", tick_num);
     }
 }

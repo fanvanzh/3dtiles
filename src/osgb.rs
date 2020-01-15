@@ -1,16 +1,15 @@
 extern crate libc;
+extern crate rayon;
 extern crate serde;
 extern crate serde_json;
-extern crate rayon;
 
 use std::fs;
 use std::io;
 
 use osgb::rayon::prelude::*;
 
-use std::path::Path;
 use std::error::Error;
-
+use std::path::Path;
 
 extern "C" {
     pub fn make_gltf(in_path: *const u8, out_path: *const u8) -> bool;
@@ -35,17 +34,19 @@ extern "C" {
 
     pub fn epsg_convert(insrs: i32, val: *mut f64, gdal: *const i8) -> bool;
 
-    fn degree2rad( val:f64 ) -> f64;
+    pub fn wkt_convert(gdal: *const u8, val: *mut f64, gdal: *const i8) -> bool;
+
+    fn degree2rad(val: f64) -> f64;
 
     #[allow(dead_code)]
-    fn meter_to_lati(m:f64) -> f64;
+    fn meter_to_lati(m: f64) -> f64;
 
     #[allow(dead_code)]
-    fn meter_to_longti(m:f64, lati:f64) -> f64;
+    fn meter_to_longti(m: f64, lati: f64) -> f64;
 }
 
 #[allow(dead_code)]
-fn walk_path(dir: &Path, cb: &mut FnMut(&str)) -> io::Result<()> {
+fn walk_path(dir: &Path, cb: &mut dyn FnMut(&str)) -> io::Result<()> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
@@ -65,14 +66,14 @@ fn walk_path(dir: &Path, cb: &mut FnMut(&str)) -> io::Result<()> {
 }
 
 #[allow(dead_code)]
-fn osgv_convert(dir_osgb: &str, dir_from: &str, dir_dest: &str) -> Result<(), Box<Error>> {
+fn osgv_convert(dir_osgb: &str, dir_from: &str, dir_dest: &str) -> Result<(), Box<dyn Error>> {
     unsafe {
         let mut source_vec = dir_osgb.to_string().as_bytes_mut().to_vec();
         source_vec.push(0x00);
-        let dest_string = dir_osgb.clone().replace(".osgb", ".b3dm").replace(
-            dir_from,
-            dir_dest,
-        );
+        let dest_string = dir_osgb
+            .clone()
+            .replace(".osgb", ".b3dm")
+            .replace(dir_from, dir_dest);
         let mut dest_vec = dest_string.to_string().as_bytes_mut().to_vec();
         dest_vec.push(0x00);
         // create dir first
@@ -111,7 +112,7 @@ pub fn osgb_batch_convert(
     center_x: f64,
     center_y: f64,
     region_offset: Option<f64>,
-) -> Result<(), Box<Error>> {
+) -> Result<(), Box<dyn Error>> {
     use std::fs::File;
     use std::io::prelude::*;
     use std::sync::mpsc::channel;
@@ -139,58 +140,57 @@ pub fn osgb_batch_convert(
                 //let in_buf = str_to_vec_c(osgb.to_str().unwrap());
                 let out_dir = dir_dest.join("Data").join(stem);
                 fs::create_dir_all(&out_dir)?;
-                osgb_dir_pair.push(OsgbInfo{
+                osgb_dir_pair.push(OsgbInfo {
                     in_dir: osgb.to_string_lossy().into(),
                     out_dir: out_dir.to_string_lossy().into(),
-                    sender: sender.clone()
+                    sender: sender.clone(),
                 });
             } else {
                 error!("dir error: {}", osgb.display());
             }
         }
     }
-    
-    let rad_x = unsafe {
-         degree2rad(center_x)
-    };
-    let rad_y = unsafe {
-        degree2rad(center_y)
-    };
+
+    let rad_x = unsafe { degree2rad(center_x) };
+    let rad_y = unsafe { degree2rad(center_y) };
 
     let max_lvl: i32 = max_lvl.unwrap_or(100);
-    osgb_dir_pair.into_par_iter().map( | info | {
-        unsafe {
-	        let mut root_box = vec![0f64; 6];
-	        let mut json_buf = vec![];
-	        let mut json_len = 0i32;
-	        let in_ptr = str_to_vec_c(&info.in_dir);
-	        let out_ptr = str_to_vec_c(&info.out_dir);
-	        let out_ptr = osgb23dtile_path(
-	            in_ptr.as_ptr(),
-	            out_ptr.as_ptr(),
-	            root_box.as_mut_ptr(),
-	            (&mut json_len) as *mut i32,
-                rad_x,rad_y,max_lvl
-	        );
-	        if out_ptr.is_null() {
-	            error!("failed: {}", info.in_dir);
-	        } else {
-	            json_buf.resize(json_len as usize, 0);
-	            libc::memcpy(
-	                json_buf.as_mut_ptr() as *mut libc::c_void,
-	                out_ptr,
-	                json_len as usize,
-	            );
-	            libc::free(out_ptr);
-	        }
-	        let t = TileResult {
+    osgb_dir_pair
+        .into_par_iter()
+        .map(|info| unsafe {
+            let mut root_box = vec![0f64; 6];
+            let mut json_buf = vec![];
+            let mut json_len = 0i32;
+            let in_ptr = str_to_vec_c(&info.in_dir);
+            let out_ptr = str_to_vec_c(&info.out_dir);
+            let out_ptr = osgb23dtile_path(
+                in_ptr.as_ptr(),
+                out_ptr.as_ptr(),
+                root_box.as_mut_ptr(),
+                (&mut json_len) as *mut i32,
+                rad_x,
+                rad_y,
+                max_lvl,
+            );
+            if out_ptr.is_null() {
+                error!("failed: {}", info.in_dir);
+            } else {
+                json_buf.resize(json_len as usize, 0);
+                libc::memcpy(
+                    json_buf.as_mut_ptr() as *mut libc::c_void,
+                    out_ptr,
+                    json_len as usize,
+                );
+                libc::free(out_ptr);
+            }
+            let t = TileResult {
                 path: info.out_dir.into(),
-	            json: String::from_utf8(json_buf).unwrap(),
-	            box_v: root_box,
-	        };
-	        info.sender.send(t).unwrap();
-	    }
-    }).count();
+                json: String::from_utf8(json_buf).unwrap(),
+                box_v: root_box,
+            };
+            info.sender.send(t).unwrap();
+        })
+        .count();
 
     // merge and root
     let mut tile_array = vec![];
@@ -229,8 +229,8 @@ pub fn osgb_batch_convert(
         {
             "asset": {
                 "version": "1.0",
-                "gltfUpAxis": "Z"  
-            }, 
+                "gltfUpAxis": "Z"
+            },
             "geometricError": 2000,
             "root" : {
                 "transform" : trans_vec,
@@ -246,7 +246,7 @@ pub fn osgb_batch_convert(
     let out_dir: String = dir_dest.to_string_lossy().into();
     for x in tile_array {
         let path = x.path;
-        let json_val : serde_json::Value = serde_json::from_str(&x.json).unwrap();
+        let json_val: serde_json::Value = serde_json::from_str(&x.json).unwrap();
         let tile_box = json_val["boundingVolume"]["box"].as_array().unwrap();
         let tile_object = json!(
             {
@@ -259,7 +259,10 @@ pub fn osgb_batch_convert(
                 }
             }
         );
-        root_json["root"]["children"].as_array_mut().unwrap().push(tile_object);
+        root_json["root"]["children"]
+            .as_array_mut()
+            .unwrap()
+            .push(tile_object);
         let sub_tile = json!({
             "asset": {
                 "version": "1.0",
