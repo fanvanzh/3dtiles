@@ -111,6 +111,12 @@ double get_geometric_error(TileBox& bbox){
 #undef max
 #endif // max
 
+    if (bbox.max.empty() || bbox.min.empty())
+    {
+        LOG_E("bbox is empty!");
+        return 0;
+    }
+
     double max_err = std::max((bbox.max[0] - bbox.min[0]),(bbox.max[1] - bbox.min[1]));
     max_err = std::max(max_err, (bbox.max[2] - bbox.min[2]));
     return max_err / 20.0;
