@@ -1043,19 +1043,30 @@ std::string get_boundingRegion(TileBox bbox, double x, double y) {
 }
 
 void calc_geometric_error(osg_tree& tree) {
-    // depth first
-    for ( auto& i : tree.sub_nodes ){
-        calc_geometric_error(i);
-    }
-    if (tree.sub_nodes.empty()) {
-        tree.geometricError = 0.0;
-    }
-    else {
-        if(tree.sub_nodes[0].geometricError == 0) 
-            tree.geometricError = get_geometric_error(tree.bbox);
-        else
-            tree.geometricError = tree.sub_nodes[0].geometricError * 2.0;
-    }
+	const double EPS = 1e-12;
+	// depth first
+	for (auto& i : tree.sub_nodes) {
+		calc_geometric_error(i);
+	}
+	if (tree.sub_nodes.empty()) {
+		tree.geometricError = 0.0;
+	}
+	else {
+		bool has = false;
+		osg_tree leaf;
+		for (auto& i : tree.sub_nodes) {
+			if (abs(i.geometricError) > EPS)
+			{
+				has = true;
+				leaf = i;
+			}
+		}
+
+		if (has == false)
+			tree.geometricError = get_geometric_error(tree.bbox);
+		else
+			tree.geometricError = leaf.geometricError * 2.0;
+	}
 }
 
 std::string encode_tile_json(osg_tree& tree, double x, double y) {
