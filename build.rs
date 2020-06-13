@@ -18,7 +18,7 @@ fn build_win_msvc() {
         .file("./src/osgb23dtile.cpp")
         .file("./src/dxt_img.cpp")
         .file("./src/make_gltf.cpp")
-        .compile("3dtile");
+        .compile("_3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=./lib");
     // -------------
@@ -55,7 +55,7 @@ fn build_win_gun() {
         .file("./src/osgb23dtile.cpp")
         .file("./src/dxt_img.cpp")
         .file("./src/make_gltf.cpp")
-        .compile("3dtile");
+        .compile("_3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=./lib");
     // -------------
