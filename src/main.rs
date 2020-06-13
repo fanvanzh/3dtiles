@@ -14,6 +14,7 @@ mod osgb;
 mod shape;
 
 use chrono::prelude::*;
+use serde::{Serialize, Deserialize};
 use clap::{App, Arg};
 use log::{Level, LevelFilter};
 use std::io::Write;
