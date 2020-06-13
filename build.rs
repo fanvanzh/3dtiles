@@ -91,7 +91,7 @@ fn build_linux_unkonw() {
         .file("./src/osgb23dtile.cpp")
         .file("./src/dxt_img.cpp")
         .file("./src/make_gltf.cpp")
-        .compile("3dtile");
+        .compile("_3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=./lib");
     // -------------
