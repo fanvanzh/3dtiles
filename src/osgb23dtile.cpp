@@ -636,24 +636,42 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                 }
                 else if (j == 2) {
                     // normal
+                    vector<double> box_max = { -1e38, -1e38, -1e38 };
+                    vector<double> box_min = { 1e38, 1e38, 1e38 };
+                    int normal_size = 0;
                     osg::Array* na = g->getNormalArray();
-                    osg::Vec3Array* v3f = (osg::Vec3Array*)na;
-                    vector<double> box_max = { -1e38, -1e38 ,-1e38 };
-                    vector<double> box_min = { 1e38, 1e38 ,1e38 };
-                    int normal_size = v3f->size();
-                    for (int vidx = 0; vidx < normal_size; vidx++)
+                    if (na)
                     {
-                        osg::Vec3f point = v3f->at(vidx);
-                        put_val(buffer.data, point.x());
-                        put_val(buffer.data, point.y());
-                        put_val(buffer.data, point.z());
+                        osg::Vec3Array* v3f = (osg::Vec3Array*)na;
+                        normal_size = v3f->size();
+                        for (int vidx = 0; vidx < normal_size; vidx++)
+                        {
+                            osg::Vec3f point = v3f->at(vidx);
+                            put_val(buffer.data, point.x());
+                            put_val(buffer.data, point.y());
+                            put_val(buffer.data, point.z());
 
-                        if (point.x() > box_max[0]) box_max[0] = point.x();
-                        if (point.x() < box_min[0]) box_min[0] = point.x();
-                        if (point.y() > box_max[1]) box_max[1] = point.y();
-                        if (point.y() < box_min[1]) box_min[1] = point.y();
-                        if (point.z() > box_max[2]) box_max[2] = point.z();
-                        if (point.z() < box_min[2]) box_min[2] = point.z();
+                            if (point.x() > box_max[0]) box_max[0] = point.x();
+                            if (point.x() < box_min[0]) box_min[0] = point.x();
+                            if (point.y() > box_max[1]) box_max[1] = point.y();
+                            if (point.y() < box_min[1]) box_min[1] = point.y();
+                            if (point.z() > box_max[2]) box_max[2] = point.z();
+                            if (point.z() < box_min[2]) box_min[2] = point.z();
+                        }
+                    }
+                    else { // mesh 没有法线坐标 
+                        osg::Vec3Array* v3f = (osg::Vec3Array*)va;
+                        int vec_size = v3f->size();
+                        normal_size = vec_size;
+                        box_max = { 0,0 };
+                        box_min = { 0,0 };
+                        for (int vidx = 0; vidx < vec_size; vidx++)
+                        {
+                            float x = 0;
+                            put_val(buffer.data, x);
+                            put_val(buffer.data, x);
+                            put_val(buffer.data, x);
+                        }
                     }
                     tinygltf::Accessor acc;
                     acc.bufferView = 2;
