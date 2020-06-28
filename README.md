@@ -115,6 +115,7 @@ shapefile 中需要有字段来表示高度信息。
 
 
 # Who use / Who star
+. NASA JPL (gkjohnson)
 
 . AnalyticalGraphicsInc (kring)
 
@@ -134,7 +135,9 @@ shapefile 中需要有字段来表示高度信息。
 
 . Alibaba (luxueyan)
 
-. Data Cloud Co. Ltd. (liujin834)
+. Data Cloud Co. Ltd (liujin834)
+
+. Tsinghua University (DeZhao-Zhang)
 
 . Wuhan University (chenguanzhou)
 
@@ -152,11 +155,7 @@ shapefile 中需要有字段来表示高度信息。
 
 . 合肥火星科技有限公司 (muyao1987)
 
-. 北京五维智能科技
-
 . 北京西部数据科技 (vtxf\elfc2000)
-
-. 图鲸科技 (bingqixuan)
 
 # About author
 
