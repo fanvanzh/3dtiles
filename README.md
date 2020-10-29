@@ -135,9 +135,13 @@ shapefile 中需要有字段来表示高度信息。
 
 . Alibaba (luxueyan)
 
+. Tencent (NichoZhang)
+
 . Data Cloud Co. Ltd (liujin834)
 
 . Tsinghua University (DeZhao-Zhang)
+
+. Peking University (CHRIS-WiNG\Weizhen-Fang)
 
 . Wuhan University (chenguanzhou)
 
