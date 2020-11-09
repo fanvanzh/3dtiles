@@ -254,7 +254,7 @@ Polygon_Mesh convert_polygon(
     double center_y,
     double height
     ) {
-    double bottom = 0.0;
+    //double bottom = 0.0;
     Polygon_Mesh mesh;
     OGRLinearRing* pRing = polyon->getExteriorRing();
     int ptNum = pRing->getNumPoints();
@@ -265,6 +265,7 @@ Polygon_Mesh convert_polygon(
     for (int i = 0; i < ptNum; i++) {
         OGRPoint pt;
         pRing->getPoint(i, &pt);
+		double bottom = pt.getZ();
         float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
         float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
         mesh.vertex.push_back({ point_x , point_y, (float)bottom });
@@ -295,6 +296,7 @@ Polygon_Mesh convert_polygon(
         for (int i = 0; i < ptNum; i++) {
             OGRPoint pt;
             pRing->getPoint(i, &pt);
+			double bottom = pt.getZ();
             float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
             float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
             mesh.vertex.push_back({ point_x , point_y, (float)bottom });
@@ -326,6 +328,7 @@ Polygon_Mesh convert_polygon(
             {
                 OGRPoint pt;
                 pRing->getPoint(i, &pt);
+				double bottom = pt.getZ();
                 float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
                 float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
                 polygon[0].push_back({ point_x, point_y });
@@ -345,6 +348,7 @@ Polygon_Mesh convert_polygon(
             {
                 OGRPoint pt;
                 pRing->getPoint(i, &pt);
+				double bottom = pt.getZ();
                 float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
                 float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
                 polygon[j].push_back({ point_x, point_y });
