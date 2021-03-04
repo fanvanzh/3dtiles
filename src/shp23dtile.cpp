@@ -149,6 +149,10 @@ public:
             }
             for (int i = 0; i < 4; i++) {
                 subnode[i]->add(id, box);
+		//when box is added to a node, stop the loop
+		if (box.isAdd) {
+		    break;
+		}
             }
         }
     }
