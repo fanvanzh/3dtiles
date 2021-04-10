@@ -19,6 +19,12 @@ fbx => 3dtile, convert fbx file to 3dtile, include auto_lod\texture convert etc.
 
 [Windows pre-build / 预编译下载](https://ci.appveyor.com/api/projects/fanvanzh/3dtiles/artifacts/3dtiles.zip?branch=master)
 
+* Install via scoop is supported on Windows / Windows下可以使用scoop进行安装：
+```
+scoop bucket add scoopcn https://github.com/scoopcn/scoopcn.git
+scoop install 3dtile
+```
+
 ## 3dtile 转换工具集。
 ### 世界上最快的 3dtiles 转换工具，极度节省你的处理时间。
 
