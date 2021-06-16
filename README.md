@@ -129,8 +129,6 @@ shapefile 中需要有字段来表示高度信息。
 
 . Geostar (hekaikai\shitao1988)
 
-. Geo-compass (wucangeo)
-
 . MapTalks (brucin\fuzhenn\axmand)
 
 . Alibaba (luxueyan)
