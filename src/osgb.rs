@@ -268,6 +268,7 @@ pub fn osgb_batch_convert(
                 "version": "1.0",
                 "gltfUpAxis":"Z"
             },
+            "geometricError": 1000,
             "root": json_val
         }
         );
