@@ -6,9 +6,9 @@
 
 [![Build status](https://ci.appveyor.com/api/projects/status/lyhf989tnt9jhi9y?svg=true)](https://ci.appveyor.com/project/fanvanzh/3dtiles)
 
-Tools for 3D-Tiles convertion.
+An extremely Fast tools for 3D-Tiles convertion!
 
-This is a `RUST language` project with cpp lib to handle osgb data.
+This is a `RUST language` project with c & cpp lib to handle osgb data.
 
 Tools provided are as follow：
 
@@ -124,9 +124,9 @@ To Translate.
   ``` json
   {
     "x": 120,
-  	"y": 30,
-  	"offset": 0 , // 模型最低面地面距离
-  	"max_lvl" : 20 // 处理切片模型到20级停止
+    "y": 30,
+    "offset": 0, // 模型最低面地面距离
+    "max_lvl": 20 // 处理切片模型到20级停止
   }
   ```
 
