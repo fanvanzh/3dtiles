@@ -6,7 +6,7 @@
 
 [![Build status](https://ci.appveyor.com/api/projects/status/lyhf989tnt9jhi9y?svg=true)](https://ci.appveyor.com/project/fanvanzh/3dtiles)
 
-An extremely Fast tools for 3D-Tiles convertion!
+An **extremely Fast** tools for 3D-Tiles convertion!
 
 This is a `RUST language` project with c & cpp lib to handle osgb data.
 
@@ -100,6 +100,7 @@ To Translate.
 ```sh
 # from osgb dataset
 3dtile.exe -f osgb -i E:\Data\hgc -o E:\Data\hgc_test
+# from osgb dataset with json config
 3dtile.exe -f osgb -i E:\Data\dayanta -o E:\Data\dayanta_test -c "{\"offset\": 0}"
 
 # from single shp file
@@ -125,12 +126,12 @@ To Translate.
   {
     "x": 120,
     "y": 30,
-    "offset": 0, // 模型最低面地面距离
-    "max_lvl": 20 // 处理切片模型到20级停止
+    "offset": 0,
+    "max_lvl": 20
   }
   ```
 
-  
+  offset 是指模型底面到地面的距离，max_lvl 指的是处理切片模型到20级停止。
 
 - `-f, --format <FORMAT>` 输入数据格式。
 
