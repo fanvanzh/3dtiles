@@ -75,7 +75,7 @@ pub fn shape_batch_convert(from: &str, to: &str, height: &str) -> bool {
                     root_region[x] = val;
                 }
             }
-            for &x in [2, 3, 5].into_iter() {
+            for &x in [2, 3, 5].iter() {
                 let val = region[x].as_f64().unwrap();
                 if val > root_region[x] {
                     root_region[x] = val;

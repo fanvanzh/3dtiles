@@ -95,7 +95,6 @@ fn build_linux_unkonw() {
     // -------------
     println!("cargo:rustc-link-search=native=./lib");
     // -------------
-    println!("cargo:rustc-link-lib=gdal");
     println!("cargo:rustc-link-lib=OpenThreads");
     println!("cargo:rustc-link-lib=osg");
     println!("cargo:rustc-link-lib=osgDB");

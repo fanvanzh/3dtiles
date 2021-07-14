@@ -14,7 +14,7 @@ mod osgb;
 mod shape;
 
 use chrono::prelude::*;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize};
 use clap::{App, Arg};
 use log::{Level, LevelFilter};
 use std::io::Write;
@@ -366,7 +366,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     if let Err(e) =
         osgb::osgb_batch_convert(&dir, &dir_dest, max_lvl, center_x, center_y, trans_region)
     {
-        error!("{}", e.description());
+        error!("{}", e);
         return;
     }
     let elap_sec = tick.elapsed().unwrap();

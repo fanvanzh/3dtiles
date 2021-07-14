@@ -1,6 +1,5 @@
 #[no_mangle]
 pub extern "C" fn write_file(file_name: *const i8, buf: *const u8, buf_len: u32) -> bool {
-    use std::error::Error;
     use std::ffi;
     use std::fs::File;
     use std::io::prelude::*;
@@ -13,7 +12,7 @@ pub extern "C" fn write_file(file_name: *const i8, buf: *const u8, buf_len: u32)
                 match f.write_all(arr) {
                     Ok(_) => true,
                     Err(e) => {
-                        error!("{}", e.description());
+                        error!("{}", e);
                         false
                     }
                 }
@@ -29,7 +28,6 @@ pub extern "C" fn write_file(file_name: *const i8, buf: *const u8, buf_len: u32)
 
 #[no_mangle]
 pub extern "C" fn mkdirs(path: *const i8) -> bool {
-    use std::error::Error;
     use std::ffi;
     use std::fs;
     unsafe {
@@ -37,12 +35,12 @@ pub extern "C" fn mkdirs(path: *const i8) -> bool {
             Ok(buf) => match fs::create_dir_all(buf) {
                 Ok(_) => true,
                 Err(e) => {
-                    error!("{}", e.description());
+                    error!("{}", e);
                     false
                 }
             },
             Err(e) => {
-                error!("{}", e.description());
+                error!("{}", e);
                 false
             }
         }
