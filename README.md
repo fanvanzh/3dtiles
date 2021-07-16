@@ -6,6 +6,8 @@
 
 [![Build status](https://ci.appveyor.com/api/projects/status/lyhf989tnt9jhi9y?svg=true)](https://ci.appveyor.com/project/fanvanzh/3dtiles)
 
+[![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/rust.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/rust.yml/badge.svg)
+
 Tools for 3D-Tiles convertion.
 
 This is a `RUST language` project with cpp lib to handle osgb data.
