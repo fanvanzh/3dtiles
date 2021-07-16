@@ -22,6 +22,13 @@
 
 using namespace std;
 
+#ifdef max
+#undef max
+#endif // max
+#ifdef min
+#undef min
+#endif // max
+
 template<class T>
 void put_val(std::vector<unsigned char>& buf, T val) {
     buf.insert(buf.end(), (unsigned char*)&val, (unsigned char*)&val + sizeof(T));
@@ -107,10 +114,6 @@ public:
 };
 
 double get_geometric_error(TileBox& bbox){
-#ifdef max
-#undef max
-#endif // max
-
     if (bbox.max.empty() || bbox.min.empty())
     {
         LOG_E("bbox is empty!");
