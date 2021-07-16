@@ -86,7 +86,7 @@ public:
             }
         }
     }
-    
+
     void apply(osg::PagedLOD& node) {
         //std::string path = node.getDatabasePath();
         int n = node.getNumFileNames();
@@ -102,7 +102,7 @@ public:
     std::vector<osg::Geometry*> geometry_array;
     std::set<osg::Texture*> texture_array;
     // 记录 mesh 和 texture 的关系，暂时认为一个模型最多只有一个 texture
-    std::map<osg::Geometry*, osg::Texture*> texture_map; 
+    std::map<osg::Geometry*, osg::Texture*> texture_map;
     std::vector<std::string> sub_node_names;
 };
 
@@ -160,7 +160,7 @@ std::string utf8_string (const char* path) {
     #else
         std::string utf8 = (path);
     #endif // WIN32
-    return utf8;   
+    return utf8;
 }
 
 int get_lvl_num(std::string file_name){
@@ -194,7 +194,7 @@ int get_lvl_num(std::string file_name){
 osg_tree get_all_tree(std::string& file_name) {
     osg_tree root_tile;
     vector<string> fileNames = { file_name };
-    
+
     InfoVisitor infoVisitor(get_parent(file_name));
     {   // add block to release Node
         osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
@@ -204,9 +204,9 @@ osg_tree get_all_tree(std::string& file_name) {
             return root_tile;
         }
         root_tile.file_name = file_name;
-        root->accept(infoVisitor);    
+        root->accept(infoVisitor);
     }
-    
+
     for (auto& i : infoVisitor.sub_node_names) {
         osg_tree tree = get_all_tree(i);
         if (!tree.file_name.empty()) {
@@ -216,7 +216,7 @@ osg_tree get_all_tree(std::string& file_name) {
     return root_tile;
 }
 
-struct mesh_info
+struct MeshInfo
 {
     string name;
     std::vector<double> min;
@@ -231,7 +231,7 @@ void alignment_buffer(std::vector<T>& buf) {
 }
 
 std::string vs_str() {
-    return 
+    return
 R"(
 precision highp float;
 uniform mat4 u_modelViewMatrix;
@@ -241,7 +241,7 @@ attribute vec2 a_texcoord0;
 attribute float a_batchid;
 varying vec2 v_texcoord0;
 void main(void)
-{   
+{
     v_texcoord0 = a_texcoord0;
     gl_Position = u_projectionMatrix * u_modelViewMatrix * vec4(a_position, 1.0);
 }
@@ -318,14 +318,14 @@ R"(
 })";
 }
 
-void make_gltf2_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& buffer, uint32_t &buf_offset) {
+void make_gltf2_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& buffer) {
     model.extensionsRequired = { "KHR_techniques_webgl" };
     model.extensionsUsed = { "KHR_techniques_webgl" };
     // add vs shader
     {
         tinygltf::BufferView bfv_vs;
         bfv_vs.buffer = 0;
-        bfv_vs.byteOffset = buf_offset;
+        bfv_vs.byteOffset = buffer.data.size();
         bfv_vs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
 
         std::string vs_shader = vs_str();
@@ -333,7 +333,6 @@ void make_gltf2_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& b
         buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
         bfv_vs.byteLength = vs_shader.size();
         alignment_buffer(buffer.data);
-        buf_offset = buffer.data.size();
         model.bufferViews.push_back(bfv_vs);
 
         tinygltf::Shader shader;
@@ -345,13 +344,12 @@ void make_gltf2_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& b
     {
         tinygltf::BufferView bfv_fs;
         bfv_fs.buffer = 0;
-        bfv_fs.byteOffset = buf_offset;
+        bfv_fs.byteOffset = buffer.data.size();
         bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
         std::string fs_shader = fs_str();
         buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
         bfv_fs.byteLength = fs_shader.size();
         alignment_buffer(buffer.data);
-        buf_offset = buffer.data.size();
         model.bufferViews.push_back(bfv_fs);
 
         tinygltf::Shader shader;
@@ -414,118 +412,287 @@ tinygltf::Material make_color_material_osgb(double r, double g, double b) {
     return material;
 }
 
-tinygltf::Accessor
-write_PrimitiveSet(osg::PrimitiveSet* ps, tinygltf::Buffer& buffer, uint32_t& acc_offset)
+struct OsgBuildState
 {
-    tinygltf::Accessor acc;
-    acc.bufferView = 0;
-    acc.type = TINYGLTF_TYPE_SCALAR;
+    tinygltf::Buffer* buffer;
+    tinygltf::Model* model;
+    osg::Vec3f point_max;
+    osg::Vec3f point_min;
+    int draw_array_first;
+    int draw_array_count;
+};
 
-    unsigned max_index = 0, min_index = 1 << 30, IndNum = 0;
+void expand_bbox3d(osg::Vec3f& point_max, osg::Vec3f& point_min, osg::Vec3f point)
+{
+    point_max.x() = std::max(point.x(), point_max.x());
+    point_min.x() = std::min(point.x(), point_min.x());
+    point_max.y() = std::max(point.y(), point_max.y());
+    point_min.y() = std::min(point.y(), point_min.y());
+    point_max.z() = std::max(point.z(), point_max.z());
+    point_min.z() = std::min(point.z(), point_min.z());
+}
+
+void expand_bbox2d(osg::Vec2f& point_max, osg::Vec2f& point_min, osg::Vec2f point)
+{
+    point_max.x() = std::max(point.x(), point_max.x());
+    point_min.x() = std::min(point.x(), point_min.x());
+    point_max.y() = std::max(point.y(), point_max.y());
+    point_min.y() = std::min(point.y(), point_min.y());
+}
+
+template<class T> void
+write_osg_indecis(T* drawElements, OsgBuildState* osgState, int componentType)
+{
+    unsigned max_index = 0;
+    unsigned min_index = 1 << 30;
+    unsigned buffer_start = osgState->buffer->data.size();
+
+    unsigned IndNum = drawElements->getNumIndices();
+    for (unsigned m = 0; m < IndNum; m++)
+    {
+        auto idx = drawElements->at(m);
+        put_val(osgState->buffer->data, idx);
+        if (idx > max_index) max_index = idx;
+        if (idx < min_index) min_index = idx;
+    }
+    alignment_buffer(osgState->buffer->data);
+
+    tinygltf::Accessor acc;
+    acc.bufferView = osgState->model->bufferViews.size();
+    acc.type = TINYGLTF_TYPE_SCALAR;
+    acc.componentType = componentType;
+    acc.count = IndNum;
+    acc.maxValues = { (double)max_index };
+    acc.minValues = { (double)min_index };
+    osgState->model->accessors.push_back(acc);
+
+    tinygltf::BufferView bfv;
+    bfv.buffer = 0;
+    bfv.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
+    bfv.byteOffset = buffer_start;
+    bfv.byteLength = osgState->buffer->data.size() - buffer_start;
+    osgState->model->bufferViews.push_back(bfv);
+}
+
+void
+write_vec3_array(osg::Vec3Array* v3f, OsgBuildState* osgState, osg::Vec3f& point_max, osg::Vec3f& point_min)
+{
+    int vec_start = 0;
+    int vec_end   = v3f->size();
+    if (osgState->draw_array_first >= 0)
+    {
+        vec_start = osgState->draw_array_first;
+        vec_end   = osgState->draw_array_count + vec_start;
+    }
+    unsigned buffer_start = osgState->buffer->data.size();
+    for (int vidx = vec_start; vidx < vec_end; vidx++)
+    {
+        osg::Vec3f point = v3f->at(vidx);
+        put_val(osgState->buffer->data, point.x());
+        put_val(osgState->buffer->data, point.y());
+        put_val(osgState->buffer->data, point.z());
+        expand_bbox3d(point_max, point_min, point);
+    }
+    alignment_buffer(osgState->buffer->data);
+
+    tinygltf::Accessor acc;
+    acc.bufferView = osgState->model->bufferViews.size();
+    acc.count = vec_end - vec_start;
+    acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+    acc.type = TINYGLTF_TYPE_VEC3;
+    acc.maxValues = {point_max.x(), point_max.y(), point_max.z()};
+    acc.minValues = {point_min.x(), point_min.y(), point_min.z()};
+    osgState->model->accessors.push_back(acc);
+
+    tinygltf::BufferView bfv;
+    bfv.buffer = 0;
+    bfv.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+    bfv.byteOffset = buffer_start;
+    bfv.byteLength = osgState->buffer->data.size() - buffer_start;
+    osgState->model->bufferViews.push_back(bfv);
+}
+
+void
+write_vec2_array(osg::Vec2Array* v2f, OsgBuildState* osgState)
+{
+    int vec_start = 0;
+    int vec_end   = v2f->size();
+    if (osgState->draw_array_first >= 0)
+    {
+        vec_start = osgState->draw_array_first;
+        vec_end   = osgState->draw_array_count + vec_start;
+    }
+    osg::Vec2f point_max(-1e38, -1e38);
+    osg::Vec2f point_min(1e38, 1e38);
+    unsigned buffer_start = osgState->buffer->data.size();
+    for (int vidx = vec_start; vidx < vec_end; vidx++)
+    {
+        osg::Vec2f point = v2f->at(vidx);
+        put_val(osgState->buffer->data, point.x());
+        put_val(osgState->buffer->data, point.y());
+        expand_bbox2d(point_max, point_min, point);
+    }
+    alignment_buffer(osgState->buffer->data);
+
+    tinygltf::Accessor acc;
+    acc.bufferView = osgState->model->bufferViews.size();
+    acc.count = vec_end - vec_start;
+    acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+    acc.type = TINYGLTF_TYPE_VEC2;
+    acc.maxValues = {point_max.x(), point_max.y()};
+    acc.minValues = {point_min.x(), point_min.y()};
+    osgState->model->accessors.push_back(acc);
+
+    tinygltf::BufferView bfv;
+    bfv.buffer = 0;
+    bfv.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+    bfv.byteOffset = buffer_start;
+    bfv.byteLength = osgState->buffer->data.size() - buffer_start;
+    osgState->model->bufferViews.push_back(bfv);
+}
+
+struct PrimitiveState
+{
+    int vertexAccessor;
+    int normalAccessor;
+    int textcdAccessor;
+};
+
+void
+write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgBuildState* osgState, PrimitiveState* pmtState)
+{
+    tinygltf::Primitive primits;
+    // indecis
+    primits.indices = osgState->model->accessors.size();
+    // reset draw_array state
+    osgState->draw_array_first = -1;
     osg::PrimitiveSet::Type t = ps->getType();
     switch (t)
     {
         case(osg::PrimitiveSet::DrawElementsUBytePrimitiveType):
         {
             const osg::DrawElementsUByte* drawElements = static_cast<const osg::DrawElementsUByte*>(ps);
-            IndNum = drawElements->getNumIndices();
-            for (unsigned m = 0; m < IndNum; m++)
-            {
-                unsigned char idx = drawElements->at(m);
-                put_val(buffer.data, idx);
-                if (idx > max_index) max_index = idx;
-                if (idx < min_index) min_index = idx;
-            }
-            acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
+            write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE);
             break;
         }
         case(osg::PrimitiveSet::DrawElementsUShortPrimitiveType):
         {
             const osg::DrawElementsUShort* drawElements = static_cast<const osg::DrawElementsUShort*>(ps);
-            IndNum = drawElements->getNumIndices();
-            for (unsigned m = 0; m < IndNum; m++)
-            {
-                unsigned short idx = drawElements->at(m);
-                put_val(buffer.data, idx);
-                if (idx > max_index) max_index = idx;
-                if (idx < min_index) min_index = idx;
-            }
-            acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+            write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT);
             break;
         }
         case(osg::PrimitiveSet::DrawElementsUIntPrimitiveType):
         {
             const osg::DrawElementsUInt* drawElements = static_cast<const osg::DrawElementsUInt*>(ps);
-            IndNum = drawElements->getNumIndices();
-            for (unsigned m = 0; m < IndNum; m++)
-            {
-                unsigned idx = drawElements->at(m);
-                put_val(buffer.data, idx);
-                if (idx > max_index) max_index = idx;
-                if (idx < min_index) min_index = idx;
-            }
-            acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
+            write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT);
             break;
         }
-        case osg::PrimitiveSet::DrawArraysPrimitiveType: {
+        case osg::PrimitiveSet::DrawArraysPrimitiveType:
+        {
+            primits.indices = -1;
             osg::DrawArrays* da = dynamic_cast<osg::DrawArrays*>(ps);
             auto mode = da->getMode();
-            if (mode != GL_TRIANGLES) {
+            if (mode != GL_TRIANGLES)
+            {
                 LOG_E("GLenum is not GL_TRIANGLES in osgb");
+                exit(1);
             }
-            int first = da->getFirst();
-            int count = da->getCount();
-            min_index = first;
-            max_index = first + count - 1;
-            IndNum = count;
-            if (max_index <= 0xFF)
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
-            else if (max_index <= 0xFFFF)
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
-            else
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
-
-            for (int i = first; i < max_index; i++) {
-                if (max_index <= 0xFF)
-                    put_val(buffer.data, (unsigned char)i);
-                else if (max_index <= 0xFFFF)
-                    put_val(buffer.data, (unsigned short)i);
-                else
-                    put_val(buffer.data, i);
-            }
+            osgState->draw_array_first = da->getFirst();
+            osgState->draw_array_count = da->getCount();
             break;
         }
         default:
         {
-            LOG_E("missing osg::PrimitiveSet::Type [%d]", t);
+            LOG_E("unsupport osg::PrimitiveSet::Type [%d]", t);
+            exit(1);
             break;
         }
     }
-    acc.count = IndNum;
-    acc.byteOffset = acc_offset;
-    alignment_buffer(buffer.data);
-    acc_offset = buffer.data.size();
-    acc.maxValues = { (double)max_index };
-    acc.minValues = { (double)min_index };
-    return acc;
+    // vertex: full vertex and part indecis
+    if (pmtState->vertexAccessor > -1 && osgState->draw_array_first == -1)
+    {
+        primits.attributes["POSITION"] = pmtState->vertexAccessor;
+    }
+    else
+    {
+        osg::Vec3f point_max(-1e38, -1e38, -1e38);
+        osg::Vec3f point_min(1e38, 1e38, 1e38);
+        osg::Vec3Array* vertexArr = (osg::Vec3Array*)g->getVertexArray();
+        primits.attributes["POSITION"] = osgState->model->accessors.size();
+        // reuse vertex accessor if multi indecis
+        if (pmtState->vertexAccessor == -1 && osgState->draw_array_first == -1)
+        {
+            pmtState->vertexAccessor = osgState->model->accessors.size();
+        }
+        write_vec3_array(vertexArr, osgState, point_max, point_min);
+        // merge mesh bbox
+        expand_bbox3d(osgState->point_max, osgState->point_min, point_max);
+        expand_bbox3d(osgState->point_max, osgState->point_min, point_min);
+    }
+    // normal
+    osg::Vec3Array* normalArr = (osg::Vec3Array*)g->getNormalArray();
+    if (normalArr)
+    {
+        if (pmtState->normalAccessor > -1 && osgState->draw_array_first == -1)
+        {
+            primits.attributes["NORMAL"] = pmtState->normalAccessor;
+        }
+        else
+        {
+            osg::Vec3f point_max(-1e38, -1e38, -1e38);
+            osg::Vec3f point_min(1e38, 1e38, 1e38);
+            primits.attributes["NORMAL"] = osgState->model->accessors.size();
+            // reuse vertex accessor if multi indecis
+            if (pmtState->normalAccessor == -1 && osgState->draw_array_first == -1)
+            {
+                pmtState->normalAccessor = osgState->model->accessors.size();
+            }
+            write_vec3_array(normalArr, osgState, point_max, point_min);
+        }
+    }
+    // textcoord
+    osg::Vec2Array* texArr = (osg::Vec2Array*)g->getTexCoordArray(0);
+    if (texArr)
+    {
+        if (pmtState->textcdAccessor > -1 && osgState->draw_array_first == -1)
+        {
+            primits.attributes["TEXCOORD_0"] = pmtState->textcdAccessor;
+        }
+        else
+        {
+            primits.attributes["TEXCOORD_0"] = osgState->model->accessors.size();
+            // reuse textcoord accessor if multi indecis
+            if (pmtState->textcdAccessor == -1 && osgState->draw_array_first == -1)
+            {
+                pmtState->textcdAccessor = osgState->model->accessors.size();
+            }
+            write_vec2_array(texArr, osgState);
+        }
+    }
+    // material
+    primits.material = 0;
+
+    primits.mode = TINYGLTF_MODE_TRIANGLES;
+    osgState->model->meshes.back().primitives.push_back(primits);
 }
 
-void write_PrimitiveSetS(tinygltf::Model& model, tinygltf::Buffer& buffer, osg::Geometry* g, uint32_t& acc_offset)
+void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState)
 {
     osg::PrimitiveSet::Type t = g->getPrimitiveSet(0)->getType();
+    PrimitiveState pmtState = {-1, -1, -1};
     for (int k = 0; k < g->getNumPrimitiveSets(); k++)
     {
         osg::PrimitiveSet* ps = g->getPrimitiveSet(k);
         if (t != ps->getType())
         {
             LOG_E("PrimitiveSets type are NOT same in osgb");
+            exit(1);
         }
-        tinygltf::Accessor acc = write_PrimitiveSet(ps, buffer, acc_offset);
-        model.accessors.push_back(acc);
+        write_element_array_primitive(g, ps, osgState, &pmtState);
     }
 }
 
-bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info>& v_info) {
+bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) {
     vector<string> fileNames = { path };
     std::string parent_path = get_parent(path);
     osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
@@ -544,218 +711,73 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
         tinygltf::TinyGLTF gltf;
         tinygltf::Model model;
         tinygltf::Buffer buffer;
-        // buffer_view {index,vertex,normal(texcoord,image)}
-        uint32_t buf_offset = 0;
-        uint32_t acc_offset = 0;
-        for (int j = 0; j < 4; j++)
+
+        osg::Vec3f point_max, point_min;
+        OsgBuildState osgState = {
+            &buffer, &model, osg::Vec3f(-1e38,-1e38,-1e38), osg::Vec3f(1e38,1e38,1e38), -1, -1
+        };
+        // mesh
+        model.meshes.resize(1);
+        int primitive_idx = 0;
+        for (auto g : infoVisitor.geometry_array)
         {
-            for (auto g : infoVisitor.geometry_array) {
-                osg::Array* va = g->getVertexArray();
-                if (g->getNumPrimitiveSets() == 0) {
-                    continue;
-                }
-                switch (j)
+            write_osgGeometry(g, &osgState);
+            // update primitive material index
+            if (infoVisitor.texture_array.size() > 1)
+            {
+                for (int k = 0; k < g->getNumPrimitiveSets(); k++)
                 {
-                    case 0:
+                    auto tex = infoVisitor.texture_map[g];
+                    for (auto texture : infoVisitor.texture_array)
                     {
-                        // indecis
-                        write_PrimitiveSetS(model, buffer, g, acc_offset);
-                        break;
+                        if (tex == texture)
+                            break;
+                        model.meshes.back().primitives[primitive_idx].material++;
                     }
-                    case 1:
-                    {
-                        // vertecis
-                        osg::Vec3Array* v3f = (osg::Vec3Array*)va;
-                        int vec_size = v3f->size();
-                        vector<double> box_max = {-1e38, -1e38 ,-1e38 };
-                        vector<double> box_min = { 1e38, 1e38 ,1e38 };
-                        for (int vidx = 0; vidx < vec_size; vidx++)
-                        {
-                            osg::Vec3f point = v3f->at(vidx);
-                            put_val(buffer.data, point.x());
-                            put_val(buffer.data, point.y());
-                            put_val(buffer.data, point.z());
-                            if (point.x() > box_max[0]) box_max[0] = point.x();
-                            if (point.x() < box_min[0]) box_min[0] = point.x();
-                            if (point.y() > box_max[1]) box_max[1] = point.y();
-                            if (point.y() < box_min[1]) box_min[1] = point.y();
-                            if (point.z() > box_max[2]) box_max[2] = point.z();
-                            if (point.z() < box_min[2]) box_min[2] = point.z();
-                        }
-                        tinygltf::Accessor acc;
-                        acc.bufferView = 1;
-                        acc.byteOffset = acc_offset;
-                        alignment_buffer(buffer.data);
-                        acc_offset = buffer.data.size() - buf_offset;
-                        acc.count = vec_size;
-                        acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-                        acc.type = TINYGLTF_TYPE_VEC3;
-                        acc.maxValues = box_max;
-                        acc.minValues = box_min;
-                        model.accessors.push_back(acc);
-
-                        // calc the box
-                        mesh_info osgb_info;
-                        osgb_info.name = g->getName();
-                        osgb_info.min = box_min;
-                        osgb_info.max = box_max;
-                        v_info.push_back(osgb_info);
-                        break;
-                    }
-                    case 2:
-                    {
-                        // normal
-                        vector<double> box_max = { -1e38, -1e38, -1e38 };
-                        vector<double> box_min = { 1e38, 1e38, 1e38 };
-                        int normal_size = 0;
-                        osg::Array* na = g->getNormalArray();
-                        if (na)
-                        {
-                            osg::Vec3Array* v3f = (osg::Vec3Array*)na;
-                            normal_size = v3f->size();
-                            for (int vidx = 0; vidx < normal_size; vidx++)
-                            {
-                                osg::Vec3f point = v3f->at(vidx);
-                                put_val(buffer.data, point.x());
-                                put_val(buffer.data, point.y());
-                                put_val(buffer.data, point.z());
-
-                                if (point.x() > box_max[0]) box_max[0] = point.x();
-                                if (point.x() < box_min[0]) box_min[0] = point.x();
-                                if (point.y() > box_max[1]) box_max[1] = point.y();
-                                if (point.y() < box_min[1]) box_min[1] = point.y();
-                                if (point.z() > box_max[2]) box_max[2] = point.z();
-                                if (point.z() < box_min[2]) box_min[2] = point.z();
-                            }
-                        }
-                        else { // mesh 没有法线坐标 
-                            osg::Vec3Array* v3f = (osg::Vec3Array*)va;
-                            int vec_size = v3f->size();
-                            normal_size = vec_size;
-                            box_max = { 0,0 };
-                            box_min = { 0,0 };
-                            for (int vidx = 0; vidx < vec_size; vidx++)
-                            {
-                                float x = 0;
-                                put_val(buffer.data, x);
-                                put_val(buffer.data, x);
-                                put_val(buffer.data, x);
-                            }
-                        }
-                        tinygltf::Accessor acc;
-                        acc.bufferView = 2;
-                        acc.byteOffset = acc_offset;
-                        alignment_buffer(buffer.data);
-                        acc_offset = buffer.data.size() - buf_offset;
-                        acc.count = normal_size;
-                        acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-                        acc.type = TINYGLTF_TYPE_VEC3;
-                        acc.maxValues = box_max;
-                        acc.minValues = box_min;
-                        model.accessors.push_back(acc);
-                        break;
-                    }
-                    case 3:
-                    {
-                        // texture coord
-                        vector<double> box_max = { -1e38, -1e38 };
-                        vector<double> box_min = { 1e38, 1e38 };
-                        int texture_size = 0;
-                        osg::Array* na = g->getTexCoordArray(0);
-                        if (na) {
-                            osg::Vec2Array* v2f = (osg::Vec2Array*)na;
-                            texture_size = v2f->size();
-                            for (int vidx = 0; vidx < texture_size; vidx++)
-                            {
-                                osg::Vec2f point = v2f->at(vidx);
-                                put_val(buffer.data, point.x());
-                                put_val(buffer.data, point.y());
-                                if (point.x() > box_max[0]) box_max[0] = point.x();
-                                if (point.x() < box_min[0]) box_min[0] = point.x();
-                                if (point.y() > box_max[1]) box_max[1] = point.y();
-                                if (point.y() < box_min[1]) box_min[1] = point.y();
-                            }
-                        }
-                        else { // mesh 没有纹理坐标
-                            osg::Vec3Array* v3f = (osg::Vec3Array*)va;
-                            int vec_size = v3f->size();
-                            texture_size = vec_size;
-                            box_max = { 0,0 };
-                            box_min = { 0,0 };
-                            for (int vidx = 0; vidx < vec_size; vidx++)
-                            {
-                                float x = 0;
-                                put_val(buffer.data, x);
-                                put_val(buffer.data, x);
-                            }
-                        }
-                        tinygltf::Accessor acc;
-                        acc.bufferView = 3;
-                        acc.byteOffset = acc_offset;
-                        alignment_buffer(buffer.data);
-                        acc_offset = buffer.data.size() - buf_offset;
-                        acc.count = texture_size;
-                        acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-                        acc.type = TINYGLTF_TYPE_VEC2;
-                        acc.maxValues = box_max;
-                        acc.minValues = box_min;
-                        model.accessors.push_back(acc);
-                        break;
-                    }
-                    default:
-                        break;
+                    primitive_idx++;
                 }
             }
-            tinygltf::BufferView bfv;
-            bfv.buffer = 0;
-            if (j == 0) {
-                bfv.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
-            }
-            else {
-                bfv.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-            }
-            bfv.byteOffset = buf_offset;
-            alignment_buffer(buffer.data);
-            bfv.byteLength = buffer.data.size() - buf_offset;
-            buf_offset = buffer.data.size();
-            if (infoVisitor.geometry_array.size() > 1) {
-                if (j == 1) { bfv.byteStride = 4 * 3; } 
-                if (j == 2) { bfv.byteStride = 4 * 3; }
-                if (j == 3) { bfv.byteStride = 4 * 2; } 
-            }
-            model.bufferViews.push_back(bfv);
         }
+        mesh_info.min = {
+            osgState.point_min.x(),
+            osgState.point_min.y(),
+            osgState.point_min.z()
+        };
+        mesh_info.max = {
+            osgState.point_max.x(),
+            osgState.point_max.y(),
+            osgState.point_max.z()
+        };
         // image
         {
-            int buf_view = 4;
-            for (auto tex : infoVisitor.texture_array) {
+            for (auto tex : infoVisitor.texture_array)
+            {
+                unsigned buffer_start = buffer.data.size();
                 std::vector<unsigned char> jpeg_buf;
                 jpeg_buf.reserve(512 * 512 * 3);
                 int width, height, comp;
-                {
-                    if (tex) {
-                        if (tex->getNumImages() > 0) {
-                            osg::Image* img = tex->getImage(0);
-                            if (img) {
-                                width = img->s();
-                                height = img->t();
-                                comp = img->getPixelSizeInBits();
-                                if (comp == 8) comp = 1;
-                                if (comp == 24) comp = 3;
-                                if (comp == 4) {
-                                    comp = 3;
-                                    fill_4BitImage(jpeg_buf, img, width, height);
-                                }
-                                else
+                if (tex) {
+                    if (tex->getNumImages() > 0) {
+                        osg::Image* img = tex->getImage(0);
+                        if (img) {
+                            width = img->s();
+                            height = img->t();
+                            comp = img->getPixelSizeInBits();
+                            if (comp == 8) comp = 1;
+                            if (comp == 24) comp = 3;
+                            if (comp == 4) {
+                                comp = 3;
+                                fill_4BitImage(jpeg_buf, img, width, height);
+                            }
+                            else
+                            {
+                                unsigned row_step = img->getRowStepInBytes();
+                                unsigned row_size = img->getRowSizeInBytes();
+                                for (size_t i = 0; i < height; i++)
                                 {
-                                    unsigned row_step = img->getRowStepInBytes();
-                                    unsigned row_size = img->getRowSizeInBytes();
-                                    for (size_t i = 0; i < height; i++)
-                                    {
-                                        jpeg_buf.insert(jpeg_buf.end(),
-                                            img->data() + row_step * i,
-                                            img->data() + row_step * i + row_size);
-                                    }
+                                    jpeg_buf.insert(jpeg_buf.end(),
+                                        img->data() + row_step * i,
+                                        img->data() + row_step * i + row_size);
                                 }
                             }
                         }
@@ -774,66 +796,27 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
                 }
                 tinygltf::Image image;
                 image.mimeType = "image/jpeg";
-
-                image.bufferView = buf_view++;
+                image.bufferView = model.bufferViews.size();
                 model.images.push_back(image);
                 tinygltf::BufferView bfv;
                 bfv.buffer = 0;
-                bfv.byteOffset = buf_offset;
-                bfv.byteLength = buffer.data.size() - buf_offset;
+                bfv.byteOffset = buffer_start;
                 alignment_buffer(buffer.data);
-                buf_offset = buffer.data.size();
+                bfv.byteLength = buffer.data.size() - buffer_start;
                 model.bufferViews.push_back(bfv);
             }
         }
-        // mesh 
+        // node
         {
-            int MeshNum = infoVisitor.geometry_array.size();
-            for (int i = 0; i < MeshNum; i++) {
-                tinygltf::Mesh mesh;
-                //mesh.name = meshes[i].mesh_name;
-                tinygltf::Primitive primits;
-                primits.attributes = {
-                    //std::pair<std::string,int>("_BATCHID", 2 * i + 1),
-                    std::pair<std::string,int>("POSITION", 1 * MeshNum + i),
-                    std::pair<std::string,int>("NORMAL",   2 * MeshNum + i),
-                    std::pair<std::string,int>("TEXCOORD_0",   3 * MeshNum + i),
-                };
-                primits.indices = i;
-                primits.material = 0;
-                if (infoVisitor.texture_array.size() > 1) {
-                    auto geomtry = infoVisitor.geometry_array[i];
-                    auto tex = infoVisitor.texture_map[geomtry];
-                    for (auto texture : infoVisitor.texture_array) {
-                        if (tex != texture) {
-                            primits.material++;
-                        }
-                        else {
-                            break;
-                        }
-                    }
-                }
-                primits.mode = TINYGLTF_MODE_TRIANGLES;
-                mesh.primitives = {
-                    primits
-                };
-                model.meshes.push_back(mesh);
-            }
-
-            // 加载所有的模型
-            for (int i = 0; i < MeshNum; i++) {
-                tinygltf::Node node;
-                node.mesh = i;
-                model.nodes.push_back(node);
-            }
+            tinygltf::Node node;
+            node.mesh = 0;
+            model.nodes.push_back(node);
         }
         // scene
         {
             // 一个场景
             tinygltf::Scene sence;
-            for (int i = 0; i < infoVisitor.geometry_array.size(); i++) {
-                sence.nodes.push_back(i);
-            }
+            sence.nodes.push_back(0);
             // 所有场景
             model.scenes = { sence };
             model.defaultScene = 0;
@@ -861,8 +844,9 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
             }
         }
         // use shader material
-        else {
-            make_gltf2_shader(model, infoVisitor.texture_array.size(), buffer, buf_offset);
+        else
+        {
+            make_gltf2_shader(model, infoVisitor.texture_array.size(), buffer);
         }
         // finish buffer
         model.buffers.push_back(std::move(buffer));
@@ -885,26 +869,20 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, std::vector<mesh_info
     return true;
 }
 
-bool osgb23dtile_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box) {
+bool osgb23dtile_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box)
+{
     using nlohmann::json;
-    
+
     std::string glb_buf;
-    std::vector<mesh_info> v_info;
-    bool ret = osgb2glb_buf(path, glb_buf,v_info);
-    if (!ret) return false;
+    MeshInfo minfo;
+    bool ret = osgb2glb_buf(path, glb_buf, minfo);
+    if (!ret)
+        return false;
 
-    tile_box.max = {-1e38,-1e38,-1e38};
-    tile_box.min = {1e38,1e38,1e38};
-    for ( auto &mesh: v_info) {
-        for(int i = 0; i < 3; i++) {
-            if (mesh.min[i] < tile_box.min[i])
-                tile_box.min[i] = mesh.min[i];
-            if (mesh.max[i] > tile_box.max[i])
-                tile_box.max[i] = mesh.max[i];
-        }
-    }
+    tile_box.max = minfo.max;
+    tile_box.min = minfo.min;
 
-    int mesh_count = v_info.size();
+    int mesh_count = 1;
     std::string feature_json_string;
     feature_json_string += "{\"BATCH_LENGTH\":";
     feature_json_string += std::to_string(mesh_count);
@@ -912,7 +890,6 @@ bool osgb23dtile_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box)
     while (feature_json_string.size() % 4 != 0 ) {
         feature_json_string.push_back(' ');
     }
-    
     json batch_json;
     std::vector<int> ids;
     for (int i = 0; i < mesh_count; ++i) {
@@ -943,7 +920,7 @@ bool osgb23dtile_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box)
     int batch_json_len = batch_json_string.size();
     int batch_bin_len = 0;
     int total_len = 28 /*header size*/ + feature_json_len + batch_json_len + glb_buf.size();
-    
+
     b3dm_buf += "b3dm";
     int version = 1;
     put_val(b3dm_buf, version);
@@ -986,7 +963,7 @@ void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl) {
     if (tree.file_name.empty()) return;
     int lvl = get_lvl_num(tree.file_name);
     if (lvl > max_lvl) return;
-    // 转 tile 
+    // 转 tile
     std::string b3dm_buf;
     osgb23dtile_buf(tree.file_name, b3dm_buf, tree.bbox);
     // false 可能当前为空, 但存在子节点
@@ -1096,11 +1073,12 @@ void calc_geometric_error(osg_tree& tree) {
 	}
 }
 
-std::string encode_tile_json(osg_tree& tree, double x, double y) {
-    if (tree.bbox.max.empty() || tree.bbox.min.empty()) {
+std::string
+encode_tile_json(osg_tree& tree, double x, double y)
+{
+    if (tree.bbox.max.empty() || tree.bbox.min.empty())
         return "";
-    }
-    
+
     std::string file_name = get_file_name(tree.file_name);
     std::string parent_str = get_parent(tree.file_name);
     std::string file_path = get_file_name(parent_str);
@@ -1145,20 +1123,22 @@ std::string encode_tile_json(osg_tree& tree, double x, double y) {
 外面分配好 box[6][double]
 外面分配好 string [1024*1024]
 */
-extern "C" void* osgb23dtile_path(
-    const char* in_path, const char* out_path, 
-    double *box, int* len, double x, double y,int max_lvl) {
-    
+extern "C" void* 
+osgb23dtile_path(const char* in_path, const char* out_path,
+                    double *box, int* len, double x, double y,int max_lvl)
+{
     std::string path = osg_string(in_path);
     osg_tree root = get_all_tree(path);
-    if (root.file_name.empty()) {
+    if (root.file_name.empty())
+    {
         LOG_E( "open file [%s] fail!", in_path);
         return NULL;
     }
     do_tile_job(root, out_path, max_lvl);
     // 返回 json 和 最大bbox
     extend_tile_box(root);
-    if (root.bbox.max.empty() || root.bbox.min.empty()) {
+    if (root.bbox.max.empty() || root.bbox.min.empty())
+    {
         LOG_E( "[%s] bbox is empty!", in_path);
         return NULL;
     }
@@ -1175,8 +1155,9 @@ extern "C" void* osgb23dtile_path(
     return str;
 }
 
-extern "C" bool osgb23dtile(
-    const char* in, const char* out ) {
+extern "C" bool
+osgb23dtile(const char* in, const char* out )
+{
     std::string b3dm_buf;
     TileBox tile_box;
     std::string path = osg_string(in);
@@ -1192,7 +1173,7 @@ extern "C" bool osgb23dtile(
         std::max<int>(p0,p1) + 1);
     std::string tileset = out;
     tileset = tileset.replace(
-        b3dm_fullpath.find_last_of('.'), 
+        b3dm_fullpath.find_last_of('.'),
         tileset.length() - 1, ".json");
     double center_mx = (tile_box.max[0] + tile_box.min[0]) / 2;
     double center_my = (tile_box.max[2] + tile_box.min[2]) / 2;
@@ -1220,12 +1201,15 @@ extern "C" bool osgb23dtile(
 }
 
 // 所有接口都是 utf8 字符串
-extern "C" bool osgb2glb(const char* in, const char* out) {
+extern "C" bool
+osgb2glb(const char* in, const char* out)
+{
     std::string b3dm_buf;
-    std::vector<mesh_info> v_info;
+    MeshInfo minfo;
     std::string path = osg_string(in);
-    bool ret = osgb2glb_buf(path,b3dm_buf,v_info);
+    bool ret = osgb2glb_buf(path, b3dm_buf, minfo);
     if (!ret) return false;
+
     ret = write_file(out, b3dm_buf.data(), b3dm_buf.size());
     if (!ret) return false;
     return true;
