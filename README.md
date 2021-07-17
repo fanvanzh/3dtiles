@@ -43,8 +43,10 @@ You may intereted in:
 
 ```sh
 # from osgb dataset
-3dtile.exe -f osgb -i E:\Data\hgc -o E:\Data\hgc_test
-3dtile.exe -f osgb -i E:\Data\dayanta -o E:\Data\dayanta_test -c "{\"offset\": 0}"
+3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path
+3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"offset\": 0}"
+# use pbr-texture
+3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"pbr\": true}"
 
 # from single shp file
 3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
@@ -102,8 +104,10 @@ To Translate.
 
 ```sh
 # from osgb dataset
-3dtile.exe -f osgb -i E:\Data\hgc -o E:\Data\hgc_test
-3dtile.exe -f osgb -i E:\Data\dayanta -o E:\Data\dayanta_test -c "{\"offset\": 0}"
+3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path
+3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"offset\": 0}"
+# use pbr-texture
+3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"pbr\": true}"
 
 # from single shp file
 3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
@@ -173,8 +177,6 @@ To Translate.
 
 Shapefile 中需要有字段来表示高度信息。
 
-仅支持 WGS84 坐标系（EPSG:4326）的矢量数据。
-
 ### ③ 通用模型转 glTF：
 
 支持 osg、osgb、obj、fbx、3ds 等单一通用模型数据转为 gltf、glb 格式。
@@ -184,7 +186,6 @@ Shapefile 中需要有字段来表示高度信息。
 ### ④ B3dm 单文件转 glb
 
 支持将 b3dm 单个文件转成 glb 格式，便于调试程序和测试数据
-
 
 
 ---
