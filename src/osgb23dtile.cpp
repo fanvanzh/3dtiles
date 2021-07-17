@@ -29,6 +29,8 @@ using namespace std;
 #undef min
 #endif // max
 
+static bool b_pbr_texture = false;
+
 template<class T>
 void put_val(std::vector<unsigned char>& buf, T val) {
     buf.insert(buf.end(), (unsigned char*)&val, (unsigned char*)&val + sizeof(T));
@@ -834,7 +836,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) 
             model.samplers = { sample };
         }
         /// --------------
-        if(0)
+        if(b_pbr_texture)
         {
             for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
             {
@@ -1128,7 +1130,8 @@ encode_tile_json(osg_tree& tree, double x, double y)
 */
 extern "C" void* 
 osgb23dtile_path(const char* in_path, const char* out_path,
-                    double *box, int* len, double x, double y,int max_lvl)
+                    double *box, int* len, double x, double y,
+                    int max_lvl, bool pbr_texture)
 {
     std::string path = osg_string(in_path);
     osg_tree root = get_all_tree(path);
@@ -1137,6 +1140,7 @@ osgb23dtile_path(const char* in_path, const char* out_path,
         LOG_E( "open file [%s] fail!", in_path);
         return NULL;
     }
+    b_pbr_texture = pbr_texture;
     do_tile_job(root, out_path, max_lvl);
     // 返回 json 和 最大bbox
     extend_tile_box(root);

@@ -576,7 +576,10 @@ struct Accessor {
     return 0;
   }
 
-  Accessor() { bufferView = -1; }
+  Accessor() {
+    bufferView = -1;
+    byteOffset = 0;
+  }
 };
 
 struct PerspectiveCamera {
@@ -3529,8 +3532,10 @@ static void SerializeGltfMesh(Mesh &mesh, json &o) {
     }
 
     primitive["attributes"] = attributes;
-    SerializeNumberProperty<int>("indices", gltfPrimitive.indices, primitive);
-    SerializeNumberProperty<int>("material", gltfPrimitive.material, primitive);
+    if (gltfPrimitive.indices > -1)
+        SerializeNumberProperty<int>("indices", gltfPrimitive.indices, primitive);
+    if (gltfPrimitive.material > -1)
+        SerializeNumberProperty<int>("material", gltfPrimitive.material, primitive);
     SerializeNumberProperty<int>("mode", gltfPrimitive.mode, primitive);
 
     // Morph targets

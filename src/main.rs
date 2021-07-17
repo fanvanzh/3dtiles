@@ -226,6 +226,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     let mut center_y = 0f64;
     let mut max_lvl = None;
     let mut trans_region = None;
+    let mut pbr_texture  = false;
 
     // try parse metadata.xml
     let metadata_file = dir.join("metadata.xml");
@@ -359,12 +360,16 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
         if let Some(lvl) = v["max_lvl"].as_i64() {
             max_lvl = Some(lvl as i32);
         }
+        if let Some(pbr) = v["pbr"].as_bool() {
+            pbr_texture = pbr;
+        }
     } else if config.len() > 0 {
         error!("config error --> {}", config);
     }
     let tick = time::SystemTime::now();
-    if let Err(e) =
-        osgb::osgb_batch_convert(&dir, &dir_dest, max_lvl, center_x, center_y, trans_region)
+    if let Err(e) = osgb::osgb_batch_convert(
+                        &dir, &dir_dest, max_lvl,
+                        center_x, center_y, trans_region, pbr_texture)
     {
         error!("{}", e);
         return;

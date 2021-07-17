@@ -25,6 +25,7 @@ extern "C" {
         x: f64,
         y: f64,
         max_lvl: i32,
+        pbr_texture: bool
     ) -> *mut libc::c_void;
 
     #[allow(dead_code)]
@@ -112,6 +113,7 @@ pub fn osgb_batch_convert(
     center_x: f64,
     center_y: f64,
     region_offset: Option<f64>,
+    pbr_texture: bool,
 ) -> Result<(), Box<dyn Error>> {
     use std::fs::File;
     use std::io::prelude::*;
@@ -171,6 +173,7 @@ pub fn osgb_batch_convert(
                 rad_x,
                 rad_y,
                 max_lvl,
+                pbr_texture,
             );
             if out_ptr.is_null() {
                 error!("failed: {}", info.in_dir);
