@@ -12,7 +12,7 @@ jobs:
     - name: Build
       run: |
         cargo build --verbose --release
-        cp target/release/_3dtile.exe bin/
+        cp target/release/_3dtile.exe bin/3dtile.exe
     
     - name: Run tests
       run: cargo test --verbose

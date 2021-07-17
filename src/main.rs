@@ -72,7 +72,7 @@ fn main() {
             Arg::with_name("format")
                 .short("f")
                 .long("format")
-                .value_name("osgb,shape,gltf")
+                .value_name("osgb,shape,gltf,b3dm")
                 .help("Set input format")
                 .required(true)
                 .takes_value(true),
@@ -86,8 +86,9 @@ fn main() {
 {
     \"x\": x,
     \"y\": y,
-    \"offset\": 0 (模型最低面地面距离),
-    \"max_lvl\" : 20 (处理切片模型到20级停止)
+    \"offset\": 0,
+    \"max_lvl\" : 20,
+    \"pbr\" : false
 }",
                 )
                 .takes_value(true),

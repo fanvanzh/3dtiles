@@ -3984,7 +3984,9 @@ std::string TinyGLTF::Serialize(Model *model) {
   KHR_techniques_webgl["techniques"] = techniques;
   json extensions = json({});
   extensions["KHR_techniques_webgl"] = KHR_techniques_webgl;
-  output["extensions"] = extensions;
+  // use extension
+  if (model->extensionsUsed.size())
+    output["extensions"] = extensions;
 
   // MESHES
   json meshes;
