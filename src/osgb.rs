@@ -4,7 +4,6 @@ extern crate serde;
 extern crate serde_json;
 
 use std::fs;
-use std::io;
 
 use osgb::rayon::prelude::*;
 
@@ -12,10 +11,6 @@ use std::error::Error;
 use std::path::Path;
 
 extern "C" {
-    pub fn make_gltf(in_path: *const u8, out_path: *const u8) -> bool;
-
-    #[allow(dead_code)]
-    fn osgb23dtile(name_in: *const u8, name_out: *const u8) -> bool;
 
     fn osgb23dtile_path(
         name_in: *const u8,
@@ -28,10 +23,9 @@ extern "C" {
         pbr_texture: bool
     ) -> *mut libc::c_void;
 
-    #[allow(dead_code)]
-    fn osgb2glb(name_in: *const u8, name_out: *const u8) -> bool;
-
-    fn transform_c(radian_x: f64, radian_y: f64, height_min: f64, ptr: *mut f64);
+    pub fn osgb2glb(name_in: *const u8, name_out: *const u8) -> bool;
+ 
+	fn transform_c(radian_x: f64, radian_y: f64, height_min: f64, ptr: *mut f64);
 
     pub fn epsg_convert(insrs: i32, val: *mut f64, gdal: *const i8) -> bool;
 
@@ -44,47 +38,6 @@ extern "C" {
 
     #[allow(dead_code)]
     fn meter_to_longti(m: f64, lati: f64) -> f64;
-}
-
-#[allow(dead_code)]
-fn walk_path(dir: &Path, cb: &mut dyn FnMut(&str)) -> io::Result<()> {
-    if dir.is_dir() {
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                walk_path(&path, cb)?;
-            } else {
-                if let Some(osdir) = path.extension() {
-                    if osdir.to_str() == Some("osgb") {
-                        cb(&path.to_str().unwrap());
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn osgv_convert(dir_osgb: &str, dir_from: &str, dir_dest: &str) -> Result<(), Box<dyn Error>> {
-    unsafe {
-        let mut source_vec = dir_osgb.to_string().as_bytes_mut().to_vec();
-        source_vec.push(0x00);
-        let dest_string = dir_osgb
-            .clone()
-            .replace(".osgb", ".b3dm")
-            .replace(dir_from, dir_dest);
-        let mut dest_vec = dest_string.to_string().as_bytes_mut().to_vec();
-        dest_vec.push(0x00);
-        // create dir first
-        let dest_path = Path::new(dest_string.as_str()).parent().unwrap();
-        fs::create_dir_all(dest_path)?;
-        if !osgb23dtile(source_vec.as_ptr(), dest_vec.as_ptr()) {
-            return Err(From::from(format!("failed: {}", dir_osgb)));
-        }
-    }
-    Ok(())
 }
 
 fn str_to_vec_c(str: &str) -> Vec<u8> {

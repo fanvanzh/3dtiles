@@ -17,7 +17,6 @@ fn build_win_msvc() {
         .file("./src/shp23dtile.cpp")
         .file("./src/osgb23dtile.cpp")
         .file("./src/dxt_img.cpp")
-        .file("./src/make_gltf.cpp")
         .compile("_3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=./lib");
@@ -54,7 +53,6 @@ fn build_win_gun() {
         .file("./src/shp23dtile.cpp")
         .file("./src/osgb23dtile.cpp")
         .file("./src/dxt_img.cpp")
-        .file("./src/make_gltf.cpp")
         .compile("_3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=./lib");
@@ -90,7 +88,6 @@ fn build_linux_unkonw() {
         .file("./src/shp23dtile.cpp")
         .file("./src/osgb23dtile.cpp")
         .file("./src/dxt_img.cpp")
-        .file("./src/make_gltf.cpp")
         .compile("_3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=./lib");

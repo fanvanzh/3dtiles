@@ -202,7 +202,7 @@ osg::ref_ptr<osg::Geometry> make_triangle_mesh_auto(Polygon_Mesh& mesh) {
     geometry->setNormalArray(norms);
     auto* uIntId = trig->getTriangles();
     osg::DrawElementsUShort* _set = new osg::DrawElementsUShort(osg::DrawArrays::TRIANGLES);
-    for (int i = 0; i < uIntId->getNumPrimitives(); i++) {
+    for (unsigned int i = 0; i < uIntId->getNumPrimitives(); i++) {
         _set->addElement(uIntId->getElement(i));
     }
     geometry->addPrimitiveSet(_set);

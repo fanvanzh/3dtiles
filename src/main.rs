@@ -197,7 +197,7 @@ fn convert_gltf(src: &str, dest: &str) {
     }
     unsafe {
         let c_str = CString::new(dest).unwrap();
-        let ret = osgb::make_gltf(src.as_ptr(), c_str.as_ptr() as *const u8);
+        let ret = osgb::osgb2glb(src.as_ptr(), c_str.as_ptr() as *const u8);
         if !ret {
             error!("convert failed");
         } else {

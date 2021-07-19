@@ -194,7 +194,7 @@ bool write_tileset_box(
 
     json_txt += last_buf;
 
-    bool ret = write_file(json_file, json_txt.data(), json_txt.size());
+    bool ret = write_file(json_file, json_txt.data(), (unsigned long)json_txt.size());
     if (!ret) {
         LOG_E("write file %s fail", json_file);
     }
@@ -245,7 +245,7 @@ bool write_tileset_region(
 
     json_txt += last_buf;
 
-    bool ret = write_file(json_file, json_txt.data(), json_txt.size());
+    bool ret = write_file(json_file, json_txt.data(), (unsigned long)json_txt.size());
     if (!ret) {
         LOG_E("write file %s fail", json_file);
     }
@@ -357,7 +357,7 @@ bool write_tileset(
 
     json_txt += last_buf;
 
-    bool ret = write_file(full_path, json_txt.data(), json_txt.size());
+    bool ret = write_file(full_path, json_txt.data(), (unsigned long)json_txt.size());
     if (!ret) {
         LOG_E("write file %s fail", filename);
     }

@@ -3,6 +3,6 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerCommandArguments>-f gltf -i ..\..\data\test\test.osgb -o ..\..\data\test\test.glb</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommand>..\..\target\debug\3dtile.exe</LocalDebuggerCommand>
+    <LocalDebuggerCommand>..\..\target\debug\_3dtile.exe</LocalDebuggerCommand>
   </PropertyGroup>
 </Project>

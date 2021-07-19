@@ -675,7 +675,7 @@ write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgBuildS
         }
     }
     // material
-    primits.material = 0;
+    primits.material = -1;
 
     primits.mode = TINYGLTF_MODE_TRIANGLES;
     osgState->model->meshes.back().primitives.push_back(primits);
@@ -685,7 +685,7 @@ void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState)
 {
     osg::PrimitiveSet::Type t = g->getPrimitiveSet(0)->getType();
     PrimitiveState pmtState = {-1, -1, -1};
-    for (int k = 0; k < g->getNumPrimitiveSets(); k++)
+    for (unsigned int k = 0; k < g->getNumPrimitiveSets(); k++)
     {
         osg::PrimitiveSet* ps = g->getPrimitiveSet(k);
         if (t != ps->getType())
@@ -728,17 +728,21 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) 
         {
             write_osgGeometry(g, &osgState);
             // update primitive material index
-            if (infoVisitor.texture_array.size() > 1)
+            if (infoVisitor.texture_array.size())
             {
-                for (int k = 0; k < g->getNumPrimitiveSets(); k++)
+                for (unsigned int k = 0; k < g->getNumPrimitiveSets(); k++)
                 {
                     auto tex = infoVisitor.texture_map[g];
-                    for (auto texture : infoVisitor.texture_array)
-                    {
-                        if (tex == texture)
-                            break;
-                        model.meshes.back().primitives[primitive_idx].material++;
-                    }
+					// if hava texture
+					if (tex)
+					{
+						for (auto texture : infoVisitor.texture_array)
+						{
+							model.meshes.back().primitives[primitive_idx].material++;
+							if (tex == texture)
+								break;
+						}
+					}
                     primitive_idx++;
                 }
             }
@@ -874,7 +878,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) 
     return true;
 }
 
-bool osgb23dtile_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box)
+bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box)
 {
     using nlohmann::json;
 
@@ -941,7 +945,6 @@ bool osgb23dtile_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box)
     return true;
 }
 
-
 std::vector<double> convert_bbox(TileBox tile) {
     double center_mx = (tile.max[0] + tile.min[0]) / 2;
     double center_my = (tile.max[1] + tile.min[1]) / 2;
@@ -970,7 +973,7 @@ void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl) {
     if (lvl > max_lvl) return;
     // 转 tile
     std::string b3dm_buf;
-    osgb23dtile_buf(tree.file_name, b3dm_buf, tree.bbox);
+    osgb2b3dm_buf(tree.file_name, b3dm_buf, tree.bbox);
     // false 可能当前为空, 但存在子节点
     std::string out_file = out_path;
     out_file += "/";
@@ -1162,62 +1165,26 @@ osgb23dtile_path(const char* in_path, const char* out_path,
     return str;
 }
 
-extern "C" bool
-osgb23dtile(const char* in, const char* out )
-{
-    std::string b3dm_buf;
-    TileBox tile_box;
-    std::string path = osg_string(in);
-    bool ret = osgb23dtile_buf(path.c_str(),b3dm_buf,tile_box);
-    if (!ret) return false;
-    ret = write_file(out, b3dm_buf.data(), b3dm_buf.size());
-    if (!ret) return false;
-    // write tileset.json
-    std::string b3dm_fullpath = out;
-    auto p0 = b3dm_fullpath.find_last_of('/');
-    auto p1 = b3dm_fullpath.find_last_of('\\');
-    std::string b3dm_file_name = b3dm_fullpath.substr(
-        std::max<int>(p0,p1) + 1);
-    std::string tileset = out;
-    tileset = tileset.replace(
-        b3dm_fullpath.find_last_of('.'),
-        tileset.length() - 1, ".json");
-    double center_mx = (tile_box.max[0] + tile_box.min[0]) / 2;
-    double center_my = (tile_box.max[2] + tile_box.min[2]) / 2;
-    double center_mz = (tile_box.max[1] + tile_box.min[1]) / 2;
-
-    double width_meter = tile_box.max[0] - tile_box.min[0];
-    double height_meter = tile_box.max[2] - tile_box.min[2];
-    double z_meter = tile_box.max[1] - tile_box.min[1];
-    if (width_meter < 0.01) { width_meter = 0.01; }
-    if (height_meter < 0.01) { height_meter = 0.01; }
-    if (z_meter < 0.01) { z_meter = 0.01; }
-    Box box;
-    std::vector<double> v = {
-        center_mx,center_my,center_mz,
-        width_meter / 2, 0, 0,
-        0, height_meter / 2, 0,
-        0, 0, z_meter / 2
-    };
-    std::memcpy(box.matrix, v.data(), 12 * sizeof(double));
-    write_tileset_box(
-        NULL, box, 100, 
-        b3dm_file_name.c_str(),
-        tileset.c_str());
-    return true;
-}
-
 // 所有接口都是 utf8 字符串
 extern "C" bool
 osgb2glb(const char* in, const char* out)
 {
-    std::string b3dm_buf;
-    MeshInfo minfo;
+	b_pbr_texture = true;
+	MeshInfo minfo;
+	std::string glb_buf;
     std::string path = osg_string(in);
-    bool ret = osgb2glb_buf(path, b3dm_buf, minfo);
-    if (!ret) return false;
+    bool ret = osgb2glb_buf(path, glb_buf, minfo);
+	if (!ret)
+	{
+		LOG_E("convert to glb failed");
+		return false;
+	}
 
-    ret = write_file(out, b3dm_buf.data(), b3dm_buf.size());
-    if (!ret) return false;
+    ret = write_file(out, glb_buf.data(), (unsigned long)glb_buf.size());
+	if (!ret)
+	{
+		LOG_E("write glb file failed");
+		return false;
+	}
     return true;
 }

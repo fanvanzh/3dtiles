@@ -21,24 +21,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\src\earcut.hpp">
-      <Filter>源文件</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\extern.h">
-      <Filter>源文件</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\json.hpp">
-      <Filter>源文件</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\stb_image.h">
-      <Filter>源文件</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\stb_image_write.h">
-      <Filter>源文件</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\tiny_gltf.h">
-      <Filter>源文件</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\gdal\cpl_atomic_ops.h">
       <Filter>头文件\gdal</Filter>
     </ClInclude>
@@ -282,20 +264,27 @@
     <ClInclude Include="..\..\src\gdal\vrtdataset.h">
       <Filter>头文件\gdal</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\..\src\fun_c.rs">
-      <Filter>源文件</Filter>
-    </None>
-    <None Include="..\..\src\main.rs">
-      <Filter>源文件</Filter>
-    </None>
-    <None Include="..\..\src\osgb.rs">
-      <Filter>源文件</Filter>
-    </None>
-    <None Include="..\..\src\shape.rs">
-      <Filter>源文件</Filter>
-    </None>
+    <ClInclude Include="..\..\src\dxt_img.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\earcut.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\extern.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\json.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\stb_image.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\stb_image_write.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\tiny_gltf.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\osgb23dtile.cpp">
@@ -307,13 +296,10 @@
     <ClCompile Include="..\..\src\tileset.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\decompress.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\dxt_img.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\make_gltf.cpp">
+    <ClCompile Include="dll.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\src\dxt_img.h" />
     <ClInclude Include="..\..\src\earcut.hpp" />
     <ClInclude Include="..\..\src\extern.h" />
     <ClInclude Include="..\..\src\gdal\cplkeywordparser.h" />
@@ -108,24 +109,18 @@
     <ClInclude Include="..\..\src\tiny_gltf.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\src\fun_c.rs" />
-    <None Include="..\..\src\main.rs" />
-    <None Include="..\..\src\osgb.rs" />
-    <None Include="..\..\src\shape.rs" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\src\decompress.cpp" />
     <ClCompile Include="..\..\src\dxt_img.cpp" />
-    <ClCompile Include="..\..\src\make_gltf.cpp" />
     <ClCompile Include="..\..\src\osgb23dtile.cpp" />
     <ClCompile Include="..\..\src\shp23dtile.cpp" />
     <ClCompile Include="..\..\src\tileset.cpp" />
+    <ClCompile Include="dll.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{7BA34CCF-D221-4793-ABC1-F8418BD4F687}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>vs</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
+    <ProjectName>3dtile</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -142,15 +137,15 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -209,9 +204,12 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>../../lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>gdal_i.lib;osg.lib;osgDB.lib;osgUtil.lib;osgViewer.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>cd ../../ &amp; cargo build</Command>
+      <Command>
+      </Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -239,16 +237,20 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\src\osg;..\..\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>../../lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>gdal_i.lib;osg.lib;osgDB.lib;osgUtil.lib;osgViewer.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>cd ../../ &amp; cargo build --release</Command>
+      <Command>
+      </Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
