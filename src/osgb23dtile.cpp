@@ -712,169 +712,174 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) 
     osgUtil::SmoothingVisitor sv;
     root->accept(sv);
 
-    {
-        tinygltf::TinyGLTF gltf;
-        tinygltf::Model model;
-        tinygltf::Buffer buffer;
+    tinygltf::TinyGLTF gltf;
+    tinygltf::Model model;
+    tinygltf::Buffer buffer;
 
-        osg::Vec3f point_max, point_min;
-        OsgBuildState osgState = {
-            &buffer, &model, osg::Vec3f(-1e38,-1e38,-1e38), osg::Vec3f(1e38,1e38,1e38), -1, -1
-        };
-        // mesh
-        model.meshes.resize(1);
-        int primitive_idx = 0;
-        for (auto g : infoVisitor.geometry_array)
+    osg::Vec3f point_max, point_min;
+    OsgBuildState osgState = {
+        &buffer, &model, osg::Vec3f(-1e38,-1e38,-1e38), osg::Vec3f(1e38,1e38,1e38), -1, -1
+    };
+    // mesh
+    model.meshes.resize(1);
+    int primitive_idx = 0;
+    for (auto g : infoVisitor.geometry_array)
+    {
+        if (!g->getVertexArray() || g->getVertexArray()->getDataSize() == 0)
+            continue;
+
+        write_osgGeometry(g, &osgState);
+        // update primitive material index
+        if (infoVisitor.texture_array.size())
         {
-            write_osgGeometry(g, &osgState);
-            // update primitive material index
-            if (infoVisitor.texture_array.size())
+            for (unsigned int k = 0; k < g->getNumPrimitiveSets(); k++)
             {
-                for (unsigned int k = 0; k < g->getNumPrimitiveSets(); k++)
+                auto tex = infoVisitor.texture_map[g];
+                // if hava texture
+                if (tex)
                 {
-                    auto tex = infoVisitor.texture_map[g];
-					// if hava texture
-					if (tex)
-					{
-						for (auto texture : infoVisitor.texture_array)
-						{
-							model.meshes.back().primitives[primitive_idx].material++;
-							if (tex == texture)
-								break;
-						}
-					}
-                    primitive_idx++;
+                    for (auto texture : infoVisitor.texture_array)
+                    {
+                        model.meshes[0].primitives[primitive_idx].material++;
+                        if (tex == texture)
+                            break;
+                    }
                 }
+                primitive_idx++;
             }
         }
-        mesh_info.min = {
-            osgState.point_min.x(),
-            osgState.point_min.y(),
-            osgState.point_min.z()
-        };
-        mesh_info.max = {
-            osgState.point_max.x(),
-            osgState.point_max.y(),
-            osgState.point_max.z()
-        };
-        // image
+    }
+    // empty geometry or empty vertex-array
+    if (model.meshes[0].primitives.empty())
+        return false;
+
+    mesh_info.min = {
+        osgState.point_min.x(),
+        osgState.point_min.y(),
+        osgState.point_min.z()
+    };
+    mesh_info.max = {
+        osgState.point_max.x(),
+        osgState.point_max.y(),
+        osgState.point_max.z()
+    };
+    // image
+    {
+        for (auto tex : infoVisitor.texture_array)
         {
-            for (auto tex : infoVisitor.texture_array)
-            {
-                unsigned buffer_start = buffer.data.size();
-                std::vector<unsigned char> jpeg_buf;
-                jpeg_buf.reserve(512 * 512 * 3);
-                int width, height, comp;
-                if (tex) {
-                    if (tex->getNumImages() > 0) {
-                        osg::Image* img = tex->getImage(0);
-                        if (img) {
-                            width = img->s();
-                            height = img->t();
-                            comp = img->getPixelSizeInBits();
-                            if (comp == 8) comp = 1;
-                            if (comp == 24) comp = 3;
-                            if (comp == 4) {
-                                comp = 3;
-                                fill_4BitImage(jpeg_buf, img, width, height);
-                            }
-                            else
+            unsigned buffer_start = buffer.data.size();
+            std::vector<unsigned char> jpeg_buf;
+            jpeg_buf.reserve(512 * 512 * 3);
+            int width, height, comp;
+            if (tex) {
+                if (tex->getNumImages() > 0) {
+                    osg::Image* img = tex->getImage(0);
+                    if (img) {
+                        width = img->s();
+                        height = img->t();
+                        comp = img->getPixelSizeInBits();
+                        if (comp == 8) comp = 1;
+                        if (comp == 24) comp = 3;
+                        if (comp == 4) {
+                            comp = 3;
+                            fill_4BitImage(jpeg_buf, img, width, height);
+                        }
+                        else
+                        {
+                            unsigned row_step = img->getRowStepInBytes();
+                            unsigned row_size = img->getRowSizeInBytes();
+                            for (size_t i = 0; i < height; i++)
                             {
-                                unsigned row_step = img->getRowStepInBytes();
-                                unsigned row_size = img->getRowSizeInBytes();
-                                for (size_t i = 0; i < height; i++)
-                                {
-                                    jpeg_buf.insert(jpeg_buf.end(),
-                                        img->data() + row_step * i,
-                                        img->data() + row_step * i + row_size);
-                                }
+                                jpeg_buf.insert(jpeg_buf.end(),
+                                    img->data() + row_step * i,
+                                    img->data() + row_step * i + row_size);
                             }
                         }
                     }
                 }
-                if (!jpeg_buf.empty()) {
-                    int buf_size = buffer.data.size();
-                    buffer.data.reserve(buffer.data.size() + width * height * comp);
-                    stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, comp, jpeg_buf.data(), 80);
-                }
-                else {
-                    std::vector<char> v_data;
-                    width = height = 256;
-                    v_data.resize(width * height * 3);
-                    stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, v_data.data(), 80);
-                }
-                tinygltf::Image image;
-                image.mimeType = "image/jpeg";
-                image.bufferView = model.bufferViews.size();
-                model.images.push_back(image);
-                tinygltf::BufferView bfv;
-                bfv.buffer = 0;
-                bfv.byteOffset = buffer_start;
-                alignment_buffer(buffer.data);
-                bfv.byteLength = buffer.data.size() - buffer_start;
-                model.bufferViews.push_back(bfv);
             }
-        }
-        // node
-        {
-            tinygltf::Node node;
-            node.mesh = 0;
-            model.nodes.push_back(node);
-        }
-        // scene
-        {
-            // 一个场景
-            tinygltf::Scene sence;
-            sence.nodes.push_back(0);
-            // 所有场景
-            model.scenes = { sence };
-            model.defaultScene = 0;
-        }
-        // sample
-        {
-            tinygltf::Sampler sample;
-            sample.magFilter = TINYGLTF_TEXTURE_FILTER_LINEAR;
-            sample.minFilter = TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR;
-            sample.wrapS = TINYGLTF_TEXTURE_WRAP_REPEAT;
-            sample.wrapT = TINYGLTF_TEXTURE_WRAP_REPEAT;
-            model.samplers = { sample };
-        }
-        /// --------------
-        if(b_pbr_texture)
-        {
-            for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
-            {
-                tinygltf::Material mat = make_color_material_osgb(1.0, 1.0, 1.0);
-                // 可能会出现多材质的情况
-                tinygltf::Parameter baseColorTexture;
-                baseColorTexture.json_int_value = { std::pair<string,int>("index",i) };
-                mat.values["baseColorTexture"] = baseColorTexture;
-                model.materials.push_back(mat);
+            if (!jpeg_buf.empty()) {
+                int buf_size = buffer.data.size();
+                buffer.data.reserve(buffer.data.size() + width * height * comp);
+                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, comp, jpeg_buf.data(), 80);
             }
-        }
-        // use shader material
-        else
-        {
-            make_gltf2_shader(model, infoVisitor.texture_array.size(), buffer);
-        }
-        // finish buffer
-        model.buffers.push_back(std::move(buffer));
-        // texture
-        {
-            int texture_index = 0;
-            for (auto tex : infoVisitor.texture_array)
-            {
-                tinygltf::Texture texture;
-                texture.source = texture_index++;
-                texture.sampler = 0;
-                model.textures.push_back(texture);
+            else {
+                std::vector<char> v_data;
+                width = height = 256;
+                v_data.resize(width * height * 3);
+                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, v_data.data(), 80);
             }
+            tinygltf::Image image;
+            image.mimeType = "image/jpeg";
+            image.bufferView = model.bufferViews.size();
+            model.images.push_back(image);
+            tinygltf::BufferView bfv;
+            bfv.buffer = 0;
+            bfv.byteOffset = buffer_start;
+            alignment_buffer(buffer.data);
+            bfv.byteLength = buffer.data.size() - buffer_start;
+            model.bufferViews.push_back(bfv);
         }
-        model.asset.version = "2.0";
-        model.asset.generator = "fanvanzh";
-
-        glb_buff = gltf.Serialize(&model);
     }
+    // node
+    {
+        tinygltf::Node node;
+        node.mesh = 0;
+        model.nodes.push_back(node);
+    }
+    // scene
+    {
+        // 一个场景
+        tinygltf::Scene sence;
+        sence.nodes.push_back(0);
+        // 所有场景
+        model.scenes = { sence };
+        model.defaultScene = 0;
+    }
+    // sample
+    {
+        tinygltf::Sampler sample;
+        sample.magFilter = TINYGLTF_TEXTURE_FILTER_LINEAR;
+        sample.minFilter = TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR;
+        sample.wrapS = TINYGLTF_TEXTURE_WRAP_REPEAT;
+        sample.wrapT = TINYGLTF_TEXTURE_WRAP_REPEAT;
+        model.samplers = { sample };
+    }
+    // use pbr material
+    if(b_pbr_texture)
+    {
+        for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
+        {
+            tinygltf::Material mat = make_color_material_osgb(1.0, 1.0, 1.0);
+            // 可能会出现多材质的情况
+            tinygltf::Parameter baseColorTexture;
+            baseColorTexture.json_int_value = { std::pair<string,int>("index",i) };
+            mat.values["baseColorTexture"] = baseColorTexture;
+            model.materials.push_back(mat);
+        }
+    }
+    // use shader material
+    else
+    {
+        make_gltf2_shader(model, infoVisitor.texture_array.size(), buffer);
+    }
+    // finish buffer
+    model.buffers.push_back(std::move(buffer));
+    // texture
+    {
+        int texture_index = 0;
+        for (auto tex : infoVisitor.texture_array)
+        {
+            tinygltf::Texture texture;
+            texture.source = texture_index++;
+            texture.sampler = 0;
+            model.textures.push_back(texture);
+        }
+    }
+    model.asset.version = "2.0";
+    model.asset.generator = "fanvanzh";
+
+    glb_buff = gltf.Serialize(&model);
     return true;
 }
 
@@ -1055,30 +1060,30 @@ std::string get_boundingRegion(TileBox bbox, double x, double y) {
 }
 
 void calc_geometric_error(osg_tree& tree) {
-	const double EPS = 1e-12;
-	// depth first
-	for (auto& i : tree.sub_nodes) {
-		calc_geometric_error(i);
-	}
-	if (tree.sub_nodes.empty()) {
-		tree.geometricError = 0.0;
-	}
-	else {
-		bool has = false;
-		osg_tree leaf;
-		for (auto& i : tree.sub_nodes) {
-			if (abs(i.geometricError) > EPS)
-			{
-				has = true;
-				leaf = i;
-			}
-		}
+    const double EPS = 1e-12;
+    // depth first
+    for (auto& i : tree.sub_nodes) {
+        calc_geometric_error(i);
+    }
+    if (tree.sub_nodes.empty()) {
+        tree.geometricError = 0.0;
+    }
+    else {
+        bool has = false;
+        osg_tree leaf;
+        for (auto& i : tree.sub_nodes) {
+            if (abs(i.geometricError) > EPS)
+            {
+                has = true;
+                leaf = i;
+            }
+        }
 
-		if (has == false)
-			tree.geometricError = get_geometric_error(tree.bbox);
-		else
-			tree.geometricError = leaf.geometricError * 2.0;
-	}
+        if (has == false)
+            tree.geometricError = get_geometric_error(tree.bbox);
+        else
+            tree.geometricError = leaf.geometricError * 2.0;
+    }
 }
 
 std::string
@@ -1169,22 +1174,22 @@ osgb23dtile_path(const char* in_path, const char* out_path,
 extern "C" bool
 osgb2glb(const char* in, const char* out)
 {
-	b_pbr_texture = true;
-	MeshInfo minfo;
-	std::string glb_buf;
+    b_pbr_texture = true;
+    MeshInfo minfo;
+    std::string glb_buf;
     std::string path = osg_string(in);
     bool ret = osgb2glb_buf(path, glb_buf, minfo);
-	if (!ret)
-	{
-		LOG_E("convert to glb failed");
-		return false;
-	}
+    if (!ret)
+    {
+        LOG_E("convert to glb failed");
+        return false;
+    }
 
     ret = write_file(out, glb_buf.data(), (unsigned long)glb_buf.size());
-	if (!ret)
-	{
-		LOG_E("write glb file failed");
-		return false;
-	}
+    if (!ret)
+    {
+        LOG_E("write glb file failed");
+        return false;
+    }
     return true;
 }
