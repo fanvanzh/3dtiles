@@ -38,7 +38,6 @@ namespace osgDB
     ///          Writing with    'keepRelativePaths': /somePath/newmodel.osg and /somePath/images/img1.jpg
     ///          Writing without 'keepRelativePaths': /somePath/newmodel.osg and /somePath/img1.jpg
     ///\author Sukender
-    ///\todo Handling of naming constraints (such as "8.3" names in 3DS)
     class OSGDB_EXPORT ExternalFileWriter
     {
     public:
@@ -63,7 +62,7 @@ namespace osgDB
         struct ObjectData
         {
             ObjectData() : written(false) {}
-            ObjectData(const std::string & absolutePath, const std::string & relativePath, bool written) : absolutePath(absolutePath), relativePath(relativePath), written(written) {}
+            ObjectData(const std::string & in_absolutePath, const std::string & in_relativePath, bool in_written) : absolutePath(in_absolutePath), relativePath(in_relativePath), written(in_written) {}
             std::string absolutePath;
             std::string relativePath;
             bool written;        ///< Says if write succeeded or not.

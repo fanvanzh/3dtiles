@@ -68,6 +68,8 @@ class OSGSHADOW_EXPORT ShadowMap : public ShadowTechnique
         /** Add a shader to internal list, will be used instead of the default ones */
         inline void addShader(osg::Shader* shader) { _shaderList.push_back(shader); }
 
+        template<class T> void addShader( const osg::ref_ptr<T>& shader ) { addShader(shader.get()); }
+
         /** Reset internal shader list */
         inline void clearShaderList() { _shaderList.clear(); }
 
@@ -82,6 +84,16 @@ class OSGSHADOW_EXPORT ShadowMap : public ShadowTechnique
 
         /** Clean scene graph from any shadow technique specific nodes, state and drawables.*/
         virtual void cleanSceneGraph();
+
+
+        /** Resize any per context GLObject buffers to specified size. */
+        virtual void resizeGLObjectBuffers(unsigned int maxSize);
+
+        /** If State is non-zero, this function releases any associated OpenGL objects for
+           * the specified graphics context. Otherwise, releases OpenGL objects
+           * for all graphics contexts. */
+        virtual void releaseGLObjects(osg::State* = 0) const;
+
 
         // debug methods
 

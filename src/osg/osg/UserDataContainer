@@ -39,6 +39,14 @@ class OSG_EXPORT UserDataContainer : public osg::Object
             by derived classes.*/
         virtual const char* className() const  { return "UserDataContainer"; }
 
+        /** Convert 'this' into a UserDataContainer pointer if Object is a UserDataContainer, otherwise return 0.
+          * Equivalent to dynamic_cast<UserDataContainer*>(this).*/
+        virtual UserDataContainer* asUserDataContainer() { return this; }
+
+        /** convert 'const this' into a const UserDataContainer pointer if Object is a UserDataContainer, otherwise return 0.
+          * Equivalent to dynamic_cast<const UserDataContainer*>(this).*/
+        virtual const UserDataContainer* asUserDataContainer() const { return this; }
+
         /**
          * Set user data, data must be subclassed from Referenced to allow
          * automatic memory handling.  If your own data isn't directly
@@ -46,6 +54,8 @@ class OSG_EXPORT UserDataContainer : public osg::Object
          * which points to your own object and handles the memory addressing.
          */
         virtual void setUserData(Referenced* obj) = 0;
+
+        using osg::Object::setUserData;
 
         /** Get user data.*/
         virtual Referenced* getUserData() = 0;
@@ -55,6 +65,8 @@ class OSG_EXPORT UserDataContainer : public osg::Object
 
         /** Add user data object. Returns the index position of object added. */
         virtual unsigned int addUserObject(Object* obj)  = 0;
+
+        template<class T> unsigned int addUserObject(const osg::ref_ptr<T>& obj) { return addUserObject(obj.get()); }
 
          /** Add element to list of user data objects.*/
         virtual void setUserObject(unsigned int i, Object* obj)  = 0;
@@ -127,6 +139,9 @@ class OSG_EXPORT DefaultUserDataContainer : public osg::UserDataContainer
          */
         virtual void setUserData(Referenced* obj);
 
+        using osg::Object::setUserData;
+        using osg::UserDataContainer::addUserObject;
+
         /** Get user data.*/
         virtual Referenced* getUserData();
 
@@ -188,20 +203,19 @@ protected:
 };
 
 
-/** Convenience function for getting the User Object associated with specificed name from an Object's UserDataContainer.*/
+/** Convenience function for getting the User Object associated with specified name from an Object's UserDataContainer.*/
 inline Object* getUserObject(osg::Object* object, const std::string& name)
 {
     osg::UserDataContainer* udc = object->getUserDataContainer();
     return udc ? udc->getUserObject(name) : 0;
 }
 
-/** Convenience function for getting the User Object associated with specificed name from an Object's UserDataContainer.*/
+/** Convenience function for getting the User Object associated with specified name from an Object's UserDataContainer.*/
 inline const Object* getUserObject(const osg::Object* object, const std::string& name)
 {
     const osg::UserDataContainer* udc = object->getUserDataContainer();
     return udc ? udc->getUserObject(name) : 0;
 }
-
 
 }
 

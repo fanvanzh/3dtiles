@@ -23,7 +23,6 @@
 
 namespace osgText {
 
-
 class OSGTEXT_EXPORT Text : public osgText::TextBase
 {
 public:
@@ -37,15 +36,12 @@ public:
     virtual const char* className() const { return "Text"; }
     virtual const char* libraryName() const { return "osgText"; }
 
-    virtual void setFont(Font* font=0) { setFont(osg::ref_ptr<Font>(font)); };
+    /** Set the ShaderTechnique hint to specify what fatures in the text shaders to enable.*/
+    void setShaderTechnique(ShaderTechnique technique);
 
-    /** Set the Font to use to render the text.*/
-    virtual void setFont(osg::ref_ptr<Font> font);
+    /** Get the ShaderTechnique hint.*/
+    ShaderTechnique getShaderTechnique() { return _shaderTechnique; }
 
-    /** Set the font, loaded from the specified front file, to use to render the text,
-      * setFont("") sets the use of the default font.
-      * See the osgText::readFontFile function for how the font file will be located. */
-    virtual void setFont(const std::string& fontfile) { TextBase::setFont(fontfile); }
 
     /**
      * Turns off writing to the depth buffer when rendering text. This only affects text
@@ -71,96 +67,13 @@ public:
         NONE
     };
 
-    enum BackdropImplementation
-    {
-        /* POLYGON_OFFSET:
-         * This uses glPolygonOffset to draw the text multiple times to
-         * create the drop-shadow and outline effects. glPolygonOffset
-         * is used to prevent z-fighting of the overlapping text.
-         * This probably should have been the best option, but all the ATI
-         * cards we have encountered so far have serious problems with this.
-         * We see little white holes/artifacts in the rendered glyph textures
-         * which move around depending on the viewing angle. For moving text,
-         * the moving holes give an extremely unpleasant flickering effect.
-         * Pumping up the "units" parameter in glPolygonOffset can minimize
-         * this problem, but two other bad side-effects occur if you do this.
-         * First, high values will cause problems with clipping, particularly
-         * when there are objects behind the text. The drop-shadows or outline
-         * may be culled because their computed offset is behind the object or
-         * z-far plane. Second, there is an additional problem associated with
-         * the Z-slope. High values can make large chunks of the backdrop
-         * suddenly disappear. This can be reduced by the "factor" parameter.
-         * Making the "factor" value small, can help, but experimentally, we've
-         * found that it creates a new, different kind of z-fighting problem.
-         * So there is no perfect solution. With units, you trade off the 'holes'
-         * for the large-section clipping.
-         * Experimentally, we have found units values from 150-512 to be tolerable
-         * to acceptable with respect to the 'holes'. A factor of .1 seems to
-         * bring down the large clipping problem without creating a new z-fighting
-         * problem.
-         * (You can experiment with these numbers by playing with the
-         * osg:PolygonOffset multipliers which this backend tries to respect.)
-         *
-         * If ATI ever fixes their cards/drivers, then this might become the
-         * best option.*/
-        POLYGON_OFFSET = 0,
-
-        /* NO_DEPTH_BUFFER
-         * Instead of using glPolygonOffset to prevent z-fighting, this mode
-         * just disables the depth buffer when rendering the text. This allows
-         * the text to be rendered without any z-fighting. The downside to this
-         * mode is that render order begins to matter and the text will not
-         * necessarily correctly appear above or behind other objects in the
-         * scene based on depth values.
-         * This mode is best for text that only needs to be ontop and
-         * not obscured by any objects.*/
-        NO_DEPTH_BUFFER,
-
-        /* DEPTH_RANGE
-         * This mode is inspired by Paul Martz's OpenGL FAQ, item 13.050.
-         * This uses glDepthRange as a substitute for glPolygonOffset.
-         * Strangely, experiments on ATI cards seem to produce cleaner results
-         * than when using glPolygonOffset. The trade-off for this is that the
-         * backdrop still may be placed too far back and might be culled by objects
-         * directly behind the object or by the far z-plane. If ATI ever fixes
-         * the glPolygonOffset problem, polygon offset is probably a slightly
-         * better solution because you can use smaller offsets. But with the
-         * current ATI problem, this option may be preferable.*/
-        DEPTH_RANGE,
-        /* STENCIL_BUFFER
-         * (Assuming the backend is written correctly,) the Stencil Buffer is
-         * the most "correct" and reliable way of producing backdrop text.
-         * The stencil buffer is a multipass system that allows writing to the
-         * same z-values without needing to resort to offsets. This implementation
-         * should not have any of the problems associated with the 3 previous
-         * implementations. But the trade-off for this mode is that without
-         * hardware acceleration for the stencil buffer, rendering will be
-         * extremely slow. (There is also potentially more overhead for this
-         * algorithm so it could be slower than the other implementations.
-         * Benchmarking would be required to determine if the speed differences
-         * are significant on your particular hardware.) This mode is best for
-         * when quality is important and stencil buffer hardware acceleration
-         * is available.*/
-        STENCIL_BUFFER,
-
-        /* DELAYED_DEPTH_WRITES
-         * This mode renders all text with depth writes turned off, then
-         * again with depth writes on, but with the color buffer disabled.
-         * This should render text accurately for all graphics cards. The
-         * only downside is the additional pass to render to the depth
-         * buffer. But if you don't need the depth buffer updated for
-         * your, this extra pass can be disabled by calling
-         * enableDepthWrites(false).*/
-        DELAYED_DEPTH_WRITES
-    };
-
     /**
      * BackdropType gives you a background shadow text behind your regular
      * text. This helps give text extra contrast which can be useful when
      * placing text against noisy backgrounds.
      * The color of the background shadow text is specified by setBackdropColor().
      * DROP_SHADOW_BOTTOM_RIGHT will draw backdrop text to the right and down of
-     * the normal text. Other DROW_SHADOW_* modes do the same for their repective directions.
+     * the normal text. Other DROP_SHADOW_* modes do the same for their respective directions.
      * OUTLINE will draw backdrop text so that it appears the text has an outline
      * or border around the normal text. This mode is particularly useful against
      * really noisy backgrounds that may put text on top of things that have
@@ -207,18 +120,6 @@ public:
     void setBackdropColor(const osg::Vec4& color);
 
     const osg::Vec4& getBackdropColor() const { return _backdropColor; }
-
-    /**
-     * This specifies the underlying backdrop rendering implementation.
-     * Unfortunately, at this time, there is no "perfect" rendering solution
-     * so this function is provided to let you 'pick your poison'. Each
-     * implementation has trade-offs. See BackdropImplementation enum
-     * docs for details.*/
-     void setBackdropImplementation(BackdropImplementation implementation);
-
-     BackdropImplementation getBackdropImplementation() const { return _backdropImplementation; }
-
-
 
     enum ColorGradientMode
     {
@@ -281,11 +182,12 @@ public:
     virtual void accept(osg::PrimitiveFunctor& pf) const;
 
 
-    /** Set whether to use a mutex to ensure ref() and unref() are thread safe.*/
-    virtual void setThreadSafeRefUnref(bool threadSafe);
+    /** Get the coordinates of the character corners in local coordinates. Use Text::getMatrix() or Text::computeMatrix(..) to get the transform into model coordinates (see TextBase header.) */
+    bool getCharacterCorners(unsigned int index, osg::Vec3& bottomLeft, osg::Vec3& bottomRight, osg::Vec3& topLeft, osg::Vec3& topRight) const;
 
     /** Resize any per context GLObject buffers to specified size. */
     virtual void resizeGLObjectBuffers(unsigned int maxSize);
+
 
     /** If State is non-zero, this function releases OpenGL objects for
       * the specified graphics context. Otherwise, releases OpenGL objexts
@@ -294,49 +196,37 @@ public:
 
 public:
 
+    /** deprecated, value ignored.*/
+    enum BackdropImplementation
+    {
+        POLYGON_OFFSET = 0,
+        NO_DEPTH_BUFFER,
+        DEPTH_RANGE,
+        STENCIL_BUFFER,
+        DELAYED_DEPTH_WRITES
+    };
+
+    /** deprecated, value ignored.*/
+     void setBackdropImplementation(BackdropImplementation) {}
+    /** deprecated, value should be ignored.*/
+    BackdropImplementation getBackdropImplementation() const { return DELAYED_DEPTH_WRITES; }
+
     // internal structures, variable and methods used for rendering of characters.
     struct OSGTEXT_EXPORT GlyphQuads
     {
         typedef std::vector<Glyph*> Glyphs;
-        typedef std::vector<unsigned int> LineNumbers;
-        typedef osg::ref_ptr<osg::Vec2Array> Coords2;
-        typedef osg::ref_ptr<osg::Vec3Array> Coords3;
-        typedef osg::ref_ptr<osg::Vec2Array> TexCoords;
-        typedef osg::ref_ptr<osg::Vec4Array> ColorCoords;
 
         Glyphs                          _glyphs;
-        Coords2                         _coords;
-        osg::buffered_object<Coords3>   _transformedCoords;
-        TexCoords                       _texcoords;
-        LineNumbers                     _lineNumbers;
-
-        osg::buffered_object<Coords3>   _transformedBackdropCoords[8];
-        ColorCoords    _colorCoords;
-
-        osg::ref_ptr<osg::DrawElementsUInt> _quadIndices;
-        void updateQuadIndices();
+        osg::ref_ptr<osg::DrawElements> _primitives;
 
         GlyphQuads();
         GlyphQuads(const GlyphQuads& gq);
 
-        void initGlyphQuads();
-        void initGPUBufferObjects();
+        void setupPrimitives(Text::BackdropType backdropType);
 
         Glyphs& getGlyphs() { return _glyphs; }
         const Glyphs& getGlyphs() const { return _glyphs; }
 
-        Coords2& getCoords() { return _coords; }
-        const Coords2& getCoords() const { return _coords; }
-
-        Coords3& getTransformedCoords(unsigned int contexID) { return _transformedCoords[contexID]; }
-        const Coords3& getTransformedCoords(unsigned int contexID) const { return _transformedCoords[contexID]; }
-
-        TexCoords& getTexCoords() { return _texcoords; }
-        const TexCoords& getTexCoords() const { return _texcoords; }
-
-        LineNumbers& getLineNumbers() { return _lineNumbers; }
-        const LineNumbers& getLineNumbers() const { return _lineNumbers; }
-        
         /** Resize any per context GLObject buffers to specified size. */
         void resizeGLObjectBuffers(unsigned int maxSize);
 
@@ -344,9 +234,9 @@ public:
         * the specified graphics context. Otherwise, releases OpenGL objexts
         * for all graphics contexts. */
         void releaseGLObjects(osg::State* state=0) const;
-        
+
     private:
-        
+
         GlyphQuads& operator = (const GlyphQuads&) { return *this; }
     };
 
@@ -355,7 +245,7 @@ public:
     /** Direct Access to GlyphQuads */
     const GlyphQuads* getGlyphQuads(GlyphTexture* texture) const
     {
-        TextureGlyphQuadMap::iterator itGlyphQuad = _textureGlyphQuadMap.find(texture);
+        TextureGlyphQuadMap::const_iterator itGlyphQuad = _textureGlyphQuadMap.find(texture);
         if (itGlyphQuad == _textureGlyphQuadMap.end()) return NULL;
 
         return &itGlyphQuad->second;
@@ -366,20 +256,22 @@ public:
         return _textureGlyphQuadMap;
     }
 
+    void addGlyphQuad(Glyph* glyph, const osg::Vec2& minc, const osg::Vec2& maxc, const osg::Vec2& mintc, const osg::Vec2& maxtc);
 
 protected:
 
     virtual ~Text();
 
+    virtual osg::StateSet* createStateSet();
+
     Font* getActiveFont();
-    const Font* getActiveFont() const;
 
     String::iterator computeLastCharacterOnLine(osg::Vec2& cursor, String::iterator first,String::iterator last);
 
     // members which have public access.
 
     // iternal map used for rendering. Set up by the computeGlyphRepresentation() method.
-    mutable TextureGlyphQuadMap            _textureGlyphQuadMap;
+    TextureGlyphQuadMap            _textureGlyphQuadMap;
 
     void computeGlyphRepresentation();
 
@@ -387,30 +279,20 @@ protected:
 
     bool computeAverageGlyphWidthAndHeight(float& avg_width, float& avg_height) const;
 
-    virtual void computePositions(unsigned int contextID) const;
+    virtual void computePositionsImplementation();
 
-    void computeBackdropPositions(unsigned int contextID) const;
-    void computeBackdropBoundingBox() const;
-    void computeBoundingBoxMargin() const;
-
-    void computeColorGradients() const;
-    void computeColorGradientsOverall() const;
-    void computeColorGradientsPerCharacter() const;
+    void computeColorGradients();
+    void computeColorGradientsOverall();
+    void computeColorGradientsPerCharacter();
 
     void drawImplementation(osg::State& state, const osg::Vec4& colorMultiplier) const;
-    void drawForegroundText(osg::State& state, const GlyphQuads& glyphquad, const osg::Vec4& colorMultiplier) const;
-    void drawTextWithBackdrop(osg::State& state, const osg::Vec4& colorMultiplier) const;
-    void renderOnlyForegroundText(osg::State& state, const osg::Vec4& colorMultiplier) const;
-    void renderWithPolygonOffset(osg::State& state, const osg::Vec4& colorMultiplier) const;
-    void renderWithNoDepthBuffer(osg::State& state, const osg::Vec4& colorMultiplier) const;
-    void renderWithDepthRange(osg::State& state, const osg::Vec4& colorMultiplier) const;
-    void renderWithStencilBuffer(osg::State& state, const osg::Vec4& colorMultiplier) const;
-    void renderWithDelayedDepthWrites(osg::State& state, const osg::Vec4& colorMultiplier) const;
 
+    void drawImplementationSinglePass(osg::State& state, const osg::Vec4& colorMultiplier) const;
+
+    ShaderTechnique _shaderTechnique;
     bool _enableDepthWrites;
 
     BackdropType _backdropType;
-    BackdropImplementation _backdropImplementation;
 
     float _backdropHorizontalOffset;
     float _backdropVerticalOffset;
@@ -421,6 +303,7 @@ protected:
     osg::Vec4 _colorGradientBottomLeft;
     osg::Vec4 _colorGradientBottomRight;
     osg::Vec4 _colorGradientTopRight;
+
 
     // Helper function for color interpolation
     float bilinearInterpolate(float x1, float x2, float y1, float y2, float x, float y, float q11, float q12, float q21, float q22) const;

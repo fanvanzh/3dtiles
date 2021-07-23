@@ -25,13 +25,14 @@ class State;
 
 typedef std::vector<osg::ShaderComponent*> ShaderComponents;
 
+/// deprecated
 class OSG_EXPORT ShaderComposer : public osg::Object
 {
     public:
 
         ShaderComposer();
         ShaderComposer(const ShaderComposer& sa,const CopyOp& copyop=CopyOp::SHALLOW_COPY);
-        META_Object(osg, ShaderComposer)
+        META_Object(osg, ShaderComposer);
 
         virtual osg::Program* getOrCreateProgram(const ShaderComponents& shaderComponents);
 
@@ -39,7 +40,7 @@ class OSG_EXPORT ShaderComposer : public osg::Object
         virtual osg::Shader* composeMain(const Shaders& shaders);
         virtual void addShaderToProgram(Program* program, const Shaders& shaders);
 
-        void releaseGLObjects(osg::State* state);
+        virtual void releaseGLObjects(osg::State* state) const;
 
     protected:
 

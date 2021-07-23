@@ -25,12 +25,16 @@
 namespace osg {
 
 // forward declare
-class State;
 class UserDataContainer;
 class Node;
 class NodeVisitor;
 class StateAttribute;
 class Uniform;
+class Drawable;
+class Camera;
+class Callback;
+class CallbackObject;
+class ValueObject;
 
 #define _ADDQUOTES(def) #def
 #define ADDQUOTES(def) _ADDQUOTES(def)
@@ -92,8 +96,8 @@ class OSG_EXPORT Object : public Referenced
 
         /** return the compound class name that combines the library name and class name.*/
         std::string getCompoundClassName() const { return std::string(libraryName()) + std::string("::") + std::string(className()); }
-        
-        
+
+
         /** Convert 'this' into a Node pointer if Object is a Node, otherwise return 0.
           * Equivalent to dynamic_cast<Node*>(this).*/
         virtual Node* asNode() { return 0; }
@@ -110,6 +114,14 @@ class OSG_EXPORT Object : public Referenced
           * Equivalent to dynamic_cast<const NodeVisitor*>(this).*/
         virtual const NodeVisitor* asNodeVisitor() const { return 0; }
 
+        /** Convert 'this' into a StateSet pointer if Object is a StateSet, otherwise return 0.
+          * Equivalent to dynamic_cast<StateSet*>(this).*/
+        virtual StateSet* asStateSet() { return 0; }
+
+        /** convert 'const this' into a const StateSet pointer if Object is a StateSet, otherwise return 0.
+          * Equivalent to dynamic_cast<const StateSet*>(this).*/
+        virtual const StateSet* asStateSet() const { return 0; }
+
         /** Convert 'this' into a StateAttribute pointer if Object is a StateAttribute, otherwise return 0.
           * Equivalent to dynamic_cast<StateAttribute*>(this).*/
         virtual StateAttribute* asStateAttribute() { return 0; }
@@ -125,6 +137,63 @@ class OSG_EXPORT Object : public Referenced
         /** convert 'const this' into a const Uniform pointer if Object is a Uniform, otherwise return 0.
           * Equivalent to dynamic_cast<const Uniform*>(this).*/
         virtual const Uniform* asUniform() const { return 0; }
+
+        /** Convert 'this' into a Camera pointer if Node is a Camera, otherwise return 0.
+          * Equivalent to dynamic_cast<Camera*>(this).*/
+        virtual Camera* asCamera() { return 0; }
+
+        /** convert 'const this' into a const Camera pointer if Node is a Camera, otherwise return 0.
+          * Equivalent to dynamic_cast<const Camera*>(this).*/
+        virtual const Camera* asCamera() const { return 0; }
+
+        /** Convert 'this' into a Drawable pointer if Object is a Drawable, otherwise return 0.
+          * Equivalent to dynamic_cast<Drawable*>(this).*/
+        virtual Drawable* asDrawable() { return 0; }
+
+        /** convert 'const this' into a const Drawable pointer if Object is a Drawable, otherwise return 0.
+          * Equivalent to dynamic_cast<const Drawable*>(this).*/
+        virtual const Drawable* asDrawable() const { return 0; }
+
+        /** Convert 'this' into a Callback pointer if Object is a Callback, otherwise return 0.
+          * Equivalent to dynamic_cast<Callback*>(this).*/
+        virtual Callback* asCallback() { return 0; }
+
+        /** convert 'const this' into a const Callback pointer if Object is a Callback, otherwise return 0.
+          * Equivalent to dynamic_cast<const Callback*>(this).*/
+        virtual const Callback* asCallback() const { return 0; }
+
+        /** Convert 'this' into a CallbackObject pointer if Object is a CallbackObject, otherwise return 0.
+          * Equivalent to dynamic_cast<CallbackObject*>(this).*/
+        virtual CallbackObject* asCallbackObject() { return 0; }
+
+        /** convert 'const this' into a const CallbackObject pointer if Object is a CallbackObject, otherwise return 0.
+          * Equivalent to dynamic_cast<const CallbackObject*>(this).*/
+        virtual const CallbackObject* asCallbackObject() const { return 0; }
+
+        /** Convert 'this' into a UserDataContainer pointer if Object is a UserDataContainer, otherwise return 0.
+          * Equivalent to dynamic_cast<UserDataContainer*>(this).*/
+        virtual UserDataContainer* asUserDataContainer() { return 0; }
+
+        /** convert 'const this' into a const UserDataContainer pointer if Object is a UserDataContainer, otherwise return 0.
+          * Equivalent to dynamic_cast<const UserDataContainer*>(this).*/
+        virtual const UserDataContainer* asUserDataContainer() const { return 0; }
+
+        /** Convert 'this' into a ValueObject pointer if Object is a ValueObject, otherwise return 0.
+          * Equivalent to dynamic_cast<ValueObject*>(this).*/
+        virtual ValueObject* asValueObject() { return 0; }
+
+        /** Convert 'this' into a ValueObject pointer if Object is a ValueObject, otherwise return 0.
+          * Equivalent to dynamic_cast<ValueObject*>(this).*/
+        virtual const ValueObject* asValueObject() const { return 0; }
+
+        /** Convert 'this' into a Image pointer if Object is a Image, otherwise return 0.
+          * Equivalent to dynamic_cast<Image*>(this).*/
+        virtual Image* asImage() { return 0; }
+
+        /** Convert 'this' into a Image pointer if Object is a Image, otherwise return 0.
+          * Equivalent to dynamic_cast<Image*>(this).*/
+        virtual const Image* asImage() const { return 0; }
+
 
 
         /** Set whether to use a mutex to ensure ref() and unref() are thread safe.*/
@@ -168,6 +237,8 @@ class OSG_EXPORT Object : public Referenced
         /** set the UserDataContainer object.*/
         void setUserDataContainer(osg::UserDataContainer* udc);
 
+        template<class T> void setUserDataContainer(const ref_ptr<T>& udc) { setUserDataContainer(udc.get()); }
+
         /** get the UserDataContainer attached to this object.*/
         osg::UserDataContainer* getUserDataContainer() { return _userDataContainer; }
 
@@ -186,6 +257,8 @@ class OSG_EXPORT Object : public Referenced
          * which points to your own object and handles the memory addressing.
          */
         virtual void setUserData(Referenced* obj);
+
+        template<class T> void setUserData(const ref_ptr<T>& ud) { setUserData(ud.get()); }
 
         /** Get user data.*/
         virtual Referenced* getUserData();
@@ -311,13 +384,22 @@ class DummyObject : public osg::Object
 {
 public:
     DummyObject() {}
-    DummyObject(const DummyObject&, const osg::CopyOp&) {}
+    DummyObject(const DummyObject& org, const CopyOp& copyop) :
+        Object(org, copyop) {}
+
     META_Object(osg, DummyObject)
 protected:
     virtual ~DummyObject() {}
 };
 
 
+inline void resizeGLObjectBuffers(osg::Object* object, unsigned int maxSize) { if (object) object->resizeGLObjectBuffers(maxSize); }
+
+template<class T> void resizeGLObjectBuffers(const osg::ref_ptr<T>& object, unsigned int maxSize) { if (object.valid()) object->resizeGLObjectBuffers(maxSize); }
+
+inline void releaseGLObjects(osg::Object* object, osg::State* state = 0) { if (object) object->releaseGLObjects(state); }
+
+template<class T> void releaseGLObjects(const osg::ref_ptr<T>& object, osg::State* state = 0) { if (object.valid()) object->releaseGLObjects(state); }
 
 }
 

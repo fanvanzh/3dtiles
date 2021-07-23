@@ -95,21 +95,9 @@ class OSGDB_EXPORT Options : public osg::Object
         };
 
 
-        Options():
-            osg::Object(true),
-            _objectCacheHint(CACHE_ARCHIVES),
-            _precisionHint(FLOAT_PRECISION_ALL),
-            _buildKdTreesHint(NO_PREFERENCE) {}
+        Options();
 
-        Options(const std::string& str):
-            osg::Object(true),
-            _str(str),
-            _objectCacheHint(CACHE_ARCHIVES),
-            _precisionHint(FLOAT_PRECISION_ALL),
-            _buildKdTreesHint(NO_PREFERENCE)
-        {
-            parsePluginStringData(str);
-        }
+        Options(const std::string& str);
 
         Options(const Options& options,const osg::CopyOp& copyop=osg::CopyOp::SHALLOW_COPY);
 
@@ -255,9 +243,12 @@ class OSGDB_EXPORT Options : public osg::Object
         /** Get the parentGroup observer_ptr, where the loaded model is intended to be added */
         const osg::observer_ptr<osg::Group>& getParentGroup() const { return _parentGroup; }
 
+        bool operator < (const Options &rhs) const;
+        bool operator == (const Options &rhs) const;
+
     protected:
 
-        virtual ~Options() {}
+        virtual ~Options();
 
         std::string                     _str;
         FilePathList                    _databasePaths;

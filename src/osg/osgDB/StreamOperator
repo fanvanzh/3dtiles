@@ -12,16 +12,21 @@ namespace osgDB
 
 // forward declare
 class InputStream;
+class OutputStream;
 
 class OSGDB_EXPORT OutputIterator : public osg::Referenced
 {
 public:
-    OutputIterator() : _out(0), _supportBinaryBrackets(false) {}
+    OutputIterator() : _out(0), _outputStream(0), _supportBinaryBrackets(false) {}
     virtual ~OutputIterator() {}
 
     void setStream( std::ostream* ostream ) { _out = ostream; }
     std::ostream* getStream() { return _out; }
     const std::ostream* getStream() const { return _out; }
+
+    void setOutputStream( OutputStream* outputStream) { _outputStream = outputStream; }
+    OutputStream* getOutputStream() { return _outputStream; }
+    const OutputStream* getOutputStream() const { return _outputStream; }
 
     void setSupportBinaryBrackets( bool b ) { _supportBinaryBrackets = b; }
     bool getSupportBinaryBrackets() const { return _supportBinaryBrackets; }
@@ -37,6 +42,8 @@ public:
     virtual void writeUInt( unsigned int i ) = 0;
     virtual void writeLong( long l ) = 0;
     virtual void writeULong( unsigned long l ) = 0;
+    virtual void writeInt64( GLint64 ll ) = 0;
+    virtual void writeUInt64( GLuint64 ull ) = 0;
     virtual void writeFloat( float f ) = 0;
     virtual void writeDouble( double d ) = 0;
     virtual void writeString( const std::string& s ) = 0;
@@ -55,8 +62,9 @@ protected:
     // Return true if the manipulator is std::endl
     bool isEndl( std::ostream& (*fn)(std::ostream&) )
     {
-#ifdef __sun
+#if defined (__sun) || (defined _WIN32 && !defined OSG_LIBRARY_STATIC)
         // What a mess, but solaris does not like taking the address below
+        // windows std::endl is a template with different adresses in different dll's
         std::stringstream ss;
         ss << fn;
         std::string s = ss.str();
@@ -67,6 +75,7 @@ protected:
     }
 
     std::ostream* _out;
+    osgDB::OutputStream* _outputStream;
     bool _supportBinaryBrackets;
 };
 
@@ -90,7 +99,7 @@ public:
     void setSupportBinaryBrackets( bool b ) { _supportBinaryBrackets = b; }
     bool getSupportBinaryBrackets() const { return _supportBinaryBrackets; }
 
-    void checkStream() const { if (_in->rdstate()&_in->failbit) _failed = true; }
+    void checkStream() const;
     bool isFailed() const { return _failed; }
 
     virtual bool isBinary() const = 0;

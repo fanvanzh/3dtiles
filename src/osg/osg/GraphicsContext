@@ -76,6 +76,12 @@ class OSG_EXPORT GraphicsContext : public Object
             int width;
             int height;
 
+            // provide a hint as to which WindowingSystemInterface implementation to use, i.e. "X11", "Win32", "Cocoa", "Carbon" etc.
+            // if the windowingSystemPreference string is empty (default) then return the first available WindowingSystemInterface that
+            // has been registered with the osg::GraphiccsContext::WindowingSystemInterfaces singleton
+            // if the windowingSystemPreference string is not empty then return the first WindowingSystemInterface that matches
+            std::string windowingSystemPreference;
+
             // window decoration and behaviour
             std::string windowName;
             bool        windowDecoration;
@@ -139,6 +145,9 @@ class OSG_EXPORT GraphicsContext : public Object
             bool overrideRedirect;
 
             DisplaySettings::SwapMethod swapMethod;
+
+            // hint of what affinity to use for any thrads associated with the graphics context created using these Traits
+            OpenThreads::Affinity affinity;
         };
 
         /** Simple resolution structure used by WindowingSystemInterface to get and set screen resolution.
@@ -150,11 +159,12 @@ class OSG_EXPORT GraphicsContext : public Object
                 refreshRate(0),
                 colorDepth(0)
             {}
-            ScreenSettings(int width, int height, double refreshRate=0, unsigned int colorDepth=0) :
-                width(width),
-                height(height),
-                refreshRate(refreshRate),
-                colorDepth(colorDepth)
+
+            ScreenSettings(int in_width, int in_height, double in_refreshRate=0, unsigned int in_colorDepth=0) :
+                width(in_width),
+                height(in_height),
+                refreshRate(in_refreshRate),
+                colorDepth(in_colorDepth)
             {}
 
             int width;
@@ -168,6 +178,9 @@ class OSG_EXPORT GraphicsContext : public Object
         /** Callback to be implemented to provide access to Windowing API's ability to create Windows/pbuffers.*/
         struct WindowingSystemInterface : public osg::Referenced
         {
+            void setName(const std::string& name) { _name = name; }
+            const std::string& getName() const { return _name; }
+
             virtual unsigned int getNumScreens(const ScreenIdentifier& screenIdentifier = ScreenIdentifier()) = 0;
 
             virtual void getScreenSettings(const ScreenIdentifier& screenIdentifier, ScreenSettings & resolution) = 0;
@@ -181,9 +194,6 @@ class OSG_EXPORT GraphicsContext : public Object
             virtual osg::DisplaySettings* getDisplaySettings() const { return 0; }
 
             virtual GraphicsContext* createGraphicsContext(Traits* traits) = 0;
-
-            virtual ~WindowingSystemInterface() {}
-
 
             /** Gets screen resolution without using the ScreenResolution structure.
               * \deprecated Provided only for backward compatibility. */
@@ -210,15 +220,38 @@ class OSG_EXPORT GraphicsContext : public Object
                 settings.refreshRate = refreshRate;
                 return setScreenSettings(screenIdentifier, settings);
             }
+        protected:
+            WindowingSystemInterface() {}
+            virtual ~WindowingSystemInterface() {}
 
+            std::string _name;
         };
 
+        class OSG_EXPORT WindowingSystemInterfaces : public osg::Referenced
+        {
+        public:
+            WindowingSystemInterfaces();
 
-        /** Set the query the windowing system for screens and create graphics context - this functor should be supplied by the windows toolkit. */
-        static void setWindowingSystemInterface(WindowingSystemInterface* wsInterface);
+            typedef std::vector< osg::ref_ptr<GraphicsContext::WindowingSystemInterface> > Interfaces;
 
-        /** Get the WindowingSystemInterface*/
-        static WindowingSystemInterface* getWindowingSystemInterface();
+            Interfaces& getInterfaces() { return _interfaces; }
+
+            void addWindowingSystemInterface(WindowingSystemInterface* wsInterface);
+
+            void removeWindowingSystemInterface(WindowingSystemInterface* wsInterface);
+
+            /** get named WindowingSystemInterface if one is available, otherwise return 0; */
+            WindowingSystemInterface* getWindowingSystemInterface(const std::string& name = "");
+
+        private:
+            virtual ~WindowingSystemInterfaces();
+            Interfaces _interfaces;
+        };
+
+        static osg::ref_ptr<WindowingSystemInterfaces>& getWindowingSystemInterfaces();
+
+        /** Get the default WindowingSystemInterface for this OS*/
+        static WindowingSystemInterface* getWindowingSystemInterface(const std::string& name = "");
 
         /** Create a graphics context for a specified set of traits.*/
         static GraphicsContext* createGraphicsContext(Traits* traits);
@@ -357,7 +390,7 @@ class OSG_EXPORT GraphicsContext : public Object
         bool releaseContext();
 
         /** Return true if the current thread has this OpenGL graphics context.*/
-        inline bool isCurrent() const { return _threadOfLastMakeCurrent == OpenThreads::Thread::CurrentThread(); }
+        inline bool isCurrent() const { return _threadOfLastMakeCurrent == OpenThreads::Thread::CurrentThreadId(); }
 
         /** Bind the graphics context to associated texture.*/
         inline void bindPBufferToTexture(GLenum buffer) { bindPBufferToTextureImplementation(buffer); }
@@ -422,9 +455,9 @@ class OSG_EXPORT GraphicsContext : public Object
         const SwapCallback* getSwapCallback() const { return _swapCallback.get(); }
 
         /** Convenience method for handling whether to call swapbuffers callback or the standard context swapBuffersImplementation.
-          * swapBuffersCallbackOrImplemenation() is called by swapBuffers() and osg::SwapBuffersOperation, end users should normally
-          * call swapBuffers() rather than swapBuffersCallbackOrImplemenation(). */
-        void swapBuffersCallbackOrImplemenation()
+          * swapBuffersCallbackOrImplementation() is called by swapBuffers() and osg::SwapBuffersOperation, end users should normally
+          * call swapBuffers() rather than swapBuffersCallbackOrImplementation(). */
+        void swapBuffersCallbackOrImplementation()
         {
             if (_state.valid()) _state->frameCompleted();
 
@@ -514,7 +547,7 @@ class OSG_EXPORT GraphicsContext : public Object
         Vec4                    _clearColor;
         GLbitfield              _clearMask;
 
-        OpenThreads::Thread*    _threadOfLastMakeCurrent;
+        size_t                              _threadOfLastMakeCurrent;
 
         OpenThreads::Mutex                  _operationsMutex;
         osg::ref_ptr<osg::RefBlock>         _operationsBlock;
@@ -543,6 +576,30 @@ public:
 
     GLsync _previousSync;
 };
+
+
+template<class T>
+struct WindowingSystemInterfaceProxy
+{
+    WindowingSystemInterfaceProxy(const std::string& name)
+    {
+        _wsi = new T;
+        _wsi->setName(name);
+
+        osg::GraphicsContext::getWindowingSystemInterfaces()->addWindowingSystemInterface(_wsi.get());
+    }
+
+    ~WindowingSystemInterfaceProxy()
+    {
+        osg::GraphicsContext::getWindowingSystemInterfaces()->removeWindowingSystemInterface(_wsi.get());
+    }
+
+    osg::ref_ptr<T> _wsi;
+};
+
+#define REGISTER_WINDOWINGSYSTEMINTERFACE(ext, classname) \
+    extern "C" void graphicswindow_##ext(void) {} \
+    static osg::WindowingSystemInterfaceProxy<classname> s_proxy_##classname(#ext);
 
 }
 

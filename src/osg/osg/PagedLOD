@@ -24,6 +24,18 @@ class OSG_EXPORT PagedLOD : public LOD
 {
     public :
 
+        /** Default constructor
+          * The default constructor sets
+          *  - the center mode to USER_DEFINED_CENTER and
+          *  - enables the paging of external children.
+          * @warning The center mode setting of the default constructor differs
+          *          from the setting of LOD's default constructor! Therefore,
+          *          the PagedLOD and LOD nodes may show different behaviour with
+          *          their default settings when using them with the same subgraph.
+          *          This is a result of the differences in determining the node's center.
+          * @note Though the bounding spheres of both nodes with their default settings
+          *       will not differ if they have same subgraph.
+          * @sa LOD::setCenter, LOD::setRadius */
         PagedLOD();
 
         /** Copy constructor using CopyOp to manage deep vs shallow copy.*/
@@ -31,15 +43,19 @@ class OSG_EXPORT PagedLOD : public LOD
 
         META_Node(osg, PagedLOD);
 
-
-
         virtual void traverse(NodeVisitor& nv);
+
+        using osg::Group::addChild;
 
         virtual bool addChild(Node *child);
 
-        virtual bool addChild(Node *child, float min, float max);
+        virtual bool addChild(Node *child, float rmin, float rmax);
 
-        virtual bool addChild(Node *child, float min, float max,const std::string& filename, float priorityOffset=0.0f, float priorityScale=1.0f);
+        template<class T> bool addChild( const ref_ptr<T>& child, float rmin, float rmax) { return addChild(child.get(), rmin, rmax); }
+
+        virtual bool addChild(Node *child, float rmin, float rmax, const std::string& filename, float priorityOffset=0.0f, float priorityScale=1.0f);
+
+        template<class T> bool addChild( const ref_ptr<T>& child, float rmin, float rmax, const std::string& filename, float priorityOffset=0.0f, float priorityScale=1.0f) { return addChild(child.get(), rmin, rmax, filename, priorityOffset, priorityScale); }
 
         virtual bool removeChildren(unsigned int pos,unsigned int numChildrenToRemove=1);
 
@@ -138,7 +154,7 @@ class OSG_EXPORT PagedLOD : public LOD
         /** Get the number of children that the PagedLOD must keep around, even if they are older than their expiry time.*/
         unsigned int getNumChildrenThatCannotBeExpired() const { return _numChildrenThatCannotBeExpired; }
 
-        /** Set wether you want to disable the paging in of external nodes.*/
+        /** Set whether you want to disable the paging in of external nodes.*/
         void setDisableExternalChildrenPaging(bool flag) { _disableExternalChildrenPaging = flag; }
 
         bool getDisableExternalChildrenPaging() const { return _disableExternalChildrenPaging; }

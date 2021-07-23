@@ -18,6 +18,13 @@
 #include <osg/Matrix>
 #include <osg/FrameStamp>
 
+#include <osg/ValueMap>
+#include <osg/ValueStack>
+
+
+namespace osgUtil { class UpdateVisitor; class CullVisitor; class IntersectionVisitor; }
+namespace osgGA { class EventVisitor; }
+
 namespace osg {
 
 class Billboard;
@@ -33,6 +40,8 @@ class OccluderNode;
 class OcclusionQueryNode;
 class PagedLOD;
 class PositionAttitudeTransform;
+class AutoTransform;
+class MultiViewAutoTransform;
 class Projection;
 class ProxyNode;
 class Sequence;
@@ -43,6 +52,11 @@ class Camera;
 class CameraView;
 class Drawable;
 class Geometry;
+class CullStack;
+
+
+
+
 
 const unsigned int UNINITIALIZED_FRAME_NUMBER=0xffffffff;
 
@@ -104,7 +118,48 @@ class OSG_EXPORT NodeVisitor : public virtual Object
           * Equivalent to dynamic_cast<const NodeVisitor*>(this).*/
         virtual const NodeVisitor* asNodeVisitor() const { return this; }
 
-        
+        /** Convert 'this' into a osgUtil::UpdateVisitor pointer if Object is a osgUtil::UpdateVisitor, otherwise return 0.
+          * Equivalent to dynamic_cast<osgUtil::UpdateVisitor*>(this).*/
+        virtual osgUtil::UpdateVisitor* asUpdateVisitor() { return 0; }
+
+        /** convert 'const this' into a const osgUtil::UpdateVisitor pointer if Object is a osgUtil::UpdateVisitor, otherwise return 0.
+          * Equivalent to dynamic_cast<const osgUtil::UpdateVisitor*>(this).*/
+        virtual const osgUtil::UpdateVisitor* asUpdateVisitor() const { return 0; }
+
+        /** Convert 'this' into a osgUtil::CullVisitor pointer if Object is a osgUtil::CullVisitor, otherwise return 0.
+          * Equivalent to dynamic_cast<osgUtil::CullVisitor*>(this).*/
+        virtual osgUtil::CullVisitor* asCullVisitor() { return 0; }
+
+        /** convert 'const this' into a const osgUtil::CullVisitor pointer if Object is a osgUtil::CullVisitor, otherwise return 0.
+          * Equivalent to dynamic_cast<const osgUtil::CullVisitor*>(this).*/
+        virtual const osgUtil::CullVisitor* asCullVisitor() const { return 0; }
+
+        /** Convert 'this' into a osgGA::EventVisitor pointer if Object is a osgGA::EventVisitor, otherwise return 0.
+          * Equivalent to dynamic_cast<osgGA::EventVisitor*>(this).*/
+        virtual osgGA::EventVisitor* asEventVisitor() { return 0; }
+
+        /** convert 'const this' into a const osgGA::EventVisitor pointer if Object is a osgGA::EventVisitor, otherwise return 0.
+          * Equivalent to dynamic_cast<const osgGA::EventVisitor*>(this).*/
+        virtual const osgGA::EventVisitor* asEventVisitor() const { return 0; }
+
+        /** Convert 'this' into a osgUtil::IntersectionVisitor pointer if Object is a IntersectionVisitor, otherwise return 0.
+          * Equivalent to dynamic_cast<osgUtil::IntersectionVisitor*>(this).*/
+        virtual osgUtil::IntersectionVisitor* asIntersectionVisitor() { return 0; }
+
+        /** convert 'const this' into a const osgUtil::IntersectionVisitor pointer if Object is a IntersectionVisitor, otherwise return 0.
+          * Equivalent to dynamic_cast<const osgUtil::IntersectionVisitor*>(this).*/
+        virtual const osgUtil::IntersectionVisitor* asIntersectionVisitor() const { return 0; }
+
+        /** Convert 'this' into a osg::CullStack pointer if Object is a osg::CullStack, otherwise return 0.
+          * Equivalent to dynamic_cast<osg::CullStack*>(this).*/
+        virtual osg::CullStack* asCullStack() { return 0; }
+
+        /** convert 'const this' into a const osg::CullStack pointer if Object is a osg::CullStack, otherwise return 0.
+          * Equivalent to dynamic_cast<const osg::CullStack*>(this).*/
+        virtual const osg::CullStack* asCullStack() const { return 0; }
+
+
+
         /** Method to call to reset visitor. Useful if your visitor accumulates
             state during a traversal, and you plan to reuse the visitor.
             To flush that state for the next traversal: call reset() prior
@@ -177,6 +232,40 @@ class OSG_EXPORT NodeVisitor : public virtual Object
 
         /** Get the traversal mode.*/
         inline TraversalMode getTraversalMode() const { return _traversalMode; }
+
+
+        /** Set the ValueMap used to store Values that can be reused over a series of traversals. */
+        inline void setValueMap(ValueMap* ps) { _valueMap = ps; }
+
+        /** Get the ValueMap. */
+        inline ValueMap* getValueMap() { return _valueMap.get(); }
+
+        /** Get the ValueMap. */
+        inline const ValueMap* getValueMap() const { return _valueMap.get(); }
+
+        /** Get the ValueMap. */
+        inline ValueMap* getOrCreateValueMap()
+        {
+            if (!_valueMap) _valueMap = new ValueMap;
+            return _valueMap.get();
+        }
+
+        /** Set the ValueStack used to stack Values during traversal. */
+        inline void setValueStack(ValueStack* ps) { _valueStack = ps; }
+
+        /** Get the ValueStack. */
+        inline ValueStack* getValueStack() { return _valueStack.get(); }
+
+        /** Get the const ValueStack. */
+        inline const ValueStack* getValueStack() const { return _valueStack.get(); }
+
+        /** Get the ValueStack. */
+        inline ValueStack* getOrCreateValueStack()
+        {
+            if (!_valueStack) _valueStack = new ValueStack;
+            return _valueStack.get();
+        }
+
 
         /** Method for handling traversal of a nodes.
             If you intend to use the visitor for actively traversing
@@ -259,6 +348,7 @@ class OSG_EXPORT NodeVisitor : public virtual Object
         virtual void apply(CameraView& node);
         virtual void apply(MatrixTransform& node);
         virtual void apply(PositionAttitudeTransform& node);
+        virtual void apply(AutoTransform& node);
 
         virtual void apply(Switch& node);
         virtual void apply(Sequence& node);
@@ -303,7 +393,7 @@ class OSG_EXPORT NodeVisitor : public virtual Object
 
             virtual double getPreLoadTime() const = 0;
 
-            virtual osg::Image* readImageFile(const std::string& fileName, const osg::Referenced* options=0) = 0;
+            virtual osg::ref_ptr<osg::Image> readRefImageFile(const std::string& fileName, const osg::Referenced* options=0) = 0;
 
             virtual void requestImageFile(const std::string& fileName,osg::Object* attachmentPoint, int attachmentIndex, double timeToMergeBy, const FrameStamp* framestamp, osg::ref_ptr<osg::Referenced>& imageRequest, const osg::Referenced* options=0) = 0;
 
@@ -338,6 +428,8 @@ class OSG_EXPORT NodeVisitor : public virtual Object
         ref_ptr<DatabaseRequestHandler> _databaseRequestHandler;
         ref_ptr<ImageRequestHandler>    _imageRequestHandler;
 
+        osg::ref_ptr<ValueMap>          _valueMap;
+        osg::ref_ptr<ValueStack>        _valueStack;
 };
 
 
@@ -358,6 +450,98 @@ class NodeAcceptOp
 
         NodeVisitor& _nv;
 };
+
+
+class PushPopObject
+{
+public:
+
+
+    PushPopObject(NodeVisitor* nv, const Referenced* key, Object* value):
+        _valueStack(0),
+        _key(0)
+    {
+        if (key)
+        {
+            _valueStack = nv->getOrCreateValueStack();
+            _key = key;
+            _valueStack->push(_key, value);
+        }
+    }
+
+    PushPopObject(ValueStack* valueStack, const Referenced* key, Object* value):
+        _valueStack(valueStack),
+        _key(0)
+    {
+        if (_valueStack && key)
+        {
+            _key = key;
+            _valueStack->push(_key, value);
+        }
+    }
+
+    inline ~PushPopObject()
+    {
+        if (_valueStack) _valueStack->pop(_key);
+    }
+
+protected:
+    ValueStack* _valueStack;
+    const Referenced* _key;
+};
+
+class PushPopValue
+{
+public:
+
+
+    template<typename T>
+    PushPopValue(NodeVisitor* nv, const Referenced* key, const T& value):
+        _valueStack(0),
+        _key(0)
+    {
+        if (key)
+        {
+            _valueStack = nv->getOrCreateValueStack();
+            _key = key;
+            _valueStack->push(_key, value);
+        }
+    }
+
+    template<typename T>
+    PushPopValue(ValueStack* valueStack, const Referenced* key, const T& value):
+        _valueStack(valueStack),
+        _key(0)
+    {
+        if (_valueStack && key)
+        {
+            _key = key;
+            _valueStack->push(_key, value);
+        }
+    }
+
+    inline ~PushPopValue()
+    {
+        if (_valueStack) _valueStack->pop(_key);
+    }
+
+protected:
+    ValueStack* _valueStack;
+    const Referenced* _key;
+};
+
+template<>
+inline ValueStack* getOrCreateUserObjectOfType<NodeVisitor,ValueStack>(NodeVisitor* nv)
+{
+    return nv->getOrCreateValueStack();
+}
+
+template<>
+inline ValueMap* getOrCreateUserObjectOfType<NodeVisitor,ValueMap>(NodeVisitor* nv)
+{
+    return nv->getOrCreateValueMap();
+}
+
 
 }
 

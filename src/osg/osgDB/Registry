@@ -366,6 +366,13 @@ class OSGDB_EXPORT Registry : public osg::Referenced
         /** Set the password map to be used by plugins when access files from secure locations.*/
         void setAuthenticationMap(AuthenticationMap* authenticationMap) { _authenticationMap = authenticationMap; }
 
+        /** Get the password map to be used by plugins when access files from secure locations. Create a AuthenticationMap if one isn't already assigned.*/
+        AuthenticationMap* getOrCreateAuthenticationMap()
+        {
+            if (!_authenticationMap) _authenticationMap = new AuthenticationMap;
+            return _authenticationMap.get();
+        }
+
         /** Get the password map to be used by plugins when access files from secure locations.*/
         AuthenticationMap* getAuthenticationMap() { return _authenticationMap.get(); }
 
@@ -452,16 +459,16 @@ class OSGDB_EXPORT Registry : public osg::Referenced
         void clearObjectCache();
 
         /** Add a filename,object,timestamp triple to the Registry::ObjectCache.*/
-        void addEntryToObjectCache(const std::string& filename, osg::Object* object, double timestamp = 0.0);
+        void addEntryToObjectCache(const std::string& filename, osg::Object* object, double timestamp = 0.0, Options *options = NULL);
 
         /** Remove Object from cache.*/
-        void removeFromObjectCache(const std::string& fileName);
+        void removeFromObjectCache(const std::string& fileName, Options *options =  NULL);
 
         /** Get an Object from the object cache*/
-        osg::Object* getFromObjectCache(const std::string& fileName);
+        osg::Object* getFromObjectCache(const std::string& fileName, Options *options = NULL);
 
         /** Get an ref_ptr<Object> from the object cache*/
-        osg::ref_ptr<osg::Object> getRefFromObjectCache(const std::string& fileName);
+        osg::ref_ptr<osg::Object> getRefFromObjectCache(const std::string& fileName, Options *options = NULL);
 
 
 
@@ -547,7 +554,7 @@ class OSGDB_EXPORT Registry : public osg::Referenced
 
     public:
         /** Functor used in internal implementations.*/
-        struct ReadFunctor
+        struct ReadFunctor : public osg::Referenced
         {
             ReadFunctor(const std::string& filename, const Options* options):
                 _filename(filename),

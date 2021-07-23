@@ -113,7 +113,7 @@ class OSG_EXPORT CullStack : public osg::CullSettings
             {
                 return getCurrentCullingSet().isCulled(node.getBound());
             }
-            else 
+            else
             {
                 getCurrentCullingSet().resetCullingMask();
                 return false;
@@ -143,9 +143,15 @@ class OSG_EXPORT CullStack : public osg::CullSettings
         inline const CullingSet& getCurrentCullingSet() const { return *_back_modelviewCullingStack; }
 
         inline osg::Viewport* getViewport();
+        inline const osg::Viewport* getViewport() const;
+
         inline osg::RefMatrix* getModelViewMatrix();
+        inline const osg::RefMatrix* getModelViewMatrix() const;
+
         inline osg::RefMatrix* getProjectionMatrix();
-        inline osg::Matrix getWindowMatrix();
+        inline const osg::RefMatrix* getProjectionMatrix() const;
+
+        inline osg::Matrix getWindowMatrix() const;
         inline const osg::RefMatrix* getMVPW();
 
         inline const osg::Vec3& getReferenceViewPoint() const { return _referenceViewPoints.back(); }
@@ -168,13 +174,22 @@ class OSG_EXPORT CullStack : public osg::CullSettings
             return osg::Vec3(-matrix(0,2),-matrix(1,2),-matrix(2,2));
         }
 
+        typedef fast_back_stack< ref_ptr<RefMatrix> > MatrixStack;
+
+        MatrixStack& getProjectionStack() { return _projectionStack; }
+        const MatrixStack& getProjectionStack() const { return _projectionStack; }
+
+        MatrixStack& getModelViewStack() { return _modelviewStack; }
+        const MatrixStack& getModelViewStack() const { return _modelviewStack; }
+
+        MatrixStack& getMVPWStack() { return _MVPW_Stack; }
+        const MatrixStack& getMVPWStack() const { return _MVPW_Stack; }
 
     protected:
 
         // base set of shadow volume occluder to use in culling.
         ShadowVolumeOccluderList                                    _occluderList;
 
-        typedef fast_back_stack< ref_ptr<RefMatrix> >                  MatrixStack;
 
         MatrixStack                                                 _projectionStack;
 
@@ -215,41 +230,35 @@ class OSG_EXPORT CullStack : public osg::CullSettings
 
 inline osg::Viewport* CullStack::getViewport()
 {
-    if (!_viewportStack.empty())
-    {
-        return _viewportStack.back().get();
-    }
-    else
-    {
-        return 0L;
-    }
+    return _viewportStack.empty() ? 0 : _viewportStack.back().get();
+}
+
+inline const osg::Viewport* CullStack::getViewport() const
+{
+    return _viewportStack.empty() ? 0 : _viewportStack.back().get();
 }
 
 inline osg::RefMatrix* CullStack::getModelViewMatrix()
 {
-    if (!_modelviewStack.empty())
-    {
-        return _modelviewStack.back().get();
-    }
-    else
-    {
-        return _identity.get();
-    }
+    return _modelviewStack.empty() ? _identity.get() : _modelviewStack.back().get();
+}
+
+inline const osg::RefMatrix* CullStack::getModelViewMatrix() const
+{
+    return _modelviewStack.empty() ? _identity.get() : _modelviewStack.back().get();
 }
 
 inline osg::RefMatrix* CullStack::getProjectionMatrix()
 {
-    if (!_projectionStack.empty())
-    {
-        return _projectionStack.back().get();
-    }
-    else
-    {
-        return _identity.get();
-    }
+    return _projectionStack.empty() ? _identity.get() : _projectionStack.back().get();
 }
 
-inline osg::Matrix CullStack::getWindowMatrix()
+inline const osg::RefMatrix* CullStack::getProjectionMatrix() const
+{
+    return _projectionStack.empty() ? _identity.get() : _projectionStack.back().get();
+}
+
+inline osg::Matrix CullStack::getWindowMatrix() const
 {
     if (!_viewportStack.empty())
     {

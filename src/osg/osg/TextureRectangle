@@ -36,6 +36,19 @@ class OSG_EXPORT TextureRectangle : public Texture
 
         TextureRectangle(Image* image);
 
+        template<class T> TextureRectangle(const osg::ref_ptr<T>& image):
+                    _textureWidth(0),
+                    _textureHeight(0)
+        {
+            setWrap(WRAP_S, CLAMP);
+            setWrap(WRAP_T, CLAMP);
+
+            setFilter(MIN_FILTER, LINEAR);
+            setFilter(MAG_FILTER, LINEAR);
+
+            setImage(image.get());
+        }
+
         /** Copy constructor using CopyOp to manage deep vs shallow copy. */
         TextureRectangle(const TextureRectangle& text,const CopyOp& copyop=CopyOp::SHALLOW_COPY);
 
@@ -49,11 +62,16 @@ class OSG_EXPORT TextureRectangle : public Texture
         /** Set the texture image. */
         void setImage(Image* image);
 
+        template<class T> void setImage(const ref_ptr<T>& image) { setImage(image.get()); }
+
         /** Get the texture image. */
         Image* getImage() { return _image.get(); }
 
         /** Get the const texture image. */
         inline const Image* getImage() const { return _image.get(); }
+
+        /** return true if the texture image data has been modified and the associated GL texture object needs to be updated.*/
+        virtual bool isDirty(unsigned int contextID) const { return (_image.valid() && _image->getModifiedCount()!=_modifiedCount[contextID]); }
 
         inline unsigned int& getModifiedCount(unsigned int contextID) const
         {

@@ -100,6 +100,8 @@ class OSGVIEWER_EXPORT StatsHandler : public osgGA::GUIEventHandler
         osg::Camera* getCamera() { return _camera.get(); }
         const osg::Camera* getCamera() const { return _camera.get(); }
 
+        virtual void collectWhichCamerasToRenderStatsFor(osgViewer::ViewerBase* viewer, osgViewer::ViewerBase::Cameras& cameras);
+
         virtual bool handle(const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapter& aa);
 
         /** Get the keyboard and mouse usage of this manipulator.*/
@@ -302,7 +304,6 @@ protected:
         bool            _changeEndBarrierPosition;
 
         osg::Timer_t    _tickOrLastKeyPress;
-        bool            _done;
 };
 
 /**
@@ -444,6 +445,7 @@ class OSGVIEWER_EXPORT ScreenCaptureHandler : public osgGA::GUIEventHandler
                 std::vector<unsigned int> _contextSaveCounter;
         };
 
+        /** @param defaultOperation : operation to do when screen capture happens. */
         /** @param numFrames >0: capture that number of frames. <0: capture all frames, call stopCapture() to stop it. */
         ScreenCaptureHandler(CaptureOperation* defaultOperation = 0, int numFrames = 1);
 
@@ -499,7 +501,7 @@ class OSGVIEWER_EXPORT ScreenCaptureHandler : public osgGA::GUIEventHandler
 /** InteractiveImage is an event handler that computes the mouse coordinates in an images coordinate frame
   * and then passes keyboard and mouse events to it.  This event handler is useful for vnc or browser
   * surfaces in the 3D scene.*/
-class OSGVIEWER_EXPORT InteractiveImageHandler : public osgGA::GUIEventHandler, public osg::Drawable::CullCallback
+class OSGVIEWER_EXPORT InteractiveImageHandler : public osgGA::GUIEventHandler, public osg::DrawableCullCallback
 {
 public:
 
@@ -510,7 +512,19 @@ public:
 
     META_Object(osgViewer, InteractiveImageHandler);
 
-    // use the osgGA::GUIEventHandler implementation of run.
+    virtual NodeCallback* asNodeCallback() { return osg::NodeCallback::asNodeCallback(); }
+    virtual const NodeCallback* asNodeCallback() const { return osg::NodeCallback::asNodeCallback(); }
+
+    virtual DrawableEventCallback* asDrawableEventCallback() { return osg::DrawableEventCallback::asDrawableEventCallback(); }
+    virtual const DrawableEventCallback* asDrawableEventCallback() const { return osg::DrawableEventCallback::asDrawableEventCallback(); }
+
+    virtual DrawableCullCallback* asDrawableCullCallback() { return osg::DrawableCullCallback::asDrawableCullCallback(); }
+    virtual const DrawableCullCallback* asDrawableCullCallback() const { return osg::DrawableCullCallback::asDrawableCullCallback(); }
+
+    virtual osgGA::EventHandler* asEventHandler() { return osgGA::EventHandler::asEventHandler(); }
+    virtual const osgGA::EventHandler* asEventHandler() const { return osgGA::EventHandler::asEventHandler(); }
+
+	// use the osgGA::GUIEventHandler implementation of run.
     virtual bool run(osg::Object* object, osg::Object* data) { return osgGA::GUIEventHandler::run(object, data); }
 
     virtual bool handle(const osgGA::GUIEventAdapter& ea,osgGA::GUIActionAdapter& aa, osg::Object*, osg::NodeVisitor* nv);
@@ -521,10 +535,11 @@ protected:
 
     virtual ~InteractiveImageHandler() {}
 
-    InteractiveImageHandler() {}
+    InteractiveImageHandler():
+        _fullscreen(false) {}
 
     InteractiveImageHandler(const InteractiveImageHandler&,const osg::CopyOp& = osg::CopyOp::SHALLOW_COPY):
-        osg::Object(), osg::Callback(), osgGA::GUIEventHandler(), osg::Drawable::CullCallback(), _fullscreen(false) {}
+        osg::Object(), osg::Callback(), osgGA::GUIEventHandler(), osg::DrawableCullCallback(), _fullscreen(false) {}
 
     bool mousePosition(osgViewer::View* view, osg::NodeVisitor* nv, const osgGA::GUIEventAdapter& ea, int& x, int &y) const;
 

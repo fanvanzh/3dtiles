@@ -1,4 +1,4 @@
-/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2014 Robert Osfield
+/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2017 Robert Osfield
  * Copyright (C) 2003-2005 3Dlabs Inc. Ltd.
  * Copyright (C) 2004-2005 Nathan Cournia
  * Copyright (C) 2007 Art Tevs
@@ -45,8 +45,10 @@
 typedef char GLchar;
 #endif
 
-#if !defined(GL_VERSION_2_0)
+#if !defined(GL_VERTEX_PROGRAM_POINT_SIZE)
     #define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
+#endif
+#if !defined(GL_VERTEX_PROGRAM_TWO_SIDE)
     #define GL_VERTEX_PROGRAM_TWO_SIDE        0x8643
 #endif
 
@@ -433,6 +435,8 @@ typedef char GLchar;
 #define GL_SAMPLER_CUBE_MAP_ARRAY_SHADOW  0x900D
 #define GL_INT_SAMPLER_CUBE_MAP_ARRAY     0x900E
 #define GL_UNSIGNED_INT_SAMPLER_CUBE_MAP_ARRAY 0x900F
+#define GL_DRAW_INDIRECT_BUFFER           0x8F3F
+#define GL_DRAW_INDIRECT_BUFFER_BINDING   0x8F43
 #endif
 
 // ARB_shader_atomic_counters
@@ -554,6 +558,60 @@ typedef char GLchar;
 #define GL_MAP_UNSYNCHRONIZED_BIT 0x0020
 #endif
 
+#define GL_INT64_ARB               0x140E
+#define GL_UNSIGNED_INT64_ARB      0x140F
+#define GL_INT64_VEC2_ARB          0x8FE9
+#define GL_INT64_VEC3_ARB          0x8FEA
+#define GL_INT64_VEC4_ARB          0x8FEB
+#define GL_UNSIGNED_INT64_VEC2_ARB 0x8FF5
+#define GL_UNSIGNED_INT64_VEC3_ARB 0x8FF6
+#define GL_UNSIGNED_INT64_VEC4_ARB 0x8FF7
+/* ------------------------------ GL_KHR_debug ----------------------------- */
+#ifndef GL_KHR_debug
+#define GL_KHR_debug 1
+
+#define GL_CONTEXT_FLAG_DEBUG_BIT 0x00000002
+#define GL_STACK_OVERFLOW 0x0503
+#define GL_STACK_UNDERFLOW 0x0504
+#define GL_DEBUG_OUTPUT_SYNCHRONOUS 0x8242
+#define GL_DEBUG_NEXT_LOGGED_MESSAGE_LENGTH 0x8243
+#define GL_DEBUG_CALLBACK_FUNCTION 0x8244
+#define GL_DEBUG_CALLBACK_USER_PARAM 0x8245
+#define GL_DEBUG_SOURCE_API 0x8246
+#define GL_DEBUG_SOURCE_WINDOW_SYSTEM 0x8247
+#define GL_DEBUG_SOURCE_SHADER_COMPILER 0x8248
+#define GL_DEBUG_SOURCE_THIRD_PARTY 0x8249
+#define GL_DEBUG_SOURCE_APPLICATION 0x824A
+#define GL_DEBUG_SOURCE_OTHER 0x824B
+#define GL_DEBUG_TYPE_ERROR 0x824C
+#define GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR 0x824D
+#define GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR 0x824E
+#define GL_DEBUG_TYPE_PORTABILITY 0x824F
+#define GL_DEBUG_TYPE_PERFORMANCE 0x8250
+#define GL_DEBUG_TYPE_OTHER 0x8251
+#define GL_DEBUG_TYPE_MARKER 0x8268
+#define GL_DEBUG_TYPE_PUSH_GROUP 0x8269
+#define GL_DEBUG_TYPE_POP_GROUP 0x826A
+#define GL_DEBUG_SEVERITY_NOTIFICATION 0x826B
+#define GL_MAX_DEBUG_GROUP_STACK_DEPTH 0x826C
+#define GL_DEBUG_GROUP_STACK_DEPTH 0x826D
+#define GL_BUFFER 0x82E0
+#define GL_SHADER 0x82E1
+#define GL_PROGRAM 0x82E2
+#define GL_QUERY 0x82E3
+#define GL_PROGRAM_PIPELINE 0x82E4
+#define GL_SAMPLER 0x82E6
+#define GL_DISPLAY_LIST 0x82E7
+#define GL_MAX_LABEL_LENGTH 0x82E8
+#define GL_MAX_DEBUG_MESSAGE_LENGTH 0x9143
+#define GL_MAX_DEBUG_LOGGED_MESSAGES 0x9144
+#define GL_DEBUG_LOGGED_MESSAGES 0x9145
+#define GL_DEBUG_SEVERITY_HIGH 0x9146
+#define GL_DEBUG_SEVERITY_MEDIUM 0x9147
+#define GL_DEBUG_SEVERITY_LOW 0x9148
+#define GL_DEBUG_OUTPUT 0x92E0
+
+#endif /* GL_KHR_debug */
 #ifndef GL_ARB_sync
 #define GL_MAX_SERVER_WAIT_TIMEOUT        0x9111
 #define GL_OBJECT_TYPE                    0x9112
@@ -572,21 +630,33 @@ typedef char GLchar;
 #define GL_TIMEOUT_IGNORED                0xFFFFFFFFFFFFFFFFull
 #endif
 
-#ifndef GL_TEXTURE_2D_ARRAY_EXT
-    #define GL_TEXTURE_2D_ARRAY_EXT           0x8C1A
-    #define GL_TEXTURE_2D_ARRAY_EXT                        0x8C1A
-    #define GL_PROXY_TEXTURE_2D_ARRAY_EXT                  0x8C1B
-    #define GL_TEXTURE_BINDING_2D_ARRAY_EXT                0x8C1D
-    #define GL_MAX_ARRAY_TEXTURE_LAYERS_EXT                0x88FF
-    #define GL_COMPARE_REF_DEPTH_TO_TEXTURE_EXT            0x884E
-    #define GL_SAMPLER_2D_ARRAY_EXT                        0x8DC1
-    #define GL_SAMPLER_2D_ARRAY_SHADOW_EXT                 0x8DC4
-    #define GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER_EXT    0x8CD4
+#ifndef GL_TEXTURE_2D_ARRAY
+    #define GL_TEXTURE_2D_ARRAY                        0x8C1A
+    #define GL_PROXY_TEXTURE_2D_ARRAY                  0x8C1B
+    #define GL_TEXTURE_BINDING_2D_ARRAY                0x8C1D
+    #define GL_MAX_ARRAY_TEXTURE_LAYERS                0x88FF
+    #define GL_COMPARE_REF_DEPTH_TO_TEXTURE            0x884E
+    #define GL_SAMPLER_2D_ARRAY                        0x8DC1
+    #define GL_SAMPLER_2D_ARRAY_SHADOW                 0x8DC4
+    #define GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER    0x8CD4
 #endif
 
 #ifndef GL_MAX_3D_TEXTURE_SIZE
     #define GL_MAX_3D_TEXTURE_SIZE      0x8073
 #endif
+
+#ifndef GL_TEXTURE_MIN_LOD
+    #define GL_TEXTURE_MIN_LOD          0x813A
+#endif
+
+#ifndef GL_TEXTURE_MAX_LOD
+    #define GL_TEXTURE_MAX_LOD          0x813B
+#endif
+
+#ifndef GL_TEXTURE_LOD_BIAS
+    #define GL_TEXTURE_LOD_BIAS         0x8501
+#endif
+
 
 #ifndef GL_INTERLEAVED_ATTRIBS
     #define GL_INTERLEAVED_ATTRIBS      0x8C8C
@@ -615,13 +685,13 @@ namespace osg
     //all ES versions except GL_OES_VERSION_1_0 provide these types for OpenGL ES
     #if !defined(GL_VERSION_1_5) && !defined(GL_ARB_vertex_buffer_object) \
     && !defined(GL_ES_VERSION_2_0) && !defined(OPENGLES_1_1_FOUND)
-    
+
         #if 1
             // experimental defination.
             typedef ptrdiff_t GLsizeiptr;
             typedef ptrdiff_t GLintptr;
         #else
-    
+
             #if defined(_WIN64)
                 typedef __int64 GLintptr;
                 typedef __int64 GLsizeiptr;

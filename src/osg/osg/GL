@@ -33,17 +33,18 @@
 /* #undef GL_HEADER_HAS_GLINT64 */
 /* #undef GL_HEADER_HAS_GLUINT64 */
 
-#define OSG_GL1_FEATURES true
-#define OSG_GL2_FEATURES true
-#define OSG_GL3_FEATURES false
-#define OSG_GLES1_FEATURES false
-#define OSG_GLES2_FEATURES false
-#define OSG_GLES3_FEATURES false
+#define OSG_GL1_FEATURES 1
+#define OSG_GL2_FEATURES 1
+#define OSG_GL3_FEATURES 0
+#define OSG_GLES1_FEATURES 0
+#define OSG_GLES2_FEATURES 0
+#define OSG_GLES3_FEATURES 0
+#define OSG_GL_CONTEXT_VERSION "1.0"
 
 
 #ifndef WIN32
 
-    // Required for compatibility with glext.h sytle function definitions of
+    // Required for compatibility with glext.h style function definitions of
     // OpenGL extensions, such as in src/osg/Point.cpp.
     #ifndef APIENTRY
         #define APIENTRY
@@ -172,13 +173,13 @@
     #define GL_NONE 0x0
 #endif
 
-#if defined(OSG_GLES1_AVAILABLE) || defined(OSG_GLES2_AVAILABLE)
+#if defined(OSG_GLES1_AVAILABLE) || defined(OSG_GLES2_AVAILABLE) || defined(OSG_GLES3_AVAILABLE)
     //GLES defines (OES)
     #define GL_RGB8_OES                                             0x8051
     #define GL_RGBA8_OES                                            0x8058
 #endif
 
-#if defined(OSG_GLES1_AVAILABLE) || defined(OSG_GLES2_AVAILABLE) || defined(OSG_GL3_AVAILABLE)
+#if defined(OSG_GLES1_AVAILABLE) || defined(OSG_GLES2_AVAILABLE) || defined(OSG_GLES3_AVAILABLE) || defined(OSG_GL3_AVAILABLE)
     #define GL_POLYGON                         0x0009
     #define GL_QUADS                           0x0007
     #define GL_QUAD_STRIP                      0x0008

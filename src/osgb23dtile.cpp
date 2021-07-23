@@ -829,10 +829,8 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) 
     }
     // scene
     {
-        // 一个场景
         tinygltf::Scene sence;
         sence.nodes.push_back(0);
-        // 所有场景
         model.scenes = { sence };
         model.defaultScene = 0;
     }
@@ -851,7 +849,6 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) 
         for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
         {
             tinygltf::Material mat = make_color_material_osgb(1.0, 1.0, 1.0);
-            // 可能会出现多材质的情况
             tinygltf::Parameter baseColorTexture;
             baseColorTexture.json_int_value = { std::pair<string,int>("index",i) };
             mat.values["baseColorTexture"] = baseColorTexture;
@@ -1150,7 +1147,7 @@ osgb23dtile_path(const char* in_path, const char* out_path,
     }
     b_pbr_texture = pbr_texture;
     do_tile_job(root, out_path, max_lvl);
-    // 返回 json 和 最大bbox
+    // return json and max-bbox
     extend_tile_box(root);
     if (root.bbox.max.empty() || root.bbox.min.empty())
     {
@@ -1170,7 +1167,6 @@ osgb23dtile_path(const char* in_path, const char* out_path,
     return str;
 }
 
-// 所有接口都是 utf8 字符串
 extern "C" bool
 osgb2glb(const char* in, const char* out)
 {

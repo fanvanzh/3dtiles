@@ -16,6 +16,12 @@
 
 #include <osg/Config>
 
+#ifdef OSG_USE_REF_PTR_SAFE_DEREFERENCE
+#include <typeinfo>
+#include <stdexcept>
+#include <string>
+#endif
+
 namespace osg {
 
 template<typename T> class observer_ptr;
@@ -75,7 +81,7 @@ class ref_ptr
         bool operator < (const ref_ptr& rp) const { return (_ptr<rp._ptr); }
 
 
-    // follows is an implmentation of the "safe bool idiom", details can be found at:
+    // follows is an implementation of the "safe bool idiom", details can be found at:
     //   http://en.wikibooks.org/wiki/More_C%2B%2B_Idioms/Safe_bool
     //   http://lists.boost.org/Archives/boost/2003/09/52856.php
 
@@ -87,8 +93,27 @@ class ref_ptr
         operator unspecified_bool_type() const { return valid()? &ref_ptr::_ptr : 0; }
 #endif
 
-        T& operator*() const { return *_ptr; }
-        T* operator->() const { return _ptr; }
+        T& operator*() const
+        {
+#ifdef OSG_USE_REF_PTR_SAFE_DEREFERENCE
+            if( !_ptr ) {
+                // pointer is invalid, so throw an exception
+                throw std::runtime_error(std::string("could not dereference invalid osg pointer ") + std::string(typeid(T).name()));
+            }
+#endif
+            return *_ptr;
+        }
+        T* operator->() const
+        {
+#ifdef OSG_USE_REF_PTR_SAFE_DEREFERENCE
+            if( !_ptr ) {
+                // pointer is invalid, so throw an exception.
+                throw std::runtime_error(std::string("could not call invalid osg pointer ") + std::string(typeid(T).name()));
+            }
+#endif
+            return _ptr;
+        }
+
         T* get() const { return _ptr; }
 
         bool operator!() const   { return _ptr==0; } // not required

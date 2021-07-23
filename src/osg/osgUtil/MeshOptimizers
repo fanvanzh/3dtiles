@@ -33,7 +33,7 @@ public:
                       Optimizer::OptimizationOptions options)
         : BaseOptimizerVisitor(optimizer, options) {}
     void reset();
-    void apply(osg::Geode& geode);
+    void apply(osg::Geometry& geom);
     typedef std::set<osg::Geometry*> GeometryList;
     GeometryList& getGeometryList() { return _geometryList; };
 protected:
@@ -46,11 +46,16 @@ class OSGUTIL_EXPORT IndexMeshVisitor : public GeometryCollector
 {
 public:
     IndexMeshVisitor(Optimizer* optimizer = 0)
-        : GeometryCollector(optimizer, Optimizer::INDEX_MESH)
+        : GeometryCollector(optimizer, Optimizer::INDEX_MESH), _generateNewIndicesOnAllGeometries(false)
     {
     }
+    inline void setGenerateNewIndicesOnAllGeometries(bool b) { _generateNewIndicesOnAllGeometries = b; }
+    inline bool getGenerateNewIndicesOnAllGeometries() const { return _generateNewIndicesOnAllGeometries; }
+
     void makeMesh(osg::Geometry& geom);
     void makeMesh();
+protected:
+    bool _generateNewIndicesOnAllGeometries;
 };
 
 // Optimize the triangle order in a mesh for best use of the GPU's
@@ -77,7 +82,7 @@ class OSGUTIL_EXPORT VertexCacheMissVisitor : public osg::NodeVisitor
 public:
     VertexCacheMissVisitor(unsigned cacheSize = 16);
     void reset();
-    virtual void apply(osg::Geode& geode);
+    virtual void apply(osg::Geometry& geom);
     void doGeometry(osg::Geometry& geom);
     unsigned misses;
     unsigned triangles;
@@ -120,6 +125,22 @@ public:
 protected:
     std::map<unsigned int, unsigned int> _deduplicateUvs;
 }; // SharedArrayOptimizer
+
+
+inline void optimizeMesh(osg::Node* node)
+{
+    IndexMeshVisitor imv;
+    node->accept(imv);
+    imv.makeMesh();
+
+    VertexCacheVisitor vcv;
+    node->accept(vcv);
+    vcv.optimizeVertices();
+
+    VertexAccessOrderVisitor vaov;
+    node->accept(vaov);
+    vaov.optimizeOrder();
+}
 
 }
 #endif

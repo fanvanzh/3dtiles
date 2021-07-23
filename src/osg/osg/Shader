@@ -49,7 +49,7 @@ class OSG_EXPORT ShaderBinary : public osg::Object
 
         META_Object(osg, ShaderBinary);
 
-        /** Allocated a data buffer of specified size/*/
+        /** Allocated a data buffer of specified size.*/
         void allocate(unsigned int size);
 
         /** Assign shader binary data, copying the specified data into locally stored data buffer, the original data can then be deleted.*/
@@ -162,14 +162,13 @@ class OSG_EXPORT Shader : public osg::Object
         /** Get the const Shader's ShaderBinary, return NULL if none is assigned. */
         const ShaderBinary* getShaderBinary() const { return _shaderBinary.get(); }
 
-
-        /** Read shader source from file and then constructor shader of specified type.
-          * Return the resulting Shader or 0 if no valid shader source could be read.*/
+#ifdef OSG_USE_DEPRECATED_API
+        /** Deorecated use osgDB::readRefShaderFile().*/
         static Shader* readShaderFile( Type type, const std::string& fileName );
 
-        /** Load the Shader's source code text from a file. */
+        /** Deorecated use osgDB::readRefShaderFile(). */
         bool loadShaderSourceFromFile( const std::string& fileName );
-
+#endif
 
         /** The code injection map used when generating the main shader during main shader composition.*/
         typedef std::multimap<float, std::string> CodeInjectionMap;
@@ -204,21 +203,6 @@ class OSG_EXPORT Shader : public osg::Object
 
         /** If needed, compile the PCS's glShader */
         void compileShader(osg::State& state) const;
-
-
-        /** Mark internal glShader for deletion.
-          * Deletion requests are queued until they can be executed
-          * in the proper GL context. */
-        static void deleteGlShader(unsigned int contextID, GLuint shader);
-
-        /** flush all the cached glShaders which need to be deleted
-          * in the OpenGL context related to contextID.*/
-        static void flushDeletedGlShaders(unsigned int contextID,double currentTime, double& availableTime);
-
-        /** discard all the cached glShaders which need to be deleted in the OpenGL context related to contextID.
-          * Note, unlike flush no OpenGL calls are made, instead the handles are all removed.
-          * this call is useful for when an OpenGL context has been destroyed. */
-        static void discardDeletedGlShaders(unsigned int contextID);
 
         static Shader::Type getTypeId( const std::string& tname );
 
@@ -322,6 +306,7 @@ class OSG_EXPORT Shader : public osg::Object
         /** osg::Programs that this osg::Shader is attached to */
         typedef std::set< osg::Program* > ProgramSet;
         ProgramSet                      _programSet;
+        OpenThreads::Mutex _programSetMutex;
         mutable osg::buffered_value< osg::ref_ptr<ShaderObjects> > _pcsList;
 
     private:
@@ -336,7 +321,7 @@ class OSG_EXPORT ShaderComponent : public osg::Object
         ShaderComponent();
         ShaderComponent(const ShaderComponent& sc,const CopyOp& copyop=CopyOp::SHALLOW_COPY);
 
-        META_Object(osg, ShaderComponent)
+        META_Object(osg, ShaderComponent);
 
         unsigned int addShader(osg::Shader* shader);
         void removeShader(unsigned int i);

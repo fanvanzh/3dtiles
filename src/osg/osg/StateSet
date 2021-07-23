@@ -63,6 +63,14 @@ class OSG_EXPORT StateSet : public Object
         bool operator == (const StateSet& rhs) const { return compare(rhs)==0; }
         bool operator != (const StateSet& rhs) const { return compare(rhs)!=0; }
 
+        /** Convert 'this' into a StateSet pointer if Object is a StateSet, otherwise return 0.
+          * Equivalent to dynamic_cast<StateSet*>(this).*/
+        virtual StateSet* asStateSet() { return this; }
+
+        /** convert 'const this' into a const StateSet pointer if Object is a StateSet, otherwise return 0.
+          * Equivalent to dynamic_cast<const StateSet*>(this).*/
+        virtual const StateSet* asStateSet() const { return this; }
+
 
         /** A vector of osg::Object pointers which is used to store the parent(s) of this Stateset, the parents could be osg::Node or osg::Drawable.*/
         typedef std::vector<Node*> ParentList;
@@ -160,14 +168,20 @@ class OSG_EXPORT StateSet : public Object
         /** Set this StateSet to contain specified attribute and override flag.*/
         void setAttribute(StateAttribute *attribute, StateAttribute::OverrideValue value=StateAttribute::OFF);
 
+        template<class T> void setAttribute(const ref_ptr<T>& attribute, StateAttribute::OverrideValue value=StateAttribute::OFF) { setAttribute(attribute.get(), value); }
+
         /** Set this StateSet to contain specified attribute and set the associated GLMode's to specified value.*/
         void setAttributeAndModes(StateAttribute *attribute, StateAttribute::GLModeValue value=StateAttribute::ON);
+
+        template<class T> void setAttributeAndModes(const ref_ptr<T>& attribute, StateAttribute::GLModeValue value=StateAttribute::ON) { setAttributeAndModes(attribute.get(), value); }
 
         /** remove attribute of specified type from StateSet.*/
         void removeAttribute(StateAttribute::Type type, unsigned int member=0);
 
         /** remove attribute from StateSet.*/
         void removeAttribute(StateAttribute *attribute);
+
+        template<class T> void removeAttribute(const ref_ptr<T>& attribute) { removeAttribute(attribute.get()); }
 
         /** Get specified StateAttribute for specified type.
           * Returns NULL if no type is contained within StateSet.*/
@@ -176,6 +190,10 @@ class OSG_EXPORT StateSet : public Object
         /** Get specified const StateAttribute for specified type.
           * Returns NULL if no type is contained within const StateSet.*/
         const StateAttribute* getAttribute(StateAttribute::Type type, unsigned int member = 0) const;
+
+        /** Get specified RefAttributePair for specified type.
+          * Returns NULL if no type is contained within StateSet.*/
+        RefAttributePair* getAttributePair(StateAttribute::Type type, unsigned int member = 0);
 
         /** Get specified RefAttributePair for specified type.
           * Returns NULL if no type is contained within StateSet.*/
@@ -226,8 +244,13 @@ class OSG_EXPORT StateSet : public Object
 
         /** Set this StateSet to contain specified attribute and override flag.*/
         void setTextureAttribute(unsigned int unit,StateAttribute *attribute, StateAttribute::OverrideValue value=StateAttribute::OFF);
+
+        template<class T> void setTextureAttribute(unsigned int unit, const ref_ptr<T>& attribute, StateAttribute::OverrideValue value=StateAttribute::OFF) { setTextureAttribute( unit, attribute.get(), value); }
+
         /** Set this StateSet to contain specified attribute and set the associated GLMode's to specified value.*/
         void setTextureAttributeAndModes(unsigned int unit,StateAttribute *attribute, StateAttribute::GLModeValue value=StateAttribute::ON);
+
+        template<class T> void setTextureAttributeAndModes(unsigned int unit, const ref_ptr<T>& attribute, StateAttribute::OverrideValue value=StateAttribute::ON) { setTextureAttributeAndModes( unit, attribute.get(), value); }
 
         /** remove texture attribute of specified type from StateSet.*/
         void removeTextureAttribute(unsigned int unit, StateAttribute::Type type);
@@ -235,17 +258,23 @@ class OSG_EXPORT StateSet : public Object
         /** remove texture attribute from StateSet.*/
         void removeTextureAttribute(unsigned int unit, StateAttribute *attribute);
 
+        template<class T> void removeTextureAttribute(unsigned int unit, const ref_ptr<T>& attribute) { removeTextureAttribute(unit, attribute.get()); }
+
         /** Get specified Texture related StateAttribute for specified type.
           * Returns NULL if no type is contained within StateSet.*/
-        StateAttribute* getTextureAttribute(unsigned int unit,StateAttribute::Type type);
+        StateAttribute* getTextureAttribute(unsigned int unit, StateAttribute::Type type);
 
         /** Get specified Texture related const StateAttribute for specified type.
           * Returns NULL if no type is contained within const StateSet.*/
-        const StateAttribute* getTextureAttribute(unsigned int unit,StateAttribute::Type type) const;
+        const StateAttribute* getTextureAttribute(unsigned int unit, StateAttribute::Type type) const;
 
         /** Get specified Texture related RefAttributePair for specified type.
           * Returns NULL if no type is contained within StateSet.*/
-        const RefAttributePair* getTextureAttributePair(unsigned int unit,StateAttribute::Type type) const;
+        RefAttributePair* getTextureAttributePair(unsigned int unit, StateAttribute::Type type);
+
+        /** Get specified Texture related RefAttributePair for specified type.
+          * Returns NULL if no type is contained within StateSet.*/
+        const RefAttributePair* getTextureAttributePair(unsigned int unit, StateAttribute::Type type) const;
 
         /** Set the list of all Texture related StateAttributes contained in this StateSet.*/
         inline void setTextureAttributeList(TextureAttributeList& tal) { _textureAttributeList=tal; }
@@ -263,8 +292,8 @@ class OSG_EXPORT StateSet : public Object
         void setAssociatedModes(const StateAttribute* attribute, StateAttribute::GLModeValue value);
         void removeAssociatedModes(const StateAttribute* attribute);
 
-        void setAssociatedTextureModes(unsigned int unit,const StateAttribute* attribute, StateAttribute::GLModeValue value);
-        void removeAssociatedTextureModes(unsigned int unit,const StateAttribute* attribute);
+        void setAssociatedTextureModes(unsigned int unit, const StateAttribute* attribute, StateAttribute::GLModeValue value);
+        void removeAssociatedTextureModes(unsigned int unit, const StateAttribute* attribute);
 
 
 
@@ -278,11 +307,15 @@ class OSG_EXPORT StateSet : public Object
         /** Set this StateSet to contain specified uniform and override flag.*/
         void addUniform(Uniform* uniform, StateAttribute::OverrideValue value=StateAttribute::ON);
 
+        template<class T> void addUniform(const ref_ptr<T>& uniform, StateAttribute::OverrideValue value=StateAttribute::ON) { addUniform( uniform.get(), value); }
+
         /** remove uniform of specified name from StateSet.*/
         void removeUniform(const std::string& name);
 
         /** remove Uniform from StateSet.*/
         void removeUniform(Uniform* uniform);
+
+        template<class T> void removeUniform(const ref_ptr<T>& uniform) { removeUniform(uniform.get()); }
 
         /** Get Uniform for specified name.
           * Returns NULL if no matching Uniform is contained within StateSet.*/
@@ -312,10 +345,10 @@ class OSG_EXPORT StateSet : public Object
         typedef std::pair<std::string, StateAttribute::OverrideValue> DefinePair;
         typedef std::map<std::string, DefinePair> DefineList;
 
-        /** Added define pass on to shaders that use utilize that define, as specified by the GLSL #pragma import_defines(..) and #pragma requires(..). */
+        /** Added define pass on to shaders that use utilize that define, as specified by the GLSL \#pragma import_defines(..) and \#pragma requires(..). */
         void setDefine(const std::string& defineName, StateAttribute::OverrideValue value=StateAttribute::ON);
 
-        /** Added define with value to pass on to shaders that use utilize that define, as specified by the GLSL #pragma import_defines(..) and #pragma requires(..). */
+        /** Added define with value to pass on to shaders that use utilize that define, as specified by the GLSL \#pragma import_defines(..) and \#pragma requires(..). */
         void setDefine(const std::string& defineName, const std::string& defineValue, StateAttribute::OverrideValue value=StateAttribute::ON);
 
         DefinePair* getDefinePair(const std::string& defineName) { DefineList::iterator itr = _defineList.find(defineName); return (itr!=_defineList.end()) ? &(itr->second) : 0; }
@@ -413,7 +446,9 @@ class OSG_EXPORT StateSet : public Object
         {
             Callback() {}
 
-            Callback(const Callback&,const CopyOp&) {}
+            Callback(const Callback& org,const CopyOp& copyop):
+                osg::Object(org, copyop),
+                osg::Callback(org, copyop) {}
 
             META_Object(osg,Callback);
 
@@ -426,6 +461,8 @@ class OSG_EXPORT StateSet : public Object
 
         /** Set the Update Callback which allows users to attach customize the updating of an object during the update traversal.*/
         void setUpdateCallback(Callback* ac);
+
+        template<class T> void setUpdateCallback(const ref_ptr<T>& ac) { setUpdateCallback(ac.get()); }
 
         /** Get the non const Update Callback.*/
         Callback* getUpdateCallback() { return _updateCallback.get(); }
@@ -446,6 +483,8 @@ class OSG_EXPORT StateSet : public Object
 
         /** Set the Event Callback which allows users to attach customize the updating of an object during the event traversal.*/
         void setEventCallback(Callback* ac);
+
+        template<class T> void setEventCallback(const ref_ptr<T>& ec) { setEventCallback(ec.get()); }
 
         /** Get the non const Event Callback.*/
         Callback* getEventCallback() { return _eventCallback.get(); }
@@ -517,19 +556,21 @@ class OSG_EXPORT StateSet : public Object
             return _textureAttributeList[unit];
         }
 
-        int compareModes(const ModeList& lhs,const ModeList& rhs);
-        int compareAttributePtrs(const AttributeList& lhs,const AttributeList& rhs);
-        int compareAttributeContents(const AttributeList& lhs,const AttributeList& rhs);
+        int compareModes(const ModeList& lhs, const ModeList& rhs);
+        int compareAttributePtrs(const AttributeList& lhs, const AttributeList& rhs);
+        int compareAttributeContents(const AttributeList& lhs, const AttributeList& rhs);
 
         void setMode(ModeList& modeList,StateAttribute::GLMode mode, StateAttribute::GLModeValue value);
-        void setModeToInherit(ModeList& modeList,StateAttribute::GLMode mode);
-        StateAttribute::GLModeValue getMode(const ModeList& modeList,StateAttribute::GLMode mode) const;
+        void setModeToInherit(ModeList& modeList, StateAttribute::GLMode mode);
+        StateAttribute::GLModeValue getMode(const ModeList& modeList, StateAttribute::GLMode mode) const;
 
-        void setAttribute(AttributeList& attributeList,StateAttribute *attribute, const StateAttribute::OverrideValue value=StateAttribute::OFF);
+        void setAttribute(AttributeList& attributeList,StateAttribute *attribute, StateAttribute::OverrideValue value=StateAttribute::OFF);
 
-        StateAttribute* getAttribute(AttributeList& attributeList,const StateAttribute::Type type, unsigned int member);
-        const StateAttribute* getAttribute(const AttributeList& attributeList,const StateAttribute::Type type, unsigned int member) const;
-        const RefAttributePair* getAttributePair(const AttributeList& attributeList,const StateAttribute::Type type, unsigned int member) const;
+        StateAttribute* getAttribute(AttributeList& attributeList, StateAttribute::Type type, unsigned int member);
+        const StateAttribute* getAttribute(const AttributeList& attributeList, StateAttribute::Type type, unsigned int member) const;
+
+        RefAttributePair* getAttributePair(AttributeList& attributeList, StateAttribute::Type type, unsigned int member);
+        const RefAttributePair* getAttributePair(const AttributeList& attributeList, StateAttribute::Type type, unsigned int member) const;
 
         int                                 _renderingHint;
 

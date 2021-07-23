@@ -30,6 +30,7 @@ namespace osg {
 class DeleteHandler;
 class Observer;
 class ObserverSet;
+class State;
 
 /** template class to help enforce static initialization order. */
 template <typename T, T M()>
@@ -47,17 +48,17 @@ class OSG_EXPORT Referenced
 
         Referenced();
 
+        /** Deprecated, Referenced is now always uses thread safe ref/unref, use default Referenced() constructor instead */
         explicit Referenced(bool threadSafeRefUnref);
 
         Referenced(const Referenced&);
 
         inline Referenced& operator = (const Referenced&) { return *this; }
 
-        /** Set whether to use a mutex to ensure ref() and unref() are thread safe.*/
-        virtual void setThreadSafeRefUnref(bool threadSafe);
+        /** Deprecated, Referenced is always theadsafe so there method now has no effect and does not need to be called.*/
+        virtual void setThreadSafeRefUnref(bool /*threadSafe*/) {}
 
         /** Get whether a mutex is used to ensure ref() and unref() are thread safe.*/
-
 #if defined(_OSG_REFERENCED_USE_ATOMIC_OPERATIONS)
         bool getThreadSafeRefUnref() const { return true; }
 #else
@@ -114,14 +115,16 @@ class OSG_EXPORT Referenced
 
         /** Remove Observer that is observing this object.*/
         void removeObserver(Observer* observer) const;
+#if 0
+         /** Resize any per context GLObject buffers to specified size. */
+        virtual void resizeGLObjectBuffers(unsigned int /*maxSize*/) {}
 
-    public:
-
-        /** Set whether reference counting should use a mutex for thread safe reference counting.*/
-        static void setThreadSafeReferenceCounting(bool enableThreadSafeReferenceCounting);
-
-        /** Get whether reference counting is active.*/
-        static bool getThreadSafeReferenceCounting();
+        /** If State is non-zero, this function releases any associated OpenGL objects for
+           * the specified graphics context. Otherwise, releases OpenGL objects
+           * for all graphics contexts. */
+        virtual void releaseGLObjects(osg::State* = 0) const {}
+#endif
+public:
 
         friend class DeleteHandler;
 

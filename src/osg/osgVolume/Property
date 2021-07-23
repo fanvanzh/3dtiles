@@ -88,7 +88,7 @@ class OSGVOLUME_EXPORT Property : public osg::Object
         unsigned int getModifiedCount() const { return _modifiedCount; }
 
         virtual void accept(PropertyVisitor& pv) { pv.apply(*this); }
-        virtual void traverse(PropertyVisitor& pv) {}
+        virtual void traverse(PropertyVisitor& /*pv*/) {}
 
     protected:
 
@@ -126,11 +126,15 @@ class OSGVOLUME_EXPORT CompositeProperty : public Property
 
         void setProperty(unsigned int i, Property* property) { if (i>=_properties.size()) _properties.resize(i+1); _properties[i] = property; }
 
+        template<class T> void setProperty(unsigned int i, const osg::ref_ptr<T>& p) { setProperty(i, p.get()); }
+
         Property* getProperty(unsigned int i) { return i<_properties.size() ? _properties[i].get() : 0; }
 
         const Property* getProperty(unsigned int i) const { return i<_properties.size() ? _properties[i].get() : 0; }
 
         void addProperty(Property* property) { _properties.push_back(property); dirty(); }
+
+        template<class T> void addProperty(const osg::ref_ptr<T>& p) { addProperty(p.get()); }
 
         void removeProperty(unsigned int i) { _properties.erase(_properties.begin()+i); }
 
@@ -482,6 +486,15 @@ class OSGVOLUME_EXPORT PropertyAdjustmentCallback : public osgGA::GUIEventHandle
         PropertyAdjustmentCallback(const PropertyAdjustmentCallback&,const osg::CopyOp&);
 
         META_Object(osgVolume, PropertyAdjustmentCallback);
+
+        virtual NodeCallback* asNodeCallback() { return osg::NodeCallback::asNodeCallback(); }
+        virtual const NodeCallback* asNodeCallback() const { return osg::NodeCallback::asNodeCallback(); }
+
+        virtual DrawableEventCallback* asDrawableEventCallback() { return osg::DrawableEventCallback::asDrawableEventCallback(); }
+        virtual const DrawableEventCallback* asDrawableEventCallback() const { return osg::DrawableEventCallback::asDrawableEventCallback(); }
+
+        virtual osgGA::EventHandler* asEventHandler() { return osgGA::EventHandler::asEventHandler(); }
+        virtual const osgGA::EventHandler* asEventHandler() const { return osgGA::EventHandler::asEventHandler(); }
 
         virtual bool run(osg::Object* object, osg::Object* data) { return osgGA::GUIEventHandler::run(object, data); }
 

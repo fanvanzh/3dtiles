@@ -30,7 +30,7 @@ namespace osgGA{
 EventHandler is base class for adding handling of events, either as node event callback, drawable event callback or an event handler attached directly to the view(er)
 */
 
-class OSGGA_EXPORT EventHandler : public osg::NodeCallback, public osg::Drawable::EventCallback
+class OSGGA_EXPORT EventHandler : public osg::NodeCallback, public osg::DrawableEventCallback
 {
 public:
 
@@ -39,14 +39,23 @@ public:
             osg::Object(eh, copyop),
             osg::Callback(eh, copyop),
             osg::NodeCallback(eh, copyop),
-            osg::Drawable::EventCallback(eh, copyop) {}
+            osg::DrawableEventCallback(eh, copyop) {}
 
         META_Object(osgGA, EventHandler);
 
+        virtual NodeCallback* asNodeCallback() { return osg::NodeCallback::asNodeCallback(); }
+        virtual const NodeCallback* asNodeCallback() const { return osg::NodeCallback::asNodeCallback(); }
+
+        virtual DrawableEventCallback* asDrawableEventCallback() { return osg::DrawableEventCallback::asDrawableEventCallback(); }
+        virtual const DrawableEventCallback* asDrawableEventCallback() const { return osg::DrawableEventCallback::asDrawableEventCallback(); }
+
+        virtual EventHandler* asEventHandler() { return this; }
+        virtual const EventHandler* asEventHandler() const { return this; }
+
         virtual bool run(osg::Object* object, osg::Object* data)
         {
-            osg::Node* node = dynamic_cast<osg::Node*>(object);
-            osg::NodeVisitor* nv = dynamic_cast<osg::NodeVisitor*>(data);
+            osg::Node* node = object->asNode();
+            osg::NodeVisitor* nv = data->asNodeVisitor();
             operator()(node, nv);
             return true;
         }

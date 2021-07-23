@@ -152,6 +152,7 @@ class OSGGA_EXPORT StandardManipulator : public CameraManipulator
             bool _isAnimating;
             double _startTime;
             double _phase;
+
             AnimationData();
             void start( const double startTime );
         };
@@ -182,7 +183,7 @@ inline bool StandardManipulator::getRelativeFlag( int index ) const
 inline void StandardManipulator::setRelativeFlag( int index, bool value )
 {
     if( value )  _relativeFlags |= (0x01 << index);
-    else  _relativeFlags &= (~0x01 << index);
+    else  _relativeFlags &= ~(0x01 << index);
 }
 
 /// Returns whether manipulator preserves camera's "UP" vector.

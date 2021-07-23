@@ -59,6 +59,21 @@ class OSGVIEWER_EXPORT ViewerBase : public virtual osg::Object
         /** set up windows and associated threads.*/
         virtual void realize() = 0;
 
+
+        /** Set whether the setUpThreading() method should call configureAffinity() to set up up the processor affinity of viewer threads.*/
+        void setUseConfigureAffinity(bool flag) { _useConfigureAffinity = flag; }
+
+        /** get whether the setUpThreading() method should call configureAffinity() to set up up the processor affinity of viewer threads.*/
+        bool getUseConfigureAffinity() const { return _useConfigureAffinity; }
+
+        /** analyse the viewer configuration and select an appropriate Affinity for main thread, and any graphics, camera threads and database pagers that are required.*/
+        virtual void configureAffinity();
+
+        /** Set the processor affinity of main thread.*/
+        virtual void setProcessorAffinity(const OpenThreads::Affinity& affinity) { _affinity = affinity; }
+        OpenThreads::Affinity& getProcessorAffinity() { return _affinity; }
+        const OpenThreads::Affinity& getProcessorAffinity() const { return _affinity; }
+
         enum ThreadingModel
         {
             SingleThreaded,
@@ -193,6 +208,11 @@ class OSGVIEWER_EXPORT ViewerBase : public virtual osg::Object
         /** Get the graphics operation to call on realization of the viewers graphics windows.*/
         osg::Operation* getRealizeOperation() { return _realizeOperation.get(); }
 
+        /** Set the graphics operation to call before the viewers graphics contexts close.*/
+        void setCleanUpOperation(osg::Operation* op) { _cleanUpOperation = op; }
+
+        /** Get the graphics operation to call before the viewers graphics contexts close.*/
+        osg::Operation* getCleanUpOperation() { return _cleanUpOperation.get(); }
 
         /** Set the incremental compile operation.
           * Used to manage the OpenGL object compilation and merging of subgraphs in a way that avoids overloading
@@ -224,7 +244,7 @@ class OSGVIEWER_EXPORT ViewerBase : public virtual osg::Object
 
         /** check to see if the new frame is required, called by run(..) when FrameScheme is set to ON_DEMAND.*/
         virtual bool checkNeedToDoFrame() = 0;
-        
+
         /** check to see if events have been received, return true if events are now available.*/
         virtual bool checkEvents() = 0;
 
@@ -277,7 +297,11 @@ class OSGVIEWER_EXPORT ViewerBase : public virtual osg::Object
         /** Get the keyboard and mouse usage of this viewer.*/
         virtual void getUsage(osg::ApplicationUsage& usage) const = 0;
 
-    protected:
+        bool getRequestRedraw() const { return _requestRedraw; }
+
+        bool getRequestContinousUpdate() const { return _requestContinousUpdate; }
+
+protected:
 
         void viewerBaseInit();
 
@@ -309,6 +333,8 @@ class OSGVIEWER_EXPORT ViewerBase : public virtual osg::Object
         bool                                                _quitEventSetsDone;
         bool                                                _releaseContextAtEndOfFrameHint;
 
+        bool                                                _useConfigureAffinity;
+        OpenThreads::Affinity                               _affinity;
         ThreadingModel                                      _threadingModel;
         bool                                                _threadsRunning;
 
@@ -332,12 +358,13 @@ class OSGVIEWER_EXPORT ViewerBase : public virtual osg::Object
         osg::ref_ptr<osgUtil::UpdateVisitor>                _updateVisitor;
 
         osg::ref_ptr<osg::Operation>                        _realizeOperation;
+        osg::ref_ptr<osg::Operation>                        _cleanUpOperation;
         osg::ref_ptr<osgUtil::IncrementalCompileOperation>  _incrementalCompileOperation;
 
         osg::observer_ptr<osg::GraphicsContext>             _currentContext;
-        
+
     private:
-        
+
         // Define private copy constructor
         // otherwsie VS2015 will construct it's own which will call the private copy operator from osg::Object resulting in an compile error.
         ViewerBase& operator = (const ViewerBase&) { return *this; }
