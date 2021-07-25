@@ -252,9 +252,7 @@ bool write_tileset_region(
     return ret;
 }
 
-/**
-根据经纬度，生成tileset
-*/
+/***/
 bool write_tileset(
     double radian_x, double radian_y, 
     double tile_w, double tile_h, 

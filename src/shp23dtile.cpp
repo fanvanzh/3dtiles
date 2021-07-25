@@ -64,7 +64,7 @@ struct bbox
 class node {
 public:
     bbox _box;
-    // 1 公里 ~ 0.01
+    // 1 km ~ 0.01
     double metric = 0.01;
     node* subnode[4];
     std::vector<int> geo_items;
@@ -178,7 +178,7 @@ public:
 
 struct Polygon_Mesh
 {
-    std::string mesh_name; // 模型名称
+    std::string mesh_name;
     Vextex vertex;
     Index  index;
     Normal normal;
@@ -195,7 +195,6 @@ osg::ref_ptr<osg::Geometry> make_triangle_mesh_auto(Polygon_Mesh& mesh) {
     trig->setInputPointArray(va);
     osg::Vec3Array *norms = new osg::Vec3Array;
     trig->setOutputNormalArray(norms);
-    //三角化处理
     trig->triangulate();
     osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
     geometry->setVertexArray(va);
@@ -250,12 +249,6 @@ void calc_normal(int baseCnt, int ptNum, Polygon_Mesh &mesh)
 }
 
 #ifdef _WIN32
-/**
-@brief: convet polygon to mesh
-@param: polygon , 多边形
-@param: center_x, 投影中心点
-@param: center_y, 投影中心点
-*/
 Polygon_Mesh
 convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double height)
 {
@@ -364,7 +357,6 @@ convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double hei
             }
         }
         std::vector<int> indices = mapbox::earcut<int>(polygon);
-        // 剖分三角形
         for (int idx = 0; idx < indices.size(); idx += 3) {
             mesh.index.push_back({ 
                 pt_count + 2 * indices[idx], 
@@ -762,18 +754,15 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
         model.meshes.push_back(mesh);
     }
 
-    // 加载所有的模型
     for (int i = 0; i < meshes.size(); i++) {
         tinygltf::Node node;
         node.mesh = i;
         model.nodes.push_back(node);
     }
-    // 一个场景
     tinygltf::Scene sence;
     for (int i = 0; i < meshes.size(); i++) {
         sence.nodes.push_back(i);
     }
-    // 所有场景
     model.scenes = { sence };
     model.defaultScene = 0;
     /// --------------
