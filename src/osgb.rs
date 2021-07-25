@@ -73,7 +73,7 @@ pub fn osgb_batch_convert(
     use std::sync::mpsc::channel;
 
     let path = dir.join("Data");
-    // 指定 .\Data 目录
+    // .\Data directory
     if !path.exists() || !path.is_dir() {
         return Err(From::from(format!("dir {} not exist", path.display())));
     }

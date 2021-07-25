@@ -5,10 +5,6 @@
 [![glTF status](https://img.shields.io/badge/glTF-2%2E0-green.svg?style=flat)](https://github.com/KhronosGroup/glTF)
 [![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/rust.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/rust.yml)
 
-[![Build status](https://ci.appveyor.com/api/projects/status/lyhf989tnt9jhi9y?svg=true)](https://ci.appveyor.com/project/fanvanzh/3dtiles)
-
-
-
 Tools for 3D-Tiles convertion.
 
 This is a `RUST language` project with cpp lib to handle osgb data.
@@ -131,13 +127,12 @@ To Translate.
   ``` json
   {
     "x": 120,
-  	"y": 30,
-  	"offset": 0 , // 模型最低面地面距离
-  	"max_lvl" : 20 // 处理切片模型到20级停止
+    "y": 30,
+    "offset": 0 , // 模型最低面地面距离
+    "max_lvl" : 20 // 处理切片模型到20级停止
   }
   ```
 
-  
 
 - `-f, --format <FORMAT>` 输入数据格式。
 

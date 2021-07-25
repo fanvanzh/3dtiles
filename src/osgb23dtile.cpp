@@ -110,7 +110,6 @@ public:
 public:
     std::vector<osg::Geometry*> geometry_array;
     std::set<osg::Texture*> texture_array;
-    // 记录 mesh 和 texture 的关系，暂时认为一个模型最多只有一个 texture
     std::map<osg::Geometry*, osg::Texture*> texture_map;
     std::vector<std::string> sub_node_names;
 };
@@ -829,10 +828,8 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) 
     }
     // scene
     {
-        // 一个场景
         tinygltf::Scene sence;
         sence.nodes.push_back(0);
-        // 所有场景
         model.scenes = { sence };
         model.defaultScene = 0;
     }
@@ -851,7 +848,6 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) 
         for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
         {
             tinygltf::Material mat = make_color_material_osgb(1.0, 1.0, 1.0);
-            // 可能会出现多材质的情况
             tinygltf::Parameter baseColorTexture;
             baseColorTexture.json_int_value = { std::pair<string,int>("index",i) };
             mat.values["baseColorTexture"] = baseColorTexture;
@@ -969,17 +965,13 @@ std::vector<double> convert_bbox(TileBox tile) {
     return v;
 }
 
-// 生成 b3dm ， 再统一外扩模型的 bbox
 void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl) {
-    // 转瓦片、写json
     std::string json_str;
     if (tree.file_name.empty()) return;
     int lvl = get_lvl_num(tree.file_name);
     if (lvl > max_lvl) return;
-    // 转 tile
     std::string b3dm_buf;
     osgb2b3dm_buf(tree.file_name, b3dm_buf, tree.bbox);
-    // false 可能当前为空, 但存在子节点
     std::string out_file = out_path;
     out_file += "/";
     out_file += replace(get_file_name(tree.file_name),".osgb",".b3dm");
@@ -1131,11 +1123,7 @@ encode_tile_json(osg_tree& tree, double x, double y)
     return tile;
 }
 
-/**
-外部创建好目录
-外面分配好 box[6][double]
-外面分配好 string [1024*1024]
-*/
+/***/
 extern "C" void* 
 osgb23dtile_path(const char* in_path, const char* out_path,
                     double *box, int* len, double x, double y,
@@ -1150,7 +1138,6 @@ osgb23dtile_path(const char* in_path, const char* out_path,
     }
     b_pbr_texture = pbr_texture;
     do_tile_job(root, out_path, max_lvl);
-    // 返回 json 和 最大bbox
     extend_tile_box(root);
     if (root.bbox.max.empty() || root.bbox.min.empty())
     {
@@ -1170,7 +1157,6 @@ osgb23dtile_path(const char* in_path, const char* out_path,
     return str;
 }
 
-// 所有接口都是 utf8 字符串
 extern "C" bool
 osgb2glb(const char* in, const char* out)
 {
