@@ -25,7 +25,7 @@ You may intereted in:
 
 - [How to debug?](https://github.com/fanvanzh/3dtiles/wiki/How-to-debug)
 
-- [Download Windows Pre-build](https://ci.appveyor.com/api/projects/fanvanzh/3dtiles/artifacts/3dtiles.zip?branch=master)
+- [Download Windows Pre-build](https://github.com/fanvanzh/3dtiles/releases/download/v0.4/3dtile.zip)
 
 # Usage
 
