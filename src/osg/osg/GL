@@ -30,8 +30,8 @@
 #define OSG_GL_VERTEX_FUNCS_AVAILABLE
 #define OSG_GL_VERTEX_ARRAY_FUNCS_AVAILABLE
 #define OSG_GL_FIXED_FUNCTION_AVAILABLE
-/* #undef GL_HEADER_HAS_GLINT64 */
-/* #undef GL_HEADER_HAS_GLUINT64 */
+#define GL_HEADER_HAS_GLINT64
+#define GL_HEADER_HAS_GLUINT64
 
 #define OSG_GL1_FEATURES 1
 #define OSG_GL2_FEATURES 1
@@ -42,7 +42,7 @@
 #define OSG_GL_CONTEXT_VERSION "1.0"
 
 
-#ifndef WIN32
+#ifndef _WIN32
 
     // Required for compatibility with glext.h style function definitions of
     // OpenGL extensions, such as in src/osg/Point.cpp.
@@ -50,7 +50,7 @@
         #define APIENTRY
     #endif
 
-#else // WIN32
+#else // _WIN32
 
     #if defined(__CYGWIN__) || defined(__MINGW32__)
 
@@ -103,7 +103,7 @@
         #define _WCHAR_T_DEFINED
     #endif
 
-#endif // WIN32
+#endif // _WIN32
 
 #if defined(OSG_GL3_AVAILABLE)
     #define GL3_PROTOTYPES 1
