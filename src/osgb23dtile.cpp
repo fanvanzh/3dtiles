@@ -595,12 +595,6 @@ write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgBuildS
         {
             primits.indices = -1;
             osg::DrawArrays* da = dynamic_cast<osg::DrawArrays*>(ps);
-            auto mode = da->getMode();
-            if (mode != GL_TRIANGLES)
-            {
-                LOG_E("GLenum is not GL_TRIANGLES in osgb");
-                exit(1);
-            }
             osgState->draw_array_first = da->getFirst();
             osgState->draw_array_count = da->getCount();
             break;
@@ -676,7 +670,22 @@ write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgBuildS
     // material
     primits.material = -1;
 
-    primits.mode = TINYGLTF_MODE_TRIANGLES;
+    switch (ps->getMode())
+    {
+    case GL_TRIANGLES:
+        primits.mode = TINYGLTF_MODE_TRIANGLES;
+        break;
+    case GL_TRIANGLE_STRIP:
+        primits.mode = TINYGLTF_MODE_TRIANGLE_STRIP;
+        break;
+    case GL_TRIANGLE_FAN:
+        primits.mode = TINYGLTF_MODE_TRIANGLE_FAN;
+        break;
+    default:
+        LOG_E("Unsupport Primitive Mode: %d", (int)ps->getMode());
+        exit(1);
+        break;
+    }
     osgState->model->meshes.back().primitives.push_back(primits);
 }
 
