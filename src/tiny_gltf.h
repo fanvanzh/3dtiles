@@ -511,6 +511,7 @@ struct Material {
   ParameterMap extCommonValues;   // KHR_common_material extension
   ParameterMap extPBRValues;
   Value extras;
+  bool  b_unlit = false;  // use KHR_materials_unlit
 };
 
 struct BufferView {
@@ -3496,6 +3497,11 @@ static void SerializeGltfMaterial(Material &material, json &o) {
     o = json::parse(material.shaderMaterial);
     return;
   }
+  if (material.b_unlit) { // use KHR_materials_unlit
+    json extension;
+    extension["KHR_materials_unlit"] = json({});
+    o["extensions"] = extension;
+  }
   if (material.extPBRValues.size()) {
     // Serialize PBR specular/glossiness material
     json values;
@@ -3949,44 +3955,44 @@ std::string TinyGLTF::Serialize(Model *model) {
     }
     output["materials"] = materials;
   }
-  // Ext
-  // output["extensions"] = json();
-  // output["extensions"]["KHR_techniques_webgl"] = json();
-  json shaders = json::array();
-  json programs = json::array();
-  json techniques = json::array();
-  // SHADER 
-  {
-    for (auto& shader : model->extensions.KHR_techniques_webgl.shaders) {
-      json val;
-      val["bufferView"] = shader.bufferView;
-      val["type"] = shader.type;
-      shaders.push_back(val);
-    }
-  }
-  // PROGREAM
-  {
-    for (auto& prog : model->extensions.KHR_techniques_webgl.programs) {
-      json val = json::parse(prog.prog_string);
-      programs.push_back(val);
-    }
-  }
-  // TECHNICH
-  {
-    for (auto& tech : model->extensions.KHR_techniques_webgl.techniques) {
-      json val = json::parse(tech.tech_string);
-      techniques.push_back(val);
-    }
-  }
-  json KHR_techniques_webgl = json({});
-  KHR_techniques_webgl["shaders"] = shaders;
-  KHR_techniques_webgl["programs"] = programs;
-  KHR_techniques_webgl["techniques"] = techniques;
-  json extensions = json({});
-  extensions["KHR_techniques_webgl"] = KHR_techniques_webgl;
+  // Extension
+  // // output["extensions"] = json();
+  // // output["extensions"]["KHR_techniques_webgl"] = json();
+  // json shaders = json::array();
+  // json programs = json::array();
+  // json techniques = json::array();
+  // // SHADER 
+  // {
+  //   for (auto& shader : model->extensions.KHR_techniques_webgl.shaders) {
+  //     json val;
+  //     val["bufferView"] = shader.bufferView;
+  //     val["type"] = shader.type;
+  //     shaders.push_back(val);
+  //   }
+  // }
+  // // PROGREAM
+  // {
+  //   for (auto& prog : model->extensions.KHR_techniques_webgl.programs) {
+  //     json val = json::parse(prog.prog_string);
+  //     programs.push_back(val);
+  //   }
+  // }
+  // // TECHNICH
+  // {
+  //   for (auto& tech : model->extensions.KHR_techniques_webgl.techniques) {
+  //     json val = json::parse(tech.tech_string);
+  //     techniques.push_back(val);
+  //   }
+  // }
+  // json KHR_techniques_webgl = json({});
+  // KHR_techniques_webgl["shaders"] = shaders;
+  // KHR_techniques_webgl["programs"] = programs;
+  // KHR_techniques_webgl["techniques"] = techniques;
+  // json extensions = json({});
+  // extensions["KHR_techniques_webgl"] = KHR_techniques_webgl;
   // use extension
-  if (model->extensionsUsed.size())
-    output["extensions"] = extensions;
+  // if (model->extensionsUsed.size())
+  //   output["extensions"] = extensions;
 
   // MESHES
   json meshes;

@@ -851,23 +851,19 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) 
         sample.wrapT = TINYGLTF_TEXTURE_WRAP_REPEAT;
         model.samplers = { sample };
     }
-    // use pbr material
-    if(b_pbr_texture)
+    // use KHR_materials_unlit
+    model.extensionsRequired = { "KHR_materials_unlit" };
+    model.extensionsUsed = { "KHR_materials_unlit" };
+    for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
     {
-        for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
-        {
-            tinygltf::Material mat = make_color_material_osgb(1.0, 1.0, 1.0);
-            tinygltf::Parameter baseColorTexture;
-            baseColorTexture.json_int_value = { std::pair<string,int>("index",i) };
-            mat.values["baseColorTexture"] = baseColorTexture;
-            model.materials.push_back(mat);
-        }
+        tinygltf::Material mat = make_color_material_osgb(1.0, 1.0, 1.0);
+        mat.b_unlit = true; // use KHR_materials_unlit
+        tinygltf::Parameter baseColorTexture;
+        baseColorTexture.json_int_value = { std::pair<string,int>("index",i) };
+        mat.values["baseColorTexture"] = baseColorTexture;
+        model.materials.push_back(mat);
     }
-    // use shader material
-    else
-    {
-        make_gltf2_shader(model, infoVisitor.texture_array.size(), buffer);
-    }
+
     // finish buffer
     model.buffers.push_back(std::move(buffer));
     // texture
