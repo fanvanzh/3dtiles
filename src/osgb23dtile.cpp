@@ -902,7 +902,7 @@ bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box)
     feature_json_string += "{\"BATCH_LENGTH\":";
     feature_json_string += std::to_string(mesh_count);
     feature_json_string += "}";
-    while (feature_json_string.size() % 4 != 0 ) {
+    while ((feature_json_string.size()+28) % 8 != 0 ) {
         feature_json_string.push_back(' ');
     }
     json batch_json;
@@ -919,7 +919,7 @@ bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box)
     batch_json["batchId"] = ids;
     batch_json["name"] = names;
     std::string batch_json_string = batch_json.dump();
-    while (batch_json_string.size() % 4 != 0 ) {
+    while (batch_json_string.size() % 8 != 0 ) {
         batch_json_string.push_back(' ');
     }
 
