@@ -211,7 +211,7 @@ pub fn osgb_batch_convert(
                 },
                 "geometricError": 1000,
                 "content": {
-                    "uri" : format!("{}/tileset.json", path.replace(&out_dir,".").replace("\\","/"))
+                    "uri" : format!("{}/tileset.json", path.replace(&out_dir,"./"))//.replace("\\","/"))
                 }
             }
         );
