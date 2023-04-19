@@ -4,6 +4,7 @@
 #include <osgDB/ConvertUTF>
 #include <osgUtil/Optimizer>
 #include <osgUtil/SmoothingVisitor>
+#include <Eigen/Eigen>
 
 #include <set>
 #include <cmath>
@@ -19,6 +20,7 @@
 #include "stb_image_write.h"
 #include "dxt_img.h"
 #include "extern.h"
+#include "GeoTransform.h"
 
 using namespace std;
 
@@ -86,7 +88,87 @@ public:
     }
 
     void apply(osg::Geometry& geometry){
-        geometry_array.push_back(&geometry);
+        geometry_array.push_back(&geometry);        
+        if (GeoTransform::pOgrCT)
+        {
+            osg::Vec3Array *vertexArr = (osg::Vec3Array *)geometry.getVertexArray();
+            OGRCoordinateTransformation *poCT = GeoTransform::pOgrCT;
+
+            /** 1. We obtain the bound of this tile */
+            glm::dvec3 Min = glm::dvec3(DBL_MAX);
+            glm::dvec3 Max = glm::dvec3(-DBL_MAX);
+            for (int VertexIndex = 0; VertexIndex < vertexArr->size(); VertexIndex++)
+            {
+                osg::Vec3d Vertex = vertexArr->at(VertexIndex);
+                glm::dvec3 vertex = glm::dvec3(Vertex.x(), Vertex.y(), Vertex.z());
+                Min = glm::min(vertex, Min);
+                Max = glm::max(vertex, Max);
+            }
+
+            /**
+             * 2. We correct the eight points of the bounding box.
+             * The point will be transformed from projected coordinate system
+             * which is given by the original osgb tileset to geographic coordinate system, 
+             * and then transformed to Cesium ECEF coordinate system, 
+             * at last we transform the point from ECEF to the original projected coordinate system again. 
+             * We do this to correct the coordinate offset that 
+             * can occur when the tile is located far from the origin.
+             */ 
+            auto Correction = [&](glm::dvec3 Point) {
+                glm::dvec3 cartographic = Point + glm::dvec3(GeoTransform::OriginX, GeoTransform::OriginY, GeoTransform::OriginZ);
+                poCT->Transform(1, &cartographic.x, &cartographic.y, &cartographic.z);
+                glm::dvec3 ecef = GeoTransform::CartographicToEcef(cartographic.x, cartographic.y, cartographic.z);
+                glm::dvec3 enu = GeoTransform::EcefToEnuMatrix * glm::dvec4(ecef, 1);
+                return enu;
+            };
+            vector<glm::dvec4> OriginalPoints(8);
+            vector<glm::dvec4> CorrectedPoints(8);
+            OriginalPoints[0] = glm::dvec4(Min.x, Min.y, Min.z, 1);
+            OriginalPoints[1] = glm::dvec4(Max.x, Min.y, Min.z, 1);
+            OriginalPoints[2] = glm::dvec4(Min.x, Max.y, Min.z, 1);
+            OriginalPoints[3] = glm::dvec4(Min.x, Min.y, Max.z, 1);
+            OriginalPoints[4] = glm::dvec4(Max.x, Max.y, Min.z, 1);
+            OriginalPoints[5] = glm::dvec4(Min.x, Max.y, Max.z, 1);
+            OriginalPoints[6] = glm::dvec4(Max.x, Min.y, Max.z, 1);
+            OriginalPoints[7] = glm::dvec4(Max.x, Max.y, Max.z, 1);
+            for (int i = 0; i < 8; i++)
+                CorrectedPoints[i] = glm::dvec4(Correction(OriginalPoints[i]), 1);
+
+            /**
+             * 3. We use the least squares method to calculate the transformation matrix
+             * that transforms the original box to the corrected box.
+            */
+            Eigen::MatrixXd A, B;
+            A.resize(8, 4);
+            B.resize(8, 4);
+            for (int row = 0; row < 8; row++)
+            {
+                A.row(row) << OriginalPoints[row].x, OriginalPoints[row].y, OriginalPoints[row].z, 1;
+            }
+            for (int row = 0; row < 8; row++)
+            {
+                B.row(row) << CorrectedPoints[row].x, CorrectedPoints[row].y, CorrectedPoints[row].z, 1;
+            }
+            Eigen::BDCSVD<Eigen::MatrixXd> SVD(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+            Eigen::MatrixXd X = SVD.solve(B);
+
+            /*
+             * 4. At last we apply the matrix to all the points of the tile to correct the offset.
+            */
+            glm::dmat4 Transform = glm::dmat4(
+                X(0, 0), X(0, 1), X(0, 2), X(0, 3),
+                X(1, 0), X(1, 1), X(1, 2), X(1, 3),
+                X(2, 0), X(2, 1), X(2, 2), X(2, 3),
+                X(3, 0), X(3, 1), X(3, 2), X(3, 3));
+
+            for (int VertexIndex = 0; VertexIndex < vertexArr->size(); VertexIndex++)
+            {
+                osg::Vec3d Vertex = vertexArr->at(VertexIndex);
+                glm::dvec4 v = Transform * glm::dvec4(Vertex.x(), Vertex.y(), Vertex.z(), 1);
+                Vertex = osg::Vec3d(v.x, v.y, v.z);
+                vertexArr->at(VertexIndex) = Vertex;
+            }
+        }
         if (auto ss = geometry.getStateSet() ) {
             osg::Texture* tex = dynamic_cast<osg::Texture*>(ss->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
             if (tex) {

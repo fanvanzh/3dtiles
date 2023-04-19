@@ -8,6 +8,7 @@ fn build_win_msvc() {
         .flag("-Zi")
         .flag("-Gm")
         .flag("-INCREMENTAL")
+        .flag("-bigobj")
         .warnings(false)
         .define("WIN32", None)
         .define("_WINDOWS", None)
@@ -17,6 +18,7 @@ fn build_win_msvc() {
         .file("./src/shp23dtile.cpp")
         .file("./src/osgb23dtile.cpp")
         .file("./src/dxt_img.cpp")
+        .file("./src/GeoTransform.cpp")
         .compile("_3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=./lib");
