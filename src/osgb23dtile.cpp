@@ -110,7 +110,7 @@ public:
              * The point will be transformed from projected coordinate system
              * which is given by the original osgb tileset to geographic coordinate system, 
              * and then transformed to Cesium ECEF coordinate system, 
-             * at last we transform the point from ECEF to the original projected coordinate system again. 
+             * at last we transform the point from ECEF to the ENU of the origin. 
              * We do this to correct the coordinate offset that 
              * can occur when the tile is located far from the origin.
              */ 
