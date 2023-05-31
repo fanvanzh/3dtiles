@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "extern.h"
+#include "GeoTransform.h"
 
 ///////////////////////
 static const double pi = std::acos(-1);
@@ -21,12 +22,14 @@ extern "C" bool epsg_convert(int insrs, double* val, char* path) {
     inRs.importFromEPSG(insrs);
     outRs.importFromEPSG(4326);
     OGRCoordinateTransformation *poCT = OGRCreateCoordinateTransformation( &inRs, &outRs );
+    GeoTransform::Init(poCT, val);
     if (poCT) {
         if (poCT->Transform( 1, val, val + 1)) {
-            delete poCT;
+            // poCT will be used later so don't delete it
+            // delete poCT;
             return true;
         }
-        delete poCT;
+        // delete poCT;
     }
     return false;
 } 
@@ -37,12 +40,13 @@ extern "C" bool wkt_convert(char* wkt, double* val, char* path) {
     inRs.importFromWkt(&wkt);
     outRs.importFromEPSG(4326);
     OGRCoordinateTransformation *poCT = OGRCreateCoordinateTransformation( &inRs, &outRs );
+    GeoTransform::Init(poCT, val);
     if (poCT) {
         if (poCT->Transform( 1, val, val + 1)) {
-            delete poCT;
+            // delete poCT;
             return true;
         }
-        delete poCT;
+        // delete poCT;
     }
     return false;
 }
