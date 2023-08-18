@@ -27,7 +27,7 @@ You may intereted in:
 
 - [Download Windows Pre-build](https://github.com/fanvanzh/3dtiles/releases/download/v0.4/3dtile.zip)
 
-- [Docker Image](https://hub.docker.com/repository/docker/winner1/3dtiles/general)
+- [Docker Image](https://hub.docker.com/r/winner1/3dtiles)
 
 # Usage
 
