@@ -73,25 +73,33 @@ struct osg_tree {
     double geometricError;
     std::string file_name;
     std::vector<osg_tree> sub_nodes;
+    // When the node contains PagedLOD and Other nodes, create a new group node
+    int type; // 0: group, 1: PagedLOD nodes (default), 2: Other nodes;
 };
 
 class InfoVisitor : public osg::NodeVisitor
 {
     std::string path;
 public:
-    InfoVisitor(std::string _path)
+    InfoVisitor(std::string _path, bool loadAllType = false)
     :osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
-    ,path(_path)
+    , path(_path), is_pagedlod(loadAllType), is_loadAllType(loadAllType)
     {}
 
     ~InfoVisitor() {
     }
 
     void apply(osg::Geometry& geometry){
-        if (geometry.getVertexArray() == nullptr || geometry.getVertexArray()->getDataSize() == 0U || geometry.getNumPrimitiveSets() == 0U)
+        if (geometry.getVertexArray() == nullptr
+            || geometry.getVertexArray()->getDataSize() == 0U
+            || geometry.getNumPrimitiveSets() == 0U)
             return;
 
-        geometry_array.push_back(&geometry);        
+        if (is_pagedlod)
+            geometry_array.push_back(&geometry);        
+        else
+            other_geometry_array.push_back(&geometry);
+  
         if (GeoTransform::pOgrCT)
         {
             osg::Vec3Array *vertexArr = (osg::Vec3Array *)geometry.getVertexArray();
@@ -175,7 +183,10 @@ public:
         if (auto ss = geometry.getStateSet() ) {
             osg::Texture* tex = dynamic_cast<osg::Texture*>(ss->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
             if (tex) {
-                texture_array.insert(tex);
+                if (is_pagedlod)
+                    texture_array.insert(tex);
+                else
+                    other_texture_array.insert(tex);
                 texture_map[&geometry] = tex;
             }
         }
@@ -189,14 +200,22 @@ public:
             std::string file_name = path + "/" + node.getFileName(i);
             sub_node_names.push_back(file_name);
         }
+        if (!is_loadAllType) is_pagedlod = true;
         traverse(node);
+        if (!is_loadAllType) is_pagedlod = false;
     }
 
 public:
+    // Storing PagedLOD Geometry
     std::vector<osg::Geometry*> geometry_array;
     std::set<osg::Texture*> texture_array;
     std::map<osg::Geometry*, osg::Texture*> texture_map;
     std::vector<std::string> sub_node_names;
+    bool is_loadAllType; // true: Store all geometry to geometry_array, false: Store by type
+    bool is_pagedlod;
+    // Storing Other Geometry
+    std::vector<osg::Geometry*> other_geometry_array;
+    std::set<osg::Texture*> other_texture_array;
 };
 
 double get_geometric_error(TileBox& bbox){
@@ -297,14 +316,35 @@ osg_tree get_all_tree(std::string& file_name) {
             return root_tile;
         }
         root_tile.file_name = file_name;
+        root_tile.type = 1;
         root->accept(infoVisitor);
     }
 
     for (auto& i : infoVisitor.sub_node_names) {
         osg_tree tree = get_all_tree(i);
         if (!tree.file_name.empty()) {
-            root_tile.sub_nodes.push_back(tree);
+            // When the node type is Group, simply add its child nodes to the current node
+            if (tree.type == 0) {
+                for (auto& node : tree.sub_nodes)
+                    root_tile.sub_nodes.push_back(node);
+            }
+            else {
+                root_tile.sub_nodes.push_back(tree);
+            }
         }
+    }
+
+    // When the node contains PagedLOD and Other nodes, create a new group node
+    if (!infoVisitor.other_geometry_array.empty() && !infoVisitor.geometry_array.empty()) {
+        osg_tree new_root_tile;
+        new_root_tile.type = 0;
+        new_root_tile.file_name = file_name;
+        osg_tree tile;
+        tile.type = 2;
+        tile.file_name = file_name;
+        new_root_tile.sub_nodes.push_back(root_tile);
+        new_root_tile.sub_nodes.push_back(tile);
+        root_tile = new_root_tile;
     }
     return root_tile;
 }
@@ -797,15 +837,19 @@ void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState)
     }
 }
 
-bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) {
+bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, int node_type) {
     vector<string> fileNames = { path };
     std::string parent_path = get_parent(path);
     osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
     if (!root.valid()) {
         return false;
     }
-    InfoVisitor infoVisitor(parent_path);
+    InfoVisitor infoVisitor(parent_path, node_type == -1);
     root->accept(infoVisitor);
+    if (node_type == 2 || infoVisitor.geometry_array.empty()) {
+        infoVisitor.geometry_array = infoVisitor.other_geometry_array;
+        infoVisitor.texture_array = infoVisitor.other_texture_array;
+    }
     if (infoVisitor.geometry_array.empty())
         return false;
 
@@ -976,13 +1020,13 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info) 
     return true;
 }
 
-bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box)
+bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box, int node_type)
 {
     using nlohmann::json;
 
     std::string glb_buf;
     MeshInfo minfo;
-    bool ret = osgb2glb_buf(path, glb_buf, minfo);
+    bool ret = osgb2glb_buf(path, glb_buf, minfo, node_type);
     if (!ret)
         return false;
 
@@ -1067,21 +1111,23 @@ void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl) {
     if (tree.file_name.empty()) return;
     int lvl = get_lvl_num(tree.file_name);
     if (lvl > max_lvl) return;
-    std::string b3dm_buf;
-    osgb2b3dm_buf(tree.file_name, b3dm_buf, tree.bbox);
-    std::string out_file = out_path;
-    out_file += "/";
-    out_file += replace(get_file_name(tree.file_name),".osgb",".b3dm");
-    if (!b3dm_buf.empty()) {
-        write_file(out_file.c_str(), b3dm_buf.data(), b3dm_buf.size());
+    if (tree.type > 0) {
+        std::string b3dm_buf;
+        osgb2b3dm_buf(tree.file_name, b3dm_buf, tree.bbox, tree.type);
+        std::string out_file = out_path;
+        out_file += "/";
+        out_file += replace(get_file_name(tree.file_name), ".osgb", tree.type != 2 ? ".b3dm" : "o.b3dm");
+        if (!b3dm_buf.empty()) {
+            write_file(out_file.c_str(), b3dm_buf.data(), b3dm_buf.size());
+        }
+        // test
+        // std::string glb_buf;
+        // std::vector<mesh_info> v_info;
+        // osgb2glb_buf(tree.file_name, glb_buf, v_info, tree.type);
+        // out_file = replace(out_file, ".b3dm", tree.type != 2 ? ".glb" : "o.glb");
+        // write_file(out_file.c_str(), glb_buf.data(), glb_buf.size());
+        // end test
     }
-    // test
-    // std::string glb_buf;
-    // std::vector<mesh_info> v_info;
-    // osgb2glb_buf(tree.file_name, glb_buf, v_info);
-    // out_file = replace(out_file, ".b3dm", ".glb");
-    // write_file(out_file.c_str(), glb_buf.data(), glb_buf.size());
-    // end test
     for (auto& i : tree.sub_nodes) {
         do_tile_job(i,out_path,max_lvl);
     }
@@ -1196,17 +1242,19 @@ encode_tile_json(osg_tree& tree, double x, double y)
     std::string tile_box = get_boundingBox(bbox);
 
     tile += tile_box;
-    tile += ",";
-    tile += "\"content\":{ \"uri\":";
-    // Data/Tile_0/Tile_0.b3dm
-    std::string uri_path = "./";
-    uri_path += file_name;
-    std::string uri = replace(uri_path,".osgb",".b3dm");
-    tile += "\"";
-    tile += uri;
-    tile += "\",";
-    tile += content_box;
-    tile += "},\"children\":[";
+    if (tree.type > 0) {
+        tile += ", \"content\":{ \"uri\":";
+        // Data/Tile_0/Tile_0.b3dm
+        std::string uri_path = "./";
+        uri_path += file_name;
+        std::string uri = replace(uri_path, ".osgb", tree.type != 2 ? ".b3dm" : "o.b3dm");
+        tile += "\"";
+        tile += uri;
+        tile += "\",";
+        tile += content_box;
+        tile += "}";
+    }
+    tile += ",\"children\":[";
     for ( auto& i : tree.sub_nodes ){
         std::string node_json = encode_tile_json(i,x,y);
         if (!node_json.empty()) {
@@ -1261,7 +1309,7 @@ osgb2glb(const char* in, const char* out)
     MeshInfo minfo;
     std::string glb_buf;
     std::string path = osg_string(in);
-    bool ret = osgb2glb_buf(path, glb_buf, minfo);
+    bool ret = osgb2glb_buf(path, glb_buf, minfo, -1);
     if (!ret)
     {
         LOG_E("convert to glb failed");
