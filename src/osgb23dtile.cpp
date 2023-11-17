@@ -216,12 +216,16 @@ double get_geometric_error(TileBox& bbox){
 
 std::string get_file_name(std::string path) {
     auto p0 = path.find_last_of("/\\");
+    if (p0 == std::string::npos)
+        return path;
     return path.substr(p0 + 1);
 }
 
 std::string replace(std::string str, std::string s0, std::string s1) {
     auto p0 = str.find(s0);
-    return str.replace(p0, p0 + s0.length() - 1, s1);
+    if (p0 == std::string::npos)
+        return str;
+    return str.replace(p0, s0.length(), s1);
 }
 
 std::string get_parent(std::string str) {
