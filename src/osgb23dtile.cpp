@@ -88,6 +88,9 @@ public:
     }
 
     void apply(osg::Geometry& geometry){
+        if (geometry.getVertexArray() == nullptr || geometry.getVertexArray()->getDataSize() == 0U || geometry.getNumPrimitiveSets() == 0U)
+            return;
+
         geometry_array.push_back(&geometry);        
         if (GeoTransform::pOgrCT)
         {
@@ -199,7 +202,7 @@ public:
 double get_geometric_error(TileBox& bbox){
     if (bbox.max.empty() || bbox.min.empty())
     {
-        LOG_E("bbox is empty!");
+        //LOG_E("bbox is empty!");
         return 0;
     }
 
@@ -706,8 +709,11 @@ write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgBuildS
         }
         write_vec3_array(vertexArr, osgState, point_max, point_min);
         // merge mesh bbox
-        expand_bbox3d(osgState->point_max, osgState->point_min, point_max);
-        expand_bbox3d(osgState->point_max, osgState->point_min, point_min);
+        if (point_min.x() <= point_max.x() && point_min.y() <= point_max.y() && point_min.z() <= point_max.z())
+        {
+            expand_bbox3d(osgState->point_max, osgState->point_min, point_max);
+            expand_bbox3d(osgState->point_max, osgState->point_min, point_min);
+        }
     }
     // normal
     osg::Vec3Array* normalArr = (osg::Vec3Array*)g->getNormalArray();
