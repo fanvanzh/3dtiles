@@ -8,6 +8,6 @@
         "terminal.integrated.shell.linux": "/bin/bash"
     },
     "extensions": [
-        "rust-lang.rust"
+        "rust-lang.rust-analyzer"
     ]
 }
