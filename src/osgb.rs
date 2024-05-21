@@ -253,17 +253,17 @@ fn box_to_tileset_box(box_v: &Vec<f64>) -> Vec<f64> {
     box_new.push((box_v[1] + box_v[4]) / 2.0);
     box_new.push((box_v[2] + box_v[5]) / 2.0);
 
-    box_new.push(abs(box_v[3] - box_v[0]).abs() / 2.0);
+    box_new.push((box_v[3] - box_v[0]).abs() / 2.0);
     box_new.push(0.0);
     box_new.push(0.0);
 
     box_new.push(0.0);
-    box_new.push(abs(box_v[4] - box_v[1]).abs() / 2.0);
+    box_new.push((box_v[4] - box_v[1]).abs() / 2.0);
     box_new.push(0.0);
 
     box_new.push(0.0);
     box_new.push(0.0);
-    box_new.push(abs(box_v[5] - box_v[2]).abs() / 2.0);
+    box_new.push((box_v[5] - box_v[2]).abs() / 2.0);
 
     box_new
 }
