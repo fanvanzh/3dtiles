@@ -1,0 +1,13 @@
+{
+    "name": "Rust Environment",
+    "context": "..",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "settings": { 
+        "terminal.integrated.shell.linux": "/bin/bash"
+    },
+    "extensions": [
+        "rust-lang.rust"
+    ]
+}
