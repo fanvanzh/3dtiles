@@ -209,7 +209,7 @@ fn convert_gltf(src: &str, dest: &str) {
 #[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 struct ModelMetadata {
-    pub version: String,
+    pub _version: String,
     pub SRS: String,
     pub SRSOrigin: String,
 }
