@@ -1,8 +1,8 @@
-name: Build
+name: Windows
 
 on: [push]
 jobs:
-  build-and-test: windows-latest
+  build-and-test:
     runs-on: windows-latest
 
     steps:
