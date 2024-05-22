@@ -1,13 +1,11 @@
-#ifdef _WIN32
-#include <gdal/ogr_spatialref.h>
-#include <gdal/ogrsf_frmts.h>
-#endif
-
 #include <cmath>
 #include <vector>
 #include <string>
 #include <cstring>
 #include <algorithm>
+
+#include <gdal/ogrsf_frmts.h>
+#include <gdal/ogr_spatialref.h>
 
 #include "extern.h"
 #include "GeoTransform.h"
@@ -15,8 +13,8 @@
 ///////////////////////
 static const double pi = std::acos(-1);
 
-#ifdef _WIN32
-extern "C" bool epsg_convert(int insrs, double* val, char* path) {
+extern "C" bool
+epsg_convert(int insrs, double* val, char* path) {
     CPLSetConfigOption("GDAL_DATA", path);
     OGRSpatialReference inRs,outRs;
     inRs.importFromEPSG(insrs);
@@ -34,7 +32,8 @@ extern "C" bool epsg_convert(int insrs, double* val, char* path) {
     return false;
 } 
 
-extern "C" bool wkt_convert(char* wkt, double* val, char* path) {
+extern "C" bool
+wkt_convert(char* wkt, double* val, char* path) {
     CPLSetConfigOption("GDAL_DATA", path);
     OGRSpatialReference inRs,outRs;
     inRs.importFromWkt(&wkt);
@@ -50,21 +49,6 @@ extern "C" bool wkt_convert(char* wkt, double* val, char* path) {
     }
     return false;
 }
-
-#else
-extern "C" bool
-epsg_convert(int insrs, double* val, char* path)
-{
-    return false;
-}
-
-extern "C" bool
-wkt_convert(char* wkt, double* val, char* path)
-{
-    return false;
-}
-
-#endif
 
 extern "C"
 {
@@ -88,8 +72,8 @@ extern "C"
 	}
 }
 
-
-std::vector<double> transfrom_xyz(double radian_x, double radian_y, double height_min){
+std::vector<double>
+transfrom_xyz(double radian_x, double radian_y, double height_min){
     double ellipsod_a = 40680631590769;
     double ellipsod_b = 40680631590769;
     double ellipsod_c = 40408299984661.4;
@@ -149,19 +133,17 @@ std::vector<double> transfrom_xyz(double radian_x, double radian_y, double heigh
     return matrix;
 }
 
-extern "C" void transform_c(double center_x, double center_y, double height_min, double* ptr) {
+extern "C" void
+transform_c(double center_x, double center_y, double height_min, double* ptr) {
     double radian_x = degree2rad( center_x );
     double radian_y = degree2rad( center_y );
     std::vector<double> v = transfrom_xyz(radian_x, radian_y, height_min);
     std::memcpy(ptr, v.data(), v.size() * 8);
 }
 
-bool write_tileset_box( 
-    Transform* trans, Box& box,     
-    double geometricError,
-    const char* b3dm_file,
-    const char* json_file) {
-
+bool
+write_tileset_box(Transform* trans, Box& box, double geometricError,
+                    const char* b3dm_file, const char* json_file) {
     std::vector<double> matrix;
     if (trans) {
         matrix = transfrom_xyz(trans->radian_x,trans->radian_y,trans->min_height);
@@ -257,14 +239,10 @@ bool write_tileset_region(
 }
 
 /***/
-bool write_tileset(
-    double radian_x, double radian_y, 
-    double tile_w, double tile_h, 
-    double height_min, double height_max,
-    double geometricError,
-    const char* filename, const char* full_path)
-{
-
+bool
+write_tileset(double radian_x, double radian_y,
+            double tile_w, double tile_h, double height_min, double height_max,
+            double geometricError, const char* filename, const char* full_path) {
     double ellipsod_a = 40680631590769;
     double ellipsod_b = 40680631590769;
     double ellipsod_c = 40408299984661.4;

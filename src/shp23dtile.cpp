@@ -1,11 +1,9 @@
-#ifdef _WIN32
-#include "gdal/ogrsf_frmts.h"
-#endif
-
 #include "tiny_gltf.h"
 #include "earcut.hpp"
 #include "json.hpp"
 #include "extern.h"
+
+#include <gdal/ogrsf_frmts.h>
 
 #include <osg/Material>
 #include <osg/PagedLOD>
@@ -248,7 +246,6 @@ void calc_normal(int baseCnt, int ptNum, Polygon_Mesh &mesh)
     }
 }
 
-#ifdef _WIN32
 Polygon_Mesh
 convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double height)
 {
@@ -372,7 +369,6 @@ convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double hei
     }
     return mesh;
 }
-#endif
 
 std::string make_polymesh(std::vector<Polygon_Mesh>& meshes);
 std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool);
@@ -381,7 +377,6 @@ extern "C" bool
 shp23dtile(const char* filename, int layer_id,
             const char* dest, const char* height)
 {
-#ifdef _WIN32
     if (!filename || layer_id < 0 || layer_id > 10000 || !dest) {
         LOG_E("make shp23dtile [%s] failed", filename);
         return false;
@@ -545,9 +540,6 @@ shp23dtile(const char* filename, int layer_id,
     //
     GDALClose(poDS);
     return true;
-#else
-    return false;
-#endif
 }
 
 template<class T> 

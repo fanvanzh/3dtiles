@@ -18,7 +18,7 @@ fn build_win_msvc() {
         .file("./src/osgb23dtile.cpp")
         .file("./src/dxt_img.cpp")
         .file("./src/GeoTransform.cpp")
-        .compile("_3dtile");
+        .compile("3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=./lib");
     // -------------
@@ -53,14 +53,17 @@ fn build_linux_unkonw() {
         .file("./src/shp23dtile.cpp")
         .file("./src/osgb23dtile.cpp")
         .file("./src/dxt_img.cpp")
-        .compile("_3dtile");
+        .file("./src/GeoTransform.cpp")
+        .compile("3dtile");
     // -------------
-    println!("cargo:rustc-link-search=native=./lib");
+    println!("cargo:rustc-link-search=native=/usr/lib/x86_64-linux-gnu");
     // -------------
     println!("cargo:rustc-link-lib=OpenThreads");
     println!("cargo:rustc-link-lib=osg");
     println!("cargo:rustc-link-lib=osgDB");
     println!("cargo:rustc-link-lib=osgUtil");
+    // gdal library
+    println!("cargo:rustc-link-lib=gdal");
 }
 
 fn main() {

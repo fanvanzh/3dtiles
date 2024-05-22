@@ -14,7 +14,7 @@ jobs:
     - name: Cache dependencies
       uses: actions/cache@v2  # 使用actions/cache
       with:
-        path: ~/vcpkg  # 设置缓存目录路径
+        path: ./vcpkg  # 设置缓存目录路径
         key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/build.rs') }}  # 设置缓存的key
         restore-keys: |  # 设置恢复缓存的key列表
           ${{ runner.os }}-vcpkg-
@@ -22,21 +22,22 @@ jobs:
     - name: Install dependencies on Ubuntu
       if: runner.os == 'Linux'
       run: |
-        sudo apt-get install -y libxi-dev libgl1-mesa-dev libglu1-mesa-dev mesa-common-dev libxrandr-dev libxxf86vm-dev
-        git clone https://github.com/Microsoft/vcpkg.git
-        ./vcpkg/bootstrap-vcpkg.sh
-        ./vcpkg/vcpkg integrate install
-        ./vcpkg/vcpkg install osg
-        ./vcpkg/vcpkg install gdal
+        sudo apt-get update
+        sudo apt-get install -y g++ libgdal-dev libopenscenegraph-dev
 
     - name: Install dependencies on Windows
       if: runner.os == 'Windows'
       run: |
-        git clone https://github.com/Microsoft/vcpkg.git
-        ./vcpkg/bootstrap-vcpkg.bat
-        ./vcpkg/vcpkg integrate install
-        ./vcpkg/vcpkg install osg
-        ./vcpkg/vcpkg install gdal
+        if (-Not (Test-Path "./vcpkg")) {
+          git clone https://github.com/Microsoft/vcpkg.git
+          ./vcpkg/bootstrap-vcpkg.bat
+          ./vcpkg/vcpkg integrate install
+          ./vcpkg/vcpkg install osg
+          ./vcpkg/vcpkg install gdal
+        }
+        else {
+          Write-Host "vcpkg directory exists. Skipping installation."
+        }
 
     - name: Build
       run: cargo build --verbose --release

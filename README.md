@@ -29,6 +29,21 @@ You may intereted in:
 
 - [Docker Image](https://hub.docker.com/r/winner1/3dtiles)
 
+# Build
+## Ubuntu
+```
+sudo apt-get update
+sudo apt-get install -y g++ libgdal-dev libopenscenegraph-dev cargo
+cargo build --release
+```
+## Centos
+```
+
+```
+## Windows
+```
+
+```
 # Usage
 
 ## ① Command Line
