@@ -13,6 +13,7 @@ fn build_win_msvc() {
         .define("WIN32", None)
         .define("_WINDOWS", None)
         .include("./src")
+        .include("./vcpkg/installed/x64-windows/include")
         .file("./src/tileset.cpp")
         .file("./src/shp23dtile.cpp")
         .file("./src/osgb23dtile.cpp")
@@ -20,7 +21,7 @@ fn build_win_msvc() {
         .file("./src/GeoTransform.cpp")
         .compile("3dtile");
     // -------------
-    println!("cargo:rustc-link-search=native=./lib");
+    println!("cargo:rustc-link-search=native=./vcpkg/installed/x64-windows/lib");
     // -------------
     println!("cargo:rustc-link-lib=gdal_i");
     println!("cargo:rustc-link-lib=OpenThreads");
@@ -28,19 +29,6 @@ fn build_win_msvc() {
     println!("cargo:rustc-link-lib=osgDB");
     println!("cargo:rustc-link-lib=osgUtil");
     println!("cargo:rustc-link-lib=osgViewer");
-
-    Command::new("cmd")
-        .args(&[
-            "/C",
-            "xcopy",
-            r#".\bin"#,
-            &format!(r#".\target\{}"#, env::var("PROFILE").unwrap()),
-            "/y",
-            "/e",
-        ])
-        .stdout(Stdio::inherit())
-        .output()
-        .unwrap();
 }
 
 fn build_linux_unkonw() {
@@ -49,6 +37,7 @@ fn build_linux_unkonw() {
         .flag("-std=c++11")
         .warnings(false)
         .include("./src")
+        .include("./vcpkg/installed/x64-linux/include")
         .file("./src/tileset.cpp")
         .file("./src/shp23dtile.cpp")
         .file("./src/osgb23dtile.cpp")
@@ -57,6 +46,7 @@ fn build_linux_unkonw() {
         .compile("3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=/usr/lib/x86_64-linux-gnu");
+    println!("cargo:rustc-link-search=native=./vcpkg/installed/x64-linux/lib");
     // -------------
     println!("cargo:rustc-link-lib=OpenThreads");
     println!("cargo:rustc-link-lib=osg");

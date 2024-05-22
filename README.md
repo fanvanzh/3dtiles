@@ -3,7 +3,7 @@
 # Introduction
 
 [![glTF status](https://img.shields.io/badge/glTF-2%2E0-green.svg?style=flat)](https://github.com/KhronosGroup/glTF)
-[![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/rust.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/rust.yml)
+[![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/build.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/build.yml)
 
 Tools for 3D-Tiles convertion.
 
@@ -38,11 +38,19 @@ cargo build --release
 ```
 ## Centos
 ```
-
+yum install -y gdal-devel cargo g++
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
+./vcpkg/vcpkg install osg
+cargo build --release
 ```
 ## Windows
 ```
-
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.bat
+./vcpkg/vcpkg install osg:x64-windows
+./vcpkg/vcpkg install gdal:x64-windows
+cargo build --release
 ```
 # Usage
 

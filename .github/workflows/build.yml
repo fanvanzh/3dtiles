@@ -29,11 +29,10 @@ jobs:
       if: runner.os == 'Windows'
       run: |
         if (-Not (Test-Path "./vcpkg")) {
-          git clone https://github.com/Microsoft/vcpkg.git
+          git clone https://github.com/microsoft/vcpkg.git
           ./vcpkg/bootstrap-vcpkg.bat
-          ./vcpkg/vcpkg integrate install
-          ./vcpkg/vcpkg install osg
-          ./vcpkg/vcpkg install gdal
+          ./vcpkg/vcpkg install osg:x64-windows
+          ./vcpkg/vcpkg install gdal:x64-windows
         }
         else {
           Write-Host "vcpkg directory exists. Skipping installation."
