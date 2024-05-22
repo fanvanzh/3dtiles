@@ -4,8 +4,14 @@
 #include <cstring>
 #include <algorithm>
 
-#include <gdal/ogrsf_frmts.h>
-#include <gdal/ogr_spatialref.h>
+/* vcpkg path */
+#ifdef _WIN32
+    #include <ogr_spatialref.h>
+    #include <ogrsf_frmts.h>
+#else
+    #include <gdal/ogrsf_frmts.h>
+    #include <gdal/ogr_spatialref.h>
+#endif
 
 #include "extern.h"
 #include "GeoTransform.h"

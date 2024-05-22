@@ -3,7 +3,12 @@
 #include "json.hpp"
 #include "extern.h"
 
-#include <gdal/ogrsf_frmts.h>
+/* vcpkg path */
+#ifdef _WIN32
+    #include <ogrsf_frmts.h>
+#else
+    #include <gdal/ogrsf_frmts.h>
+#endif
 
 #include <osg/Material>
 #include <osg/PagedLOD>

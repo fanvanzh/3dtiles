@@ -3,8 +3,8 @@
 # Introduction
 
 [![glTF status](https://img.shields.io/badge/glTF-2%2E0-green.svg?style=flat)](https://github.com/KhronosGroup/glTF)
-[![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/build.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/build.yml)
-
+[![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/windows.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/windows.yml)
+[![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/linux.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/linux.yml)
 Tools for 3D-Tiles convertion.
 
 This is a `RUST language` project with cpp lib to handle osgb data.
