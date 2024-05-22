@@ -2,11 +2,8 @@ name: Build
 
 on: [push]
 jobs:
-  build-and-test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  build-and-test: windows-latest
+    runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v2
@@ -19,20 +16,16 @@ jobs:
         restore-keys: |  # 设置恢复缓存的key列表
           ${{ runner.os }}-vcpkg-
 
-    - name: Install dependencies on Ubuntu
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y g++ libgdal-dev libopenscenegraph-dev
-
     - name: Install dependencies on Windows
       if: runner.os == 'Windows'
       run: |
         if (-Not (Test-Path "./vcpkg")) {
           git clone https://github.com/microsoft/vcpkg.git
           ./vcpkg/bootstrap-vcpkg.bat
-          ./vcpkg/vcpkg install osg:x64-windows
           ./vcpkg/vcpkg install gdal:x64-windows
+          tree ./vcpkg/installed
+          ./vcpkg/vcpkg install osg:x64-windows
+          tree ./vcpkg/installed
         }
         else {
           Write-Host "vcpkg directory exists. Skipping installation."
