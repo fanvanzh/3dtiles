@@ -23,9 +23,9 @@ jobs:
           git clone https://github.com/microsoft/vcpkg.git
           ./vcpkg/bootstrap-vcpkg.bat
           ./vcpkg/vcpkg install gdal:x64-windows
-          tree ./vcpkg/installed
+          tree ./vcpkg/installed /F /A
           ./vcpkg/vcpkg install osg:x64-windows
-          tree ./vcpkg/installed
+          tree ./vcpkg/installed /F /A
         }
         else {
           Write-Host "vcpkg directory exists. Skipping installation."

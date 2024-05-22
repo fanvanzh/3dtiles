@@ -5,11 +5,8 @@
 [![glTF status](https://img.shields.io/badge/glTF-2%2E0-green.svg?style=flat)](https://github.com/KhronosGroup/glTF)
 [![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/windows.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/windows.yml)
 [![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/linux.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/linux.yml)
-Tools for 3D-Tiles convertion.
 
-This is a `RUST language` project with cpp lib to handle osgb data.
-
-Tools provided are as follow：
+3D-Tiles convertion:
 
 - `Osgb(OpenSceneGraph Binary)` to `3D-Tiles`: convert huge of osgb file to 3D-Tiles.
 
@@ -46,6 +43,8 @@ cargo build --release
 ```
 ## Windows
 ```
+curl https://sh.rustup.rs -sSf -o rustup-init.exe
+./rustup-init.exe -y
 git clone https://github.com/microsoft/vcpkg.git
 ./vcpkg/bootstrap-vcpkg.bat
 ./vcpkg/vcpkg install osg:x64-windows
@@ -127,8 +126,6 @@ To Translate.
 # from osgb dataset
 3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path
 3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"offset\": 0}"
-# use pbr-texture
-3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"pbr\": true}"
 
 # from single shp file
 3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
@@ -153,8 +150,8 @@ To Translate.
   {
     "x": 120,
     "y": 30,
-    "offset": 0 , // 模型最低面地面距离
-    "max_lvl" : 20 // 处理切片模型到20级停止
+    "offset": 0,
+    "max_lvl" : 20
   }
   ```
 
@@ -206,37 +203,3 @@ Shapefile 中需要有字段来表示高度信息。
 ### ④ B3dm 单文件转 glb
 
 支持将 b3dm 单个文件转成 glb 格式，便于调试程序和测试数据
-
-
----
-
-# Who use / Who star
-
-- NASA JPL (gkjohnson)
-- AnalyticalGraphicsInc (kring)
-- NVIDIA (Vinjn Zhang)
-- Ubisoft (Cmdu76)
-- Baidu (hinikai)
-- Esri (suny323)
-- Geostar (hekaikai\shitao1988)
-
-- MapTalks (brucin\fuzhenn\axmand)
-- Alibaba (luxueyan)
-- Tencent (NichoZhang)
-- Data Cloud Co- Ltd (liujin834)
-- Tsinghua University (DeZhao-Zhang)
-- Peking University (CHRIS-WiNG\Weizhen-Fang)
-- Wuhan University (chenguanzhou)
-- Guangzhou University (LreeLenn)
-- Hopkins University (AndrewAnnex)
-
-- 中国铁道科学设计研究院
-- 上海华东设计研究院
-- 江苏省测绘研究所
-- 宁波市测绘设计研究院
-- 合肥火星科技有限公司 (muyao1987)
-- 北京西部数据科技 (vtxf\elfc2000)
-
-# About author
-
-作者不是专业搞三维GIS的，因偶尔有个需求要展示 3D-Tiles，一时找不到工具，就写了个轮子，代码多有纰漏，仅供参考。
