@@ -11,7 +11,7 @@ fn build_win_msvc() {
         .define("WIN32", None)
         .define("_WINDOWS", None)
         .include("./src")
-        .include("./vcpkg/installed/x64-windows/include")
+        .include("./vcpkg/installed/x64-windows-release/include")
         .file("./src/tileset.cpp")
         .file("./src/shp23dtile.cpp")
         .file("./src/osgb23dtile.cpp")
@@ -19,7 +19,7 @@ fn build_win_msvc() {
         .file("./src/GeoTransform.cpp")
         .compile("_3dtile");
     // -------------
-    println!("cargo:rustc-link-search=native=./vcpkg/installed/x64-windows/lib");
+    println!("cargo:rustc-link-search=native=./vcpkg/installed/x64-windows-release/lib");
     // ------ GDAL library -------
     println!("cargo:rustc-link-lib=gdal");
     // ------ OSG library --------
@@ -36,7 +36,7 @@ fn build_linux_unkonw() {
         .flag("-std=c++11")
         .warnings(false)
         .include("./src")
-        .include("./vcpkg/installed/x64-linux/include")
+        .include("./vcpkg/installed/x64-linux-release/include")
         .file("./src/tileset.cpp")
         .file("./src/shp23dtile.cpp")
         .file("./src/osgb23dtile.cpp")
@@ -45,7 +45,7 @@ fn build_linux_unkonw() {
         .compile("_3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=/usr/lib/x86_64-linux-gnu");
-    println!("cargo:rustc-link-search=native=./vcpkg/installed/x64-linux/lib");
+    println!("cargo:rustc-link-search=native=./vcpkg/installed/x64-linux-release/lib");
     // -------------
     println!("cargo:rustc-link-lib=osg");
     println!("cargo:rustc-link-lib=osgDB");
