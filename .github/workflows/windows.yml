@@ -1,0 +1,30 @@
+name: Windows
+
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      id: cache-vcpkg
+      with:
+        path: ./vcpkg
+        key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/build.rs') }}
+        restore-keys: |
+          ${{ runner.os }}-vcpkg-
+
+    - name: Install dependencies on Windows
+      if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+      run: |
+        git clone https://github.com/microsoft/vcpkg.git
+        ./vcpkg/bootstrap-vcpkg.bat
+        ./vcpkg/vcpkg install gdal:x64-windows-release
+        ./vcpkg/vcpkg install osg:x64-windows-release
+        tree ./vcpkg/installed /F /A
+
+    - name: Build
+      run: cargo build --verbose --release

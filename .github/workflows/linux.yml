@@ -1,0 +1,21 @@
+name: Ubuntu
+
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies on Ubuntu
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y g++ libgdal-dev libopenscenegraph-dev
+
+    - name: Build
+      run: cargo build --verbose --release
+    
+    - name: Test
+      run: cargo test --verbose

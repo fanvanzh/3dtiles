@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     libc6-dev \
     m4 \
     gcc \
+    libgdal-dev \
+    libopenscenegraph-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录

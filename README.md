@@ -3,13 +3,10 @@
 # Introduction
 
 [![glTF status](https://img.shields.io/badge/glTF-2%2E0-green.svg?style=flat)](https://github.com/KhronosGroup/glTF)
-[![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/rust.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/rust.yml)
+[![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/linux.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/linux.yml)
+[![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/windows.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/windows.yml)
 
-Tools for 3D-Tiles convertion.
-
-This is a `RUST language` project with cpp lib to handle osgb data.
-
-Tools provided are as follow：
+3D-Tiles convertion:
 
 - `Osgb(OpenSceneGraph Binary)` to `3D-Tiles`: convert huge of osgb file to 3D-Tiles.
 
@@ -18,10 +15,9 @@ Tools provided are as follow：
 - `Fbx` to `3D-Tiles`: convert fbx file to 3D-Tiles, include auto_lod\texture convertion etc.
 
 
-
 You may intereted in: 
 
-- [How to build this project?](https://github.com/fanvanzh/3dtiles/wiki/How-to-build)
+- [How to build?](https://github.com/fanvanzh/3dtiles/wiki/How-to-build)
 
 - [How to debug?](https://github.com/fanvanzh/3dtiles/wiki/How-to-debug)
 
@@ -29,57 +25,73 @@ You may intereted in:
 
 - [Docker Image](https://hub.docker.com/r/winner1/3dtiles)
 
+# Build
+## Ubuntu
+```
+sudo apt-get update
+sudo apt-get install -y g++ libgdal-dev libopenscenegraph-dev cargo
+git clone https://github.com/fanvanzh/3dtiles
+cd 3dtiles
+cargo build --release
+```
+## Centos
+```
+sudo yum install -y gdal-devel cargo g++
+git clone https://github.com/fanvanzh/3dtiles
+cd 3dtiles
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
+./vcpkg/vcpkg install osg:x64-linux-release
+cargo build --release
+```
+## Windows
+```
+curl https://sh.rustup.rs -sSf -o rustup-init.exe
+./rustup-init.exe -y
+git clone https://github.com/fanvanzh/3dtiles
+cd 3dtiles
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.bat
+./vcpkg/vcpkg install osg:x64-windows-release
+./vcpkg/vcpkg install gdal:x64-windows-release
+cargo build --release
+```
 # Usage
 
 ## ① Command Line
 
 ```sh
-3dtile.exe [FLAGS] [OPTIONS] --format <FORMAT> --input <PATH> --output <DIR>
+_3dtile.exe [FLAGS] [OPTIONS] --format <FORMAT> --input <PATH> --output <DIR>
 ```
 
 ## ② Examples
 
 ```sh
 # from osgb dataset
-3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path
-3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"offset\": 0}"
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"offset\": 0}"
 # use pbr-texture
-3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"pbr\": true}"
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"pbr\": true}"
 
 # from single shp file
-3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
+_3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
 
 # from single osgb file to glb file
-3dtile.exe -f gltf -i E:\Data\TT\001.osgb -o E:\Data\TT\001.glb
+_3dtile.exe -f gltf -i E:\Data\TT\001.osgb -o E:\Data\TT\001.glb
 
 # from single obj file to glb file
-3dtile.exe -f gltf -i E:\Data\TT\001.obj -o E:\Data\TT\001.glb
+_3dtile.exe -f gltf -i E:\Data\TT\001.obj -o E:\Data\TT\001.glb
 
 # convert single b3dm file to glb file
-3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
+_3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
 ```
-
-## ③ Paramters
-
-To Translate.
-
-# Data Requirements & Announcement
-
-To Translate.
-
-
-
-
-
 ---
 
 **[English](#Introduction) | 简体中文**
 
 <h1 id="intro">简介</h1>
 
-3D-Tile 转换工具集，高效快速的 3D-Tiles 生产工具，极度节省你的处理时间。
-
-这是一个混合了 c 和 c++ 库（主要是 osgb）的 Rust 项目。
+3D-Tile 转换工具集，高效快速的 3D-Tiles 生产工具。
 
 提供了如下的子工具：
 
@@ -90,34 +102,63 @@ To Translate.
 - `Fbx` 转 `3D-Tiles`
 - ...
 
-# 用法说明
+# 编译
+## Ubuntu
+```
+sudo apt-get update
+sudo apt-get install -y g++ libgdal-dev libopenscenegraph-dev cargo
+git clone https://github.com/fanvanzh/3dtiles
+cd 3dtiles
+cargo build --release
+```
+## Centos
+```
+sudo yum install -y gdal-devel cargo g++
+git clone https://github.com/fanvanzh/3dtiles
+cd 3dtiles
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
+./vcpkg/vcpkg install osg:x64-linux-release
+cargo build --release
+```
+## Windows
+```
+curl https://sh.rustup.rs -sSf -o rustup-init.exe
+./rustup-init.exe -y
+git clone https://github.com/fanvanzh/3dtiles
+cd 3dtiles
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.bat
+./vcpkg/vcpkg install osg:x64-windows-release
+./vcpkg/vcpkg install gdal:x64-windows-release
+cargo build --release
+```
+# 使用说明
 
 ## ① 命令行格式
 
 ```sh
-3dtile.exe [FLAGS] [OPTIONS] --format <FORMAT> --input <PATH> --output <DIR>
+_3dtile.exe [FLAGS] [OPTIONS] --format <FORMAT> --input <PATH> --output <DIR>
 ```
 
 ## ② 示例命令
 
 ```sh
 # from osgb dataset
-3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path
-3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"offset\": 0}"
-# use pbr-texture
-3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"pbr\": true}"
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"offset\": 0}"
 
 # from single shp file
-3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
+_3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
 
 # from single osgb file to glb file
-3dtile.exe -f gltf -i E:\Data\TT\001.osgb -o E:\Data\TT\001.glb
+_3dtile.exe -f gltf -i E:\Data\TT\001.osgb -o E:\Data\TT\001.glb
 
 # from single obj file to glb file
-3dtile.exe -f gltf -i E:\Data\TT\001.obj -o E:\Data\TT\001.glb
+_3dtile.exe -f gltf -i E:\Data\TT\001.obj -o E:\Data\TT\001.glb
 
 # convert single b3dm file to glb file
-3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
+_3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
 ```
 
 ## ③ 参数说明
@@ -130,8 +171,8 @@ To Translate.
   {
     "x": 120,
     "y": 30,
-    "offset": 0 , // 模型最低面地面距离
-    "max_lvl" : 20 // 处理切片模型到20级停止
+    "offset": 0,
+    "max_lvl" : 20
   }
   ```
 
@@ -183,37 +224,3 @@ Shapefile 中需要有字段来表示高度信息。
 ### ④ B3dm 单文件转 glb
 
 支持将 b3dm 单个文件转成 glb 格式，便于调试程序和测试数据
-
-
----
-
-# Who use / Who star
-
-- NASA JPL (gkjohnson)
-- AnalyticalGraphicsInc (kring)
-- NVIDIA (Vinjn Zhang)
-- Ubisoft (Cmdu76)
-- Baidu (hinikai)
-- Esri (suny323)
-- Geostar (hekaikai\shitao1988)
-
-- MapTalks (brucin\fuzhenn\axmand)
-- Alibaba (luxueyan)
-- Tencent (NichoZhang)
-- Data Cloud Co- Ltd (liujin834)
-- Tsinghua University (DeZhao-Zhang)
-- Peking University (CHRIS-WiNG\Weizhen-Fang)
-- Wuhan University (chenguanzhou)
-- Guangzhou University (LreeLenn)
-- Hopkins University (AndrewAnnex)
-
-- 中国铁道科学设计研究院
-- 上海华东设计研究院
-- 江苏省测绘研究所
-- 宁波市测绘设计研究院
-- 合肥火星科技有限公司 (muyao1987)
-- 北京西部数据科技 (vtxf\elfc2000)
-
-# About author
-
-作者不是专业搞三维GIS的，因偶尔有个需求要展示 3D-Tiles，一时找不到工具，就写了个轮子，代码多有纰漏，仅供参考。
