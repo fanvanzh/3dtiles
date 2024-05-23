@@ -18,16 +18,17 @@ fn build_win_msvc() {
         .file("./src/osgb23dtile.cpp")
         .file("./src/dxt_img.cpp")
         .file("./src/GeoTransform.cpp")
-        .compile("3dtile");
+        .compile("_3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=./vcpkg/installed/x64-windows/lib");
-    // -------------
-    println!("cargo:rustc-link-lib=gdal_i");
-    println!("cargo:rustc-link-lib=OpenThreads");
+    // ------ GDAL library -------
+    println!("cargo:rustc-link-lib=gdal");
+    // ------ OSG library --------
     println!("cargo:rustc-link-lib=osg");
     println!("cargo:rustc-link-lib=osgDB");
     println!("cargo:rustc-link-lib=osgUtil");
     println!("cargo:rustc-link-lib=osgViewer");
+    println!("cargo:rustc-link-lib=OpenThreads");
 }
 
 fn build_linux_unkonw() {
@@ -42,15 +43,15 @@ fn build_linux_unkonw() {
         .file("./src/osgb23dtile.cpp")
         .file("./src/dxt_img.cpp")
         .file("./src/GeoTransform.cpp")
-        .compile("3dtile");
+        .compile("_3dtile");
     // -------------
     println!("cargo:rustc-link-search=native=/usr/lib/x86_64-linux-gnu");
     println!("cargo:rustc-link-search=native=./vcpkg/installed/x64-linux/lib");
     // -------------
-    println!("cargo:rustc-link-lib=OpenThreads");
     println!("cargo:rustc-link-lib=osg");
     println!("cargo:rustc-link-lib=osgDB");
     println!("cargo:rustc-link-lib=osgUtil");
+    println!("cargo:rustc-link-lib=OpenThreads");
     // gdal library
     println!("cargo:rustc-link-lib=gdal");
 }
