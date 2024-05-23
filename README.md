@@ -102,7 +102,38 @@ _3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
 - `Fbx` 转 `3D-Tiles`
 - ...
 
-# 用法说明
+# 编译
+## Ubuntu
+```
+sudo apt-get update
+sudo apt-get install -y g++ libgdal-dev libopenscenegraph-dev cargo
+git clone https://github.com/fanvanzh/3dtiles
+cd 3dtiles
+cargo build --release
+```
+## Centos
+```
+sudo yum install -y gdal-devel cargo g++
+git clone https://github.com/fanvanzh/3dtiles
+cd 3dtiles
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
+./vcpkg/vcpkg install osg:x64-linux-release
+cargo build --release
+```
+## Windows
+```
+curl https://sh.rustup.rs -sSf -o rustup-init.exe
+./rustup-init.exe -y
+git clone https://github.com/fanvanzh/3dtiles
+cd 3dtiles
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.bat
+./vcpkg/vcpkg install osg:x64-windows-release
+./vcpkg/vcpkg install gdal:x64-windows-release
+cargo build --release
+```
+# 使用说明
 
 ## ① 命令行格式
 
