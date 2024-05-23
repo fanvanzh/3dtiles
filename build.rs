@@ -5,7 +5,6 @@ fn build_win_msvc() {
     cc::Build::new()
         .cpp(true)
         .flag("-Zi")
-        .flag("-Gm")
         .flag("-INCREMENTAL")
         .flag("-bigobj")
         .warnings(false)
