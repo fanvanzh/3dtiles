@@ -6,6 +6,8 @@
 /* vcpkg path */
 #ifdef _WIN32
     #include <ogrsf_frmts.h>
+#elif __APPLE__
+    #include <ogrsf_frmts.h>
 #else
     #include <gdal/ogrsf_frmts.h>
 #endif

@@ -133,6 +133,14 @@ git clone https://github.com/microsoft/vcpkg.git
 ./vcpkg/vcpkg install gdal:x64-windows-release
 cargo build --release
 ```
+## MacOS
+```
+#install brew first
+brew install rust gdal open-scene-graph
+git clone https://github.com/fanvanzh/3dtiles
+cd 3dtiles
+cargo build --release
+```
 # 使用说明
 
 ## ① 命令行格式
