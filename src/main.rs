@@ -238,7 +238,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
             if let Ok(_) = f.read_to_string(&mut buffer) {
                 //
                 if let Ok(metadata) =
-                    serde_xml_rs::deserialize::<_, ModelMetadata>(buffer.as_bytes())
+                    serde_xml_rs::from_str::<ModelMetadata>(&buffer)
                 {
                     //println!("{:?}", metadata);
                     let v: Vec<&str> = metadata.SRS.split(":").collect();

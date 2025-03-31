@@ -8,6 +8,9 @@
 #ifdef _WIN32
     #include <ogr_spatialref.h>
     #include <ogrsf_frmts.h>
+#elif __APPLE__
+    #include <ogr_spatialref.h>
+    #include <ogrsf_frmts.h>
 #else
     #include <gdal/ogrsf_frmts.h>
     #include <gdal/ogr_spatialref.h>
