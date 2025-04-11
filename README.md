@@ -30,14 +30,14 @@ You may intereted in:
 ```
 sudo apt-get update
 sudo apt-get install -y g++ libgdal-dev libopenscenegraph-dev cargo
-git clone https://github.com/fanvanzh/3dtiles
+git clone https://github.com/fanvanzh/3dtiles.git
 cd 3dtiles
 cargo build --release
 ```
 ## Centos
 ```
 sudo yum install -y gdal-devel cargo g++
-git clone https://github.com/fanvanzh/3dtiles
+git clone https://github.com/fanvanzh/3dtiles.git
 cd 3dtiles
 git clone https://github.com/microsoft/vcpkg.git
 ./vcpkg/bootstrap-vcpkg.sh
@@ -46,14 +46,14 @@ cargo build --release
 ```
 ## Windows
 ```
-curl https://sh.rustup.rs -sSf -o rustup-init.exe
-./rustup-init.exe -y
-git clone https://github.com/fanvanzh/3dtiles
+curl -O https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
+.\rustup-init.exe -y
+git clone https://github.com/fanvanzh/3dtiles.git
 cd 3dtiles
 git clone https://github.com/microsoft/vcpkg.git
-./vcpkg/bootstrap-vcpkg.bat
-./vcpkg/vcpkg install osg:x64-windows-release
-./vcpkg/vcpkg install gdal:x64-windows-release
+.\vcpkg\bootstrap-vcpkg.bat
+.\vcpkg\vcpkg install osg:x64-windows-release
+.\vcpkg\vcpkg install gdal:x64-windows-release
 cargo build --release
 ```
 # Usage
@@ -107,14 +107,14 @@ _3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
 ```
 sudo apt-get update
 sudo apt-get install -y g++ libgdal-dev libopenscenegraph-dev cargo
-git clone https://github.com/fanvanzh/3dtiles
+git clone https://github.com/fanvanzh/3dtiles.git
 cd 3dtiles
 cargo build --release
 ```
 ## Centos
 ```
 sudo yum install -y gdal-devel cargo g++
-git clone https://github.com/fanvanzh/3dtiles
+git clone https://github.com/fanvanzh/3dtiles.git
 cd 3dtiles
 git clone https://github.com/microsoft/vcpkg.git
 ./vcpkg/bootstrap-vcpkg.sh
@@ -123,21 +123,21 @@ cargo build --release
 ```
 ## Windows
 ```
-curl https://sh.rustup.rs -sSf -o rustup-init.exe
-./rustup-init.exe -y
-git clone https://github.com/fanvanzh/3dtiles
+curl -O https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe
+.\rustup-init.exe -y
+git clone https://github.com/fanvanzh/3dtiles.git
 cd 3dtiles
 git clone https://github.com/microsoft/vcpkg.git
-./vcpkg/bootstrap-vcpkg.bat
-./vcpkg/vcpkg install osg:x64-windows-release
-./vcpkg/vcpkg install gdal:x64-windows-release
+.\vcpkg\bootstrap-vcpkg.bat
+.\vcpkg\vcpkg install osg:x64-windows-release
+.\vcpkg\vcpkg install gdal:x64-windows-release
 cargo build --release
 ```
 ## MacOS
 ```
 #install brew first
 brew install rust gdal open-scene-graph
-git clone https://github.com/fanvanzh/3dtiles
+git clone https://github.com/fanvanzh/3dtiles.git
 cd 3dtiles
 cargo build --release
 ```
