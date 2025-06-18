@@ -12,9 +12,6 @@
 
 - `Esri Shapefile` to `3D-Tiles`: convert shapefile to 3D-Tiles.
 
-- `Fbx` to `3D-Tiles`: convert fbx file to 3D-Tiles, include auto_lod\texture convertion etc.
-
-
 You may intereted in: 
 
 - [How to build?](https://github.com/fanvanzh/3dtiles/wiki/How-to-build)
@@ -98,9 +95,6 @@ _3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
 - `Osgb(OpenSceneGraph Binary)` 转 `3D-Tiles`
 
 - `Esri Shapefile` 转 `3D-Tiles`
-
-- `Fbx` 转 `3D-Tiles`
-- ...
 
 # 编译
 ## Ubuntu
@@ -223,12 +217,6 @@ _3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
 
 Shapefile 中需要有字段来表示高度信息。
 
-### ③ 通用模型转 glTF：
-
-支持 osg、osgb、obj、fbx、3ds 等单一通用模型数据转为 gltf、glb 格式。
-
-转出格式为 2.0 的gltf，可在以下网址验证查看： https://pissang.github.io/clay-viewer/editor/
-
-### ④ B3dm 单文件转 glb
+### ③ B3dm 单文件转 glb
 
 支持将 b3dm 单个文件转成 glb 格式，便于调试程序和测试数据
