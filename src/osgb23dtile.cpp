@@ -96,10 +96,10 @@ public:
             return;
 
         if (is_pagedlod)
-            geometry_array.push_back(&geometry);        
+            geometry_array.push_back(&geometry);
         else
             other_geometry_array.push_back(&geometry);
-  
+
         if (GeoTransform::pOgrCT)
         {
             osg::Vec3Array *vertexArr = (osg::Vec3Array *)geometry.getVertexArray();
@@ -119,12 +119,12 @@ public:
             /**
              * 2. We correct the eight points of the bounding box.
              * The point will be transformed from projected coordinate system
-             * which is given by the original osgb tileset to geographic coordinate system, 
-             * and then transformed to Cesium ECEF coordinate system, 
-             * at last we transform the point from ECEF to the ENU of the origin. 
-             * We do this to correct the coordinate offset that 
+             * which is given by the original osgb tileset to geographic coordinate system,
+             * and then transformed to Cesium ECEF coordinate system,
+             * at last we transform the point from ECEF to the ENU of the origin.
+             * We do this to correct the coordinate offset that
              * can occur when the tile is located far from the origin.
-             */ 
+             */
             auto Correction = [&](glm::dvec3 Point) {
                 glm::dvec3 cartographic = Point + glm::dvec3(GeoTransform::OriginX, GeoTransform::OriginY, GeoTransform::OriginZ);
                 poCT->Transform(1, &cartographic.x, &cartographic.y, &cartographic.z);
@@ -913,44 +913,67 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         {
             unsigned buffer_start = buffer.data.size();
             std::vector<unsigned char> jpeg_buf;
-            jpeg_buf.reserve(512 * 512 * 3);
-            int width, height, comp;
+            int width, height;
             if (tex) {
                 if (tex->getNumImages() > 0) {
                     osg::Image* img = tex->getImage(0);
                     if (img) {
                         width = img->s();
                         height = img->t();
-                        comp = img->getPixelSizeInBits();
-                        if (comp == 8) comp = 1;
-                        if (comp == 24) comp = 3;
-                        if (comp == 4) {
-                            comp = 3;
-                            fill_4BitImage(jpeg_buf, img, width, height);
-                        }
-                        else
+
+                        const GLenum format = img->getPixelFormat();
+                        const char* rgb = (const char*)(img->data());
+                        uint32_t rowStep = img->getRowStepInBytes();
+                        uint32_t rowSize = img->getRowSizeInBytes();
+                        switch (format)
                         {
-                            unsigned row_step = img->getRowStepInBytes();
-                            unsigned row_size = img->getRowSizeInBytes();
-                            for (size_t i = 0; i < height; i++)
+                        case GL_RGBA:
+                            jpeg_buf.resize(width * height * 3);
+                            for (int i = 0; i < height; i++)
                             {
-                                jpeg_buf.insert(jpeg_buf.end(),
-                                    img->data() + row_step * i,
-                                    img->data() + row_step * i + row_size);
+                                for (int j = 0; j < width; j++)
+                                {
+                                    jpeg_buf[i * width * 3 + j * 3] = rgb[i * width * 4 + j * 4];
+                                    jpeg_buf[i * width * 3 + j * 3 + 1] = rgb[i * width * 4 + j * 4 + 1];
+                                    jpeg_buf[i * width * 3 + j * 3 + 2] = rgb[i * width * 4 + j * 4 + 2];
+                                }
                             }
+                            break;
+                        case GL_BGRA:
+                            jpeg_buf.resize(width * height * 3);
+                            for (int i = 0; i < height; i++)
+                            {
+                                for (int j = 0; j < width; j++)
+                                {
+                                    jpeg_buf[i * width * 3 + j * 3] = rgb[i * width * 4 + j * 4 + 2];
+                                    jpeg_buf[i * width * 3 + j * 3 + 1] = rgb[i * width * 4 + j * 4 + 1];
+                                    jpeg_buf[i * width * 3 + j * 3 + 2] = rgb[i * width * 4 + j * 4];
+                                }
+                            }
+                            break;
+                        case GL_RGB:
+                            for (int i = 0; i < height; i++)
+                            {
+                                for (int j = 0; j < rowSize; j++)
+                                {
+                                    jpeg_buf.push_back(rgb[rowStep * i + j]);
+                                }
+                            }
+                            break;
+                        default:
+                            break;
                         }
                     }
                 }
             }
             if (!jpeg_buf.empty()) {
                 int buf_size = buffer.data.size();
-                buffer.data.reserve(buffer.data.size() + width * height * comp);
-                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, comp, jpeg_buf.data(), 80);
+                buffer.data.reserve(buffer.data.size() + width * height * 3);
+                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, jpeg_buf.data(), 80);
             }
             else {
-                std::vector<char> v_data;
+                std::vector<char> v_data(256 * 256 * 3, 255);
                 width = height = 256;
-                v_data.resize(width * height * 3);
                 stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, v_data.data(), 80);
             }
             tinygltf::Image image;
@@ -1269,7 +1292,7 @@ encode_tile_json(osg_tree& tree, double x, double y)
 }
 
 /***/
-extern "C" void* 
+extern "C" void*
 osgb23dtile_path(const char* in_path, const char* out_path,
                     double *box, int* len, double x, double y,
                     int max_lvl, bool pbr_texture)
