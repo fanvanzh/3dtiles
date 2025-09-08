@@ -2,6 +2,7 @@ extern "C" {
     fn shp23dtile(name: *const u8, layer: i32, dest: *const u8, height: *const u8) -> bool;
 }
 
+use std::ffi::CString;
 use std::fs;
 use std::fs::File;
 use std::io;
@@ -31,17 +32,14 @@ fn walk_path(dir: &Path, cb: &mut dyn FnMut(&str)) -> io::Result<()> {
 
 pub fn shape_batch_convert(from: &str, to: &str, height: &str) -> bool {
     unsafe {
-        let mut source_vec = String::from(from);
-        source_vec.push('\0');
-        let mut dest_vec = String::from(to);
-        dest_vec.push('\0');
-        let mut height_vec = String::from(height);
-        height_vec.push('\0');
+        let mut source_vec = CString::new(from).unwrap();
+        let mut dest_vec = CString::new(to).unwrap();
+        let mut height_vec = CString::new(height).unwrap();
         let res = shp23dtile(
-            source_vec.as_ptr(),
+            source_vec.as_ptr() as *const u8,
             0,
-            dest_vec.as_ptr(),
-            height_vec.as_ptr(),
+            dest_vec.as_ptr() as *const u8,
+            height_vec.as_ptr() as *const u8,
         );
         if !res {
             return res;
