@@ -209,7 +209,7 @@ fn convert_gltf(src: &str, dest: &str) {
 #[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 struct ModelMetadata {
-    pub _version: String,
+    pub version: String,
     pub SRS: String,
     pub SRSOrigin: String,
 }
@@ -272,16 +272,29 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                                         Path::new(&exe_dir)
                                             .parent()
                                             .unwrap()
-                                            .join("gdal_data")
+                                            .join("gdal")
+                                            .to_str()
+                                            .unwrap()
+                                            .into()
+                                    };
+                                    let proj_lib: String = {
+                                        use std::path::Path;
+                                        let exe_dir = ::std::env::current_exe().unwrap();
+                                        Path::new(&exe_dir)
+                                            .parent()
+                                            .unwrap()
+                                            .join("proj")
                                             .to_str()
                                             .unwrap()
                                             .into()
                                     };
                                     unsafe {
                                         use std::ffi::CString;
-                                        let c_str = CString::new(gdal_data).unwrap();
-                                        let ptr = c_str.as_ptr();
-                                        if osgb::epsg_convert(srs, pt.as_mut_ptr(), ptr) {
+                                        let gdal_c_str = CString::new(gdal_data).unwrap();
+                                        let gdal_ptr = gdal_c_str.as_ptr();
+                                        let proj_c_str = CString::new(proj_lib).unwrap();
+                                        let proj_ptr = proj_c_str.as_ptr();
+                                        if osgb::epsg_convert(srs, pt.as_mut_ptr(), gdal_ptr, proj_ptr) {
                                             center_x = pt[0];
                                             center_y = pt[1];
                                             info!("epsg: x->{}, y->{}", pt[0], pt[1]);
