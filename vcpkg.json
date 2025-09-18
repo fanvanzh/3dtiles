@@ -1,0 +1,16 @@
+{
+  "dependencies": [
+    {
+        "name": "osg",
+        "version>=": "3.6.5#27",
+        "features": [ "plugins" ],
+        "default-features": false
+    },
+    {
+        "name": "gdal",
+        "version>=": "3.9.3#1",
+        "default-features": false,
+        "features": [ "archive", "curl"]
+    }
+  ]
+}
