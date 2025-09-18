@@ -1,7 +1,7 @@
 extern crate cmake;
 extern crate pkg_config;
 use cmake::Config;
-use std::{env, fs, io};
+use std::{env, fs, io, path::Path};
 
 fn build_win_msvc() {
     // Probe Library Link for GDAL and OpenSceneGraph
@@ -25,6 +25,10 @@ fn build_win_msvc() {
     println!("cargo:rustc-link-lib=OpenThreads");
     // gdal library
     println!("cargo:rustc-link-lib=gdal");
+
+    let vcpkg_share_dir = "./vcpkg_installed/x64-windows/share";
+    copy_gdal_data(vcpkg_share_dir);
+    copy_proj_data(vcpkg_share_dir);
 }
 
 fn build_linux_unkown() {
@@ -51,6 +55,10 @@ fn build_linux_unkown() {
     println!("cargo:rustc-link-lib=OpenThreads");
     // gdal library
     println!("cargo:rustc-link-lib=gdal");
+
+    let vcpkg_share_dir = "./vcpkg_installed/x64-linux-release/share";
+    copy_gdal_data(vcpkg_share_dir);
+    copy_proj_data(vcpkg_share_dir);
 }
 
 fn build_macos() {
@@ -77,6 +85,10 @@ fn build_macos() {
     println!("cargo:rustc-link-lib=OpenThreads");
     // gdal library
     println!("cargo:rustc-link-lib=gdal");
+
+    let vcpkg_share_dir = "./vcpkg_installed/arm64-osx/share";
+    copy_gdal_data(vcpkg_share_dir);
+    copy_proj_data(vcpkg_share_dir);
 }
 
 fn link_compile_commands() {
@@ -98,6 +110,47 @@ fn link_compile_commands() {
     let target_path = format!("{}/compile_commands.json", target_dir);
 
     let _ = fs::copy(&cc_path, &target_path);
+}
+
+fn copy_gdal_data(share: &str) {
+    let profile = env::var("PROFILE").unwrap();
+    let gdal_data = Path::new(share).join("gdal");
+    let out_dir = Path::new(&env::var("CARGO_TARGET_DIR")
+    .unwrap_or("target".into()))
+    .join(&profile)
+    .join("gdal");
+
+    copy_dir_recursive(&gdal_data, &out_dir).unwrap();
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
+    if !dst.exists() {
+        fs::create_dir_all(dst)?;
+    }
+
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let dest_path = dst.join(entry.file_name());
+
+        if path.is_dir() {
+            copy_dir_recursive(&path, &dest_path)?;
+        } else {
+            fs::copy(&path, &dest_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_proj_data(share: &str) {
+    let profile = env::var("PROFILE").unwrap();
+    let proj_data = Path::new(share).join("proj");
+    let out_dir = Path::new(&env::var("CARGO_TARGET_DIR")
+    .unwrap_or("target".into()))
+    .join(&profile)
+    .join("proj");
+
+    copy_dir_recursive(&proj_data, &out_dir).unwrap();
 }
 
 fn main() {
