@@ -1,0 +1,37 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug (Linux, gdb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/_3dtile",
+      "args": ["-f", "osgb", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cargo build",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "sourceLanguages": ["rust", "cpp"]
+    },
+    {
+      "name": "Debug (macOS, lldb)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/_3dtile",
+      "args": ["-f", "osgb", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir"],,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cargo build",
+      "sourceLanguages": ["rust", "cpp"]
+    },
+    {
+      "name": "Debug (Windows, MSVC)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}\\target\\debug\\_3dtile.exe",
+      "args": ["-f", "osgb", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir"],,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cargo build",
+      "sourceLanguages": ["rust", "cpp"]
+    }
+  ]
+}
