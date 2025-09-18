@@ -23,13 +23,24 @@
 static const double pi = std::acos(-1);
 
 extern "C" bool
-epsg_convert(int insrs, double* val, char* path) {
-    CPLSetConfigOption("GDAL_DATA", path);
+epsg_convert(int insrs, double* val, char* gdal_data, char *proj_lib) {
+    CPLSetConfigOption("GDAL_DATA", gdal_data);
+    CPLSetConfigOption("PROJ_LIB", proj_lib);
     OGRSpatialReference inRs,outRs;
-    inRs.importFromEPSG(insrs);
-    outRs.importFromEPSG(4326);
-    OGRCoordinateTransformation *poCT = OGRCreateCoordinateTransformation( &inRs, &outRs );
-    GeoTransform::Init(poCT, val);
+    OGRErr inErr = inRs.importFromEPSG(insrs);
+    if (inErr != OGRERR_NONE) {
+        LOG_E("importFromEPSG(%d) failed, err_code=%d", insrs, inErr);
+        return false;
+    }
+    inRs.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+    OGRErr outErr = outRs.importFromEPSG(4326);
+    if (outErr != OGRERR_NONE) {
+        LOG_E("importFromEPSG(4326) failed, err_code=%d", outErr);
+        return false;
+    }
+    outRs.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+    OGRCoordinateTransformation *poCT = OGRCreateCoordinateTransformation(&inRs, &outRs );
+    // GeoTransform::Init(poCT, val);
     if (poCT) {
         if (poCT->Transform( 1, val, val + 1)) {
             // poCT will be used later so don't delete it
@@ -39,7 +50,7 @@ epsg_convert(int insrs, double* val, char* path) {
         // delete poCT;
     }
     return false;
-} 
+}
 
 extern "C" bool
 wkt_convert(char* wkt, double* val, char* path) {
@@ -99,7 +110,7 @@ transfrom_xyz(double radian_x, double radian_y, double height_min){
     double px = x0 / gamma;
     double py = y0 / gamma;
     double pz = z0 / gamma;
-    
+
     double dx = xn * height_min;
     double dy = yn * height_min;
     double dz = zn * height_min;
@@ -111,13 +122,13 @@ transfrom_xyz(double radian_x, double radian_y, double height_min){
         (x0*east_mat[1] - east_mat[0]*y0)
     };
     double east_normal = std::sqrt(
-        east_mat[0]*east_mat[0] + 
-        east_mat[1]*east_mat[1] + 
+        east_mat[0]*east_mat[0] +
+        east_mat[1]*east_mat[1] +
         east_mat[2]*east_mat[2]
         );
     double north_normal = std::sqrt(
-        north_mat[0]*north_mat[0] + 
-        north_mat[1]*north_mat[1] + 
+        north_mat[0]*north_mat[0] +
+        north_mat[1]*north_mat[1] +
         north_mat[2]*north_mat[2]
         );
 
@@ -197,11 +208,11 @@ write_tileset_box(Transform* trans, Box& box, double geometricError,
 }
 
 bool write_tileset_region(
-    Transform* trans, 
+    Transform* trans,
     Region& region,
     double geometricError,
     const char* b3dm_file,
-    const char* json_file) 
+    const char* json_file)
 {
     std::vector<double> matrix;
     if (trans) {
@@ -279,13 +290,13 @@ write_tileset(double radian_x, double radian_y,
         (x0*east_mat[1] - east_mat[0]*y0)
     };
     double east_normal = std::sqrt(
-        east_mat[0]*east_mat[0] + 
-        east_mat[1]*east_mat[1] + 
+        east_mat[0]*east_mat[0] +
+        east_mat[1]*east_mat[1] +
         east_mat[2]*east_mat[2]
         );
     double north_normal = std::sqrt(
-        north_mat[0]*north_mat[0] + 
-        north_mat[1]*north_mat[1] + 
+        north_mat[0]*north_mat[0] +
+        north_mat[1]*north_mat[1] +
         north_mat[2]*north_mat[2]
         );
 

@@ -24,10 +24,10 @@ extern "C" {
     ) -> *mut libc::c_void;
 
     pub fn osgb2glb(name_in: *const u8, name_out: *const u8) -> bool;
- 
+
 	fn transform_c(radian_x: f64, radian_y: f64, height_min: f64, ptr: *mut f64);
 
-    pub fn epsg_convert(insrs: i32, val: *mut f64, gdal: *const i8) -> bool;
+    pub fn epsg_convert(insrs: i32, val: *mut f64, gdal: *const i8, proj: *const i8) -> bool;
 
     pub fn wkt_convert(gdal: *const u8, val: *mut f64, gdal: *const i8) -> bool;
 
