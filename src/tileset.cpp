@@ -40,7 +40,7 @@ epsg_convert(int insrs, double* val, char* gdal_data, char *proj_lib) {
     }
     outRs.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
     OGRCoordinateTransformation *poCT = OGRCreateCoordinateTransformation(&inRs, &outRs );
-    // GeoTransform::Init(poCT, val);
+    GeoTransform::Init(poCT, val);
     if (poCT) {
         if (poCT->Transform( 1, val, val + 1)) {
             // poCT will be used later so don't delete it

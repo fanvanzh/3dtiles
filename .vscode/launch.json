@@ -18,7 +18,7 @@
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/target/debug/_3dtile",
-      "args": ["-f", "osgb", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir"],,
+      "args": ["-f", "osgb", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "cargo build",
       "sourceLanguages": ["rust", "cpp"]
@@ -28,7 +28,7 @@
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}\\target\\debug\\_3dtile.exe",
-      "args": ["-f", "osgb", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir"],,
+      "args": ["-f", "osgb", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "cargo build",
       "sourceLanguages": ["rust", "cpp"]
