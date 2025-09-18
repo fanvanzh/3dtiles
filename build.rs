@@ -1,7 +1,7 @@
 extern crate cmake;
 extern crate pkg_config;
 use cmake::Config;
-use std::env;
+use std::{env, fs, io};
 
 fn build_win_msvc() {
     // Probe Library Link for GDAL and OpenSceneGraph
@@ -79,6 +79,27 @@ fn build_macos() {
     println!("cargo:rustc-link-lib=gdal");
 }
 
+fn link_compile_commands() {
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let build_dir = format!("{}/build", out_dir);
+    let cc_path = format!("{}/compile_commands.json", build_dir);
+
+    // 拷到项目根目录（或固定目录）
+    let project_root = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let target_dir = format!("{}/.vscode", project_root);
+    match fs::create_dir(target_dir.as_str()) {
+        Ok(_) => {}
+        Err(e) => {
+            if e.kind() != io::ErrorKind::AlreadyExists {
+                panic!("{}", e);
+            }
+        }
+    };
+    let target_path = format!("{}/compile_commands.json", target_dir);
+
+    let _ = fs::copy(&cc_path, &target_path);
+}
+
 fn main() {
     match env::var("TARGET") {
         Ok(val) => match val.as_str() {
@@ -89,4 +110,6 @@ fn main() {
         },
         _ => {}
     }
+
+    link_compile_commands();
 }

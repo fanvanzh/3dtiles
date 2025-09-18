@@ -1,2 +1,4 @@
 /target/
 /vcpkg_installed/
+/.vscode/compile_commands.json
+/.cache/
