@@ -33,6 +33,9 @@ fn build_linux_unkown() {
     pkg_config::Config::new().atleast_version("3.8.4").probe("gdal").unwrap();
     pkg_config::Config::new().probe("openscenegraph").unwrap();
     let dst = Config::new(".").very_verbose(true).build();
+    println!("cmake dst = {}", dst.display());
+    // Link Search Path for C++ Implementation
+    println!("cargo:rustc-link-search=native={}/lib", dst.display());
     // for FFI C++ static library
     println!("cargo:rustc-link-lib=static=_3dtile");
     // -------------
@@ -45,6 +48,8 @@ fn build_linux_unkown() {
     println!("cargo:rustc-link-lib=OpenThreads");
     // gdal library
     println!("cargo:rustc-link-lib=gdal");
+    // Link Standard C++
+    println!("cargo:rustc-link-lib=stdc++");
 
     // for ubuntu 22.04 using apt install libgdal-dev
     copy_gdal_data("/usr/share/");
@@ -75,7 +80,7 @@ fn build_macos() {
 
     // GDAL library
     println!("cargo:rustc-link-lib=gdal");
-    // Link Search Path for C++ Implementation
+    // Link Standard C++
     println!("cargo:rustc-link-lib=c++");
     copy_gdal_data("/opt/homebrew/opt/gdal/share/");
     copy_proj_data("/opt/homebrew/opt/proj/share/");
