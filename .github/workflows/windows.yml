@@ -1,6 +1,9 @@
 name: Windows
 
-on: [push]
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
 jobs:
   build-and-test:
     runs-on: windows-latest

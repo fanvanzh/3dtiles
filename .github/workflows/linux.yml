@@ -1,6 +1,9 @@
 name: Ubuntu
 
-on: [push]
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -16,6 +19,6 @@ jobs:
 
     - name: Build
       run: cargo build --verbose --release
-    
+
     - name: Test
       run: cargo test --verbose
