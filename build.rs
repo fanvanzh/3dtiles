@@ -30,8 +30,8 @@ fn build_win_msvc() {
 
 fn build_linux_unkown() {
     // Probe Library Link for GDAL and OpenSceneGraph
-    pkg_config::Config::new().atleast_version("3.9.3").probe("gdal").unwrap();
-    pkg_config::Config::new().atleast_version("3.6.5").probe("OpenSceneGraph").unwrap();
+    pkg_config::Config::new().atleast_version("3.8.4").probe("gdal").unwrap();
+    pkg_config::Config::new().probe("openscenegraph").unwrap();
     let dst = Config::new(".").very_verbose(true).build();
     // for FFI C++ static library
     println!("cargo:rustc-link-lib=static=_3dtile");
@@ -46,13 +46,14 @@ fn build_linux_unkown() {
     // gdal library
     println!("cargo:rustc-link-lib=gdal");
 
-    copy_gdal_data("/usr/lib/x86_64-linux-gnu/share/");
-    copy_proj_data("/usr/lib/x86_64-linux-gnu/share/");
+    // for ubuntu 22.04 using apt install libgdal-dev
+    copy_gdal_data("/usr/share/");
+    copy_proj_data("/usr/share/");
 }
 
 fn build_macos() {
     // Probe Library Link for GDAL and OpenSceneGraph
-    pkg_config::Config::new().atleast_version("3.9.3").probe("gdal").unwrap();
+    pkg_config::Config::new().atleast_version("3.8.4").probe("gdal").unwrap();
     pkg_config::Config::new().atleast_version("3.6.5").probe("OpenSceneGraph").unwrap();
     // Get VCPKG_ROOT environment variable
     let dst = Config::new(".").very_verbose(true).build();
