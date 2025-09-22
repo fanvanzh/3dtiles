@@ -1,0 +1,9 @@
+{
+  "configurations": [
+    {
+      "name": "compile_commands.json",
+      "compileCommands": "./build/compile_commands.json"
+    }
+  ],
+  "version": 4
+}
