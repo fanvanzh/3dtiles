@@ -3,7 +3,11 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.22)
 PROJECT(3dtiles)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_compile_options(-Wno-error=unguarded-availability-new)
+
+if(APPLE)
+    # 在 macOS 或其他 Apple 系统下
+    add_compile_options(-Wno-error=unguarded-availability-new)
+endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
