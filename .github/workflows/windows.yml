@@ -32,9 +32,7 @@ jobs:
       run: |
         git clone https://github.com/microsoft/vcpkg.git
         ./vcpkg/bootstrap-vcpkg.bat
-        ./vcpkg/vcpkg install gdal:x64-windows-release
-        ./vcpkg/vcpkg install osg:x64-windows-release
-        tree ./vcpkg/installed /F /A
+        ./vcpkg/vcpkg install
 
     - name: Set VCPKG_ROOT
       run: echo "VCPKG_ROOT=${{ github.workspace }}\\vcpkg" >> $env:GITHUB_ENV
