@@ -12,9 +12,15 @@ fn build_win_msvc() {
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
     // for FFI C++ static library
     println!("cargo:rustc-link-lib=static=_3dtile");
-    // Link Search Path for Third Party Libraries
-    let vcpkg_installed_dir = "./vcpkg_installed/x64-windows/lib";
-    println!("cargo:rustc-link-search=native={}", vcpkg_installed_dir);
+    let out_dir = env::var("OUT_DIR").unwrap();
+    println!("cargo:warning=out_dir = {}", &out_dir);
+    print_vcpkg_tree(Path::new(&out_dir)).unwrap();
+    // vcpkg_installed path
+    let vcpkg_installed_dir = Path::new(&out_dir).join("build").join("vcpkg_installed").join("x64-windows");
+
+    // Link Search Path for third party library
+    let vcpkg_installed_lib_dir = vcpkg_installed_dir.join("lib");
+    println!("cargo:rustc-link-search=native={}", vcpkg_installed_lib_dir.display());
     // openscenegraph library
     println!("cargo:rustc-link-lib=osg");
     println!("cargo:rustc-link-lib=osgDB");
@@ -23,9 +29,18 @@ fn build_win_msvc() {
     // gdal library
     println!("cargo:rustc-link-lib=gdal");
 
-    let vcpkg_share_dir = "./vcpkg_installed/x64-windows/share";
-    copy_gdal_data(vcpkg_share_dir);
-    copy_proj_data(vcpkg_share_dir);
+    // copy gdal and proj data
+    let vcpkg_share_dir = vcpkg_installed_dir.join("share");
+    copy_gdal_data(vcpkg_share_dir.to_str().unwrap());
+    copy_proj_data(vcpkg_share_dir.to_str().unwrap());
+}
+
+fn get_target_dir() -> std::path::PathBuf {
+    let profile = env::var("PROFILE").unwrap();
+    let target_dir = Path::new(&env::var("CARGO_TARGET_DIR")
+    .unwrap_or("target".into()))
+    .join(&profile);
+    target_dir
 }
 
 fn build_linux_unkown() {
@@ -87,13 +102,11 @@ fn build_macos() {
 }
 
 fn copy_gdal_data(share: &str) {
-    let profile = env::var("PROFILE").unwrap();
     let gdal_data = Path::new(share).join("gdal");
-    let out_dir = Path::new(&env::var("CARGO_TARGET_DIR")
-    .unwrap_or("target".into()))
-    .join(&profile)
+    let out_dir = get_target_dir()
     .join("gdal");
 
+    println!("gdal_data -> {}, out_dir -> {}", gdal_data.display(),out_dir.display());
     copy_dir_recursive(&gdal_data, &out_dir).unwrap();
 }
 
@@ -117,17 +130,56 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
 }
 
 fn copy_proj_data(share: &str) {
-    let profile = env::var("PROFILE").unwrap();
     let proj_data = Path::new(share).join("proj");
-    let out_dir = Path::new(&env::var("CARGO_TARGET_DIR")
-    .unwrap_or("target".into()))
-    .join(&profile)
+    let out_dir = get_target_dir()
     .join("proj");
+        println!("proj_data -> {}, out_dir -> {}", proj_data.display(),out_dir.display());
 
     copy_dir_recursive(&proj_data, &out_dir).unwrap();
 }
 
+/// 打印 ./vcpkg_installed 下的目录树，用 cargo:warning 输出，这样能在 cargo build 输出中看到
+fn print_vcpkg_tree(root: &Path) -> io::Result<()> {
+    if !root.exists() {
+        println!("cargo:warning=path '{}' does not exist", root.display());
+        return Ok(());
+    }
+    fn walk(path: &Path, prefix: &str) -> io::Result<()> {
+        let meta = fs::metadata(path)?;
+        if meta.is_dir() {
+            println!("cargo:warning={}{}", prefix, path.file_name().map(|s| s.to_string_lossy()).unwrap_or_else(|| path.display().to_string().into()));
+            let mut entries: Vec<_> = fs::read_dir(path)?.collect();
+            entries.sort_by_key(|e| e.as_ref().map(|e| e.file_name()).ok());
+            for entry in entries {
+                let entry = entry?;
+                let p = entry.path();
+                if p.is_dir() {
+                    walk(&p, &format!("{}  ", prefix))?;
+                } else {
+                    println!("cargo:warning={}  {}", prefix, entry.file_name().to_string_lossy());
+                }
+            }
+        } else {
+            println!("cargo:warning={} (file)", path.display());
+        }
+        Ok(())
+    }
+    // 根节点打印特殊处理
+    println!("cargo:warning=Listing {}", root.display());
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let p = entry.path();
+        if p.is_dir() {
+            walk(&p, "")?;
+        } else {
+            println!("cargo:warning=  {}", entry.file_name().to_string_lossy());
+        }
+    }
+    Ok(())
+}
+
 fn main() {
+    std::env::set_var("RUST_BACKTRACE", "full");
     match env::var("TARGET") {
         Ok(val) => match val.as_str() {
             "x86_64-unknown-linux-gnu" => build_linux_unkown(),
