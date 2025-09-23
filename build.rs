@@ -13,7 +13,7 @@ fn build_win_msvc() {
     // for FFI C++ static library
     println!("cargo:rustc-link-lib=static=_3dtile");
     // Link Search Path for Third Party Libraries
-    let vcpkg_installed_dir = "./vcpkg_installed/x64-windows/lib";
+    let vcpkg_installed_dir = "./vcpkg/installed/x64-windows-release/lib";
     println!("cargo:rustc-link-search=native={}", vcpkg_installed_dir);
     // openscenegraph library
     println!("cargo:rustc-link-lib=osg");
@@ -23,7 +23,7 @@ fn build_win_msvc() {
     // gdal library
     println!("cargo:rustc-link-lib=gdal");
 
-    let vcpkg_share_dir = "./vcpkg_installed/x64-windows/share";
+    let vcpkg_share_dir = "./vcpkg/installed/x64-windows-release/share";
     copy_gdal_data(vcpkg_share_dir);
     copy_proj_data(vcpkg_share_dir);
 }

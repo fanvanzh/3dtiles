@@ -10,7 +10,7 @@ if(APPLE)
 endif()
 
 if (WIN32)
-    set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}scripts/buildsystems/vcpkg.cmake")
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}scripts/buildsystems/vcpkg.cmake")
 endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
