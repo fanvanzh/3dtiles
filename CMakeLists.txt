@@ -9,6 +9,10 @@ if(APPLE)
     add_compile_options(-Wno-error=unguarded-availability-new)
 endif()
 
+if (WIN32)
+    set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}scripts/buildsystems/vcpkg.cmake")
+endif()
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 file(GLOB_RECURSE SOURCES src/*.cpp)
