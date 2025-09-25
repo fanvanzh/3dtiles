@@ -1,6 +1,9 @@
 name: Windows
 
-on: [push]
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
 jobs:
   build-and-test:
     runs-on: windows-latest
@@ -8,11 +11,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Cache dependencies
+    # 缓存 vcpkg 已安装包 & 构建产物
+    - name: Cache vcpkg artifacts
       uses: actions/cache@v4
       id: cache-vcpkg
       with:
-        path: ./vcpkg
+        path: |
+          ${{ env.VCPKG_ROOT }}
+          ${{ github.workspace }}/vcpkg_installed
+          !${{ env.VCPKG_ROOT }}/.git
+          !${{ env.VCPKG_ROOT }}/buildtrees
+          !${{ env.VCPKG_ROOT }}/packages
+          !${{ env.VCPKG_ROOT }}/downloads
         key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/build.rs') }}
         restore-keys: |
           ${{ runner.os }}-vcpkg-
@@ -25,6 +35,9 @@ jobs:
         ./vcpkg/vcpkg install gdal:x64-windows-release
         ./vcpkg/vcpkg install osg:x64-windows-release
         tree ./vcpkg/installed /F /A
+
+    - name: Set VCPKG_ROOT
+      run: echo "VCPKG_ROOT=${{ github.workspace }}\\vcpkg" >> $env:GITHUB_ENV
 
     - name: Build
       run: cargo build --verbose --release
