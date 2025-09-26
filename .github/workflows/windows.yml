@@ -4,33 +4,45 @@ on:
   push:
   pull_request:
     types: [opened, synchronize, reopened]
+
 jobs:
   build-and-test:
     runs-on: windows-latest
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+      VCPKG_TRIPLET: x64-windows
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set VCPKG_ROOT
-      run: echo "VCPKG_ROOT=${{ github.workspace }}\\vcpkg" >> $env:GITHUB_ENV
+    - name: Debug paths
+      run: |
+        echo "GITHUB_WORKSPACE=${{ github.workspace }}"
+        echo "VCPKG_ROOT=${{ env.VCPKG_ROOT }}"
+        echo "WORKDIR=$(pwd)"
+        dir
+      shell: cmd
 
-    # 缓存 vcpkg 已安装包 & 构建产物
+    # 缓存 vcpkg 工具与 repo 下的 vcpkg_installed（表达式在模板展开时可用）
     - name: Cache vcpkg artifacts
       uses: actions/cache@v4
       id: cache-vcpkg
       with:
         path: |
-          ${{ github.workspace }}/vcpkg_installed
-          ${{ github.workspace }}/vcpkg
-        key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/build.rs') }}
+          ${{ env.VCPKG_ROOT }}
+          ${{ github.workspace }}\vcpkg_installed
+        key: ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('vcpkg.json') }}
         restore-keys: |
+          ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-
           ${{ runner.os }}-vcpkg-
 
     - name: Install dependencies on Windows
       if: steps.cache-vcpkg.outputs.cache-hit != 'true'
       run: |
-        git clone https://github.com/microsoft/vcpkg.git
-        ./vcpkg/bootstrap-vcpkg.bat
+        git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
+        "%VCPKG_ROOT%\bootstrap-vcpkg.bat"
+        "%VCPKG_ROOT%\vcpkg.exe" install gdal[core]:%VCPKG_TRIPLET% openscenegraph:%VCPKG_TRIPLET%
+      shell: cmd
 
     - name: Build
       run: cargo build -vv --release
