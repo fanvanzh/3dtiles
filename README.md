@@ -1,4 +1,4 @@
-**English | [简体中文](#简介)** 
+**English | [简体中文](#简介)**
 
 # Introduction
 
@@ -12,7 +12,7 @@
 
 - `Esri Shapefile` to `3D-Tiles`: convert shapefile to 3D-Tiles.
 
-You may intereted in: 
+You may intereted in:
 
 - [How to build?](https://github.com/fanvanzh/3dtiles/wiki/How-to-build)
 
@@ -95,6 +95,9 @@ _3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
 - `Osgb(OpenSceneGraph Binary)` 转 `3D-Tiles`
 
 - `Esri Shapefile` 转 `3D-Tiles`
+
+# 生成compile_commands.json便于vscode索引C++头文件
+cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 # 编译
 ## Ubuntu
