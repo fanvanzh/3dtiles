@@ -32,9 +32,9 @@ fn walk_path(dir: &Path, cb: &mut dyn FnMut(&str)) -> io::Result<()> {
 
 pub fn shape_batch_convert(from: &str, to: &str, height: &str) -> bool {
     unsafe {
-        let mut source_vec = CString::new(from).unwrap();
-        let mut dest_vec = CString::new(to).unwrap();
-        let mut height_vec = CString::new(height).unwrap();
+        let source_vec = CString::new(from).unwrap();
+        let dest_vec = CString::new(to).unwrap();
+        let height_vec = CString::new(height).unwrap();
         let res = shp23dtile(
             source_vec.as_ptr() as *const u8,
             0,

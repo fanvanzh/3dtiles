@@ -206,6 +206,7 @@ fn convert_gltf(src: &str, dest: &str) {
     }
 }
 
+#[allow(dead_code)]
 #[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 struct ModelMetadata {
