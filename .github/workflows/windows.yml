@@ -17,10 +17,15 @@ jobs:
 
     - name: Debug paths
       run: |
-        echo "GITHUB_WORKSPACE=${{ github.workspace }}"
-        echo "VCPKG_ROOT=${{ env.VCPKG_ROOT }}"
-        echo "WORKDIR=$(pwd)"
-        dir "%VCPKG_ROOT%"
+        echo GITHUB_WORKSPACE=${{ github.workspace }}
+        echo VCPKG_ROOT=%VCPKG_ROOT%
+        echo WORKDIR=%CD%
+        if exist "%VCPKG_ROOT%" (
+          echo "VCPKG_ROOT exists, listing:"
+          dir "%VCPKG_ROOT%" /b
+        ) else (
+          echo "VCPKG_ROOT not found (expected on first run)"
+        )
       shell: cmd
 
     - name: Cache vcpkg artifacts
@@ -32,6 +37,7 @@ jobs:
           ${{ env.VCPKG_ROOT }}\packages
           ${{ env.VCPKG_ROOT }}\downloads
           ${{ github.workspace }}\vcpkg_installed
+        # if you don't have vcpkg.json, replace hashFiles(...) with a fixed token
         key: ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('vcpkg.json') }}
         restore-keys: |
           ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-
@@ -39,7 +45,6 @@ jobs:
 
     - name: Show cache result & inspect installed
       run: |
-        echo cache-hit=%CACHE_HIT%
         echo "cache-hit(official)=${{ steps.cache-vcpkg.outputs.cache-hit }}"
         if exist "%VCPKG_ROOT%\installed\%VCPKG_TRIPLET%" (
           echo "Installed dir contents:"
