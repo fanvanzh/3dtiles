@@ -49,8 +49,6 @@ git clone https://github.com/fanvanzh/3dtiles.git
 cd 3dtiles
 git clone https://github.com/microsoft/vcpkg.git
 .\vcpkg\bootstrap-vcpkg.bat
-.\vcpkg\vcpkg install osg:x64-windows-release
-.\vcpkg\vcpkg install gdal:x64-windows-release
 cargo build --release
 ```
 # Usage
@@ -126,8 +124,6 @@ git clone https://github.com/fanvanzh/3dtiles.git
 cd 3dtiles
 git clone https://github.com/microsoft/vcpkg.git
 .\vcpkg\bootstrap-vcpkg.bat
-.\vcpkg\vcpkg install osg:x64-windows-release
-.\vcpkg\vcpkg install gdal:x64-windows-release
 cargo build --release
 ```
 ## MacOS
