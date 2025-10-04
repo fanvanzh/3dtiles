@@ -1,0 +1,31 @@
+name: macOS
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  build-and-test:
+    runs-on: macos-15
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Homebrew
+      id: set-up-homebrew
+      uses: Homebrew/actions/setup-homebrew@main
+
+    - name: Install dependencies on macOS
+      run: |
+        brew install gdal open-scene-graph
+
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Build
+      run: cargo build --verbose --release
+
+    - name: Test
+      run: cargo test --verbose

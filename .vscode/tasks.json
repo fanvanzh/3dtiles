@@ -1,0 +1,16 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cargo build",          // 👈 这里必须和 launch.json 里的一致
+      "type": "shell",
+      "command": "cargo",
+      "args": ["build"],               // 如果你要调试 release，可以写 ["build", "--release"]
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$rustc"]
+    }
+  ]
+}

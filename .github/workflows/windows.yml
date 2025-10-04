@@ -4,40 +4,69 @@ on:
   push:
   pull_request:
     types: [opened, synchronize, reopened]
+
 jobs:
   build-and-test:
     runs-on: windows-latest
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+      VCPKG_TRIPLET: x64-windows
 
     steps:
     - uses: actions/checkout@v4
 
-    # 缓存 vcpkg 已安装包 & 构建产物
+    - name: Debug paths
+      run: |
+        echo GITHUB_WORKSPACE=${{ github.workspace }}
+        echo VCPKG_ROOT=%VCPKG_ROOT%
+        echo WORKDIR=%CD%
+        if exist "%VCPKG_ROOT%" (
+          echo "VCPKG_ROOT exists, listing:"
+          dir "%VCPKG_ROOT%" /b
+        ) else (
+          echo "VCPKG_ROOT not found (expected on first run)"
+        )
+      shell: cmd
+
     - name: Cache vcpkg artifacts
       uses: actions/cache@v4
       id: cache-vcpkg
       with:
         path: |
-          ${{ env.VCPKG_ROOT }}
-          ${{ github.workspace }}/vcpkg_installed
-          !${{ env.VCPKG_ROOT }}/.git
-          !${{ env.VCPKG_ROOT }}/buildtrees
-          !${{ env.VCPKG_ROOT }}/packages
-          !${{ env.VCPKG_ROOT }}/downloads
-        key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/build.rs') }}
+          ${{ env.VCPKG_ROOT }}\installed\${{ env.VCPKG_TRIPLET }}
+          ${{ env.VCPKG_ROOT }}\packages
+          ${{ env.VCPKG_ROOT }}\downloads
+          ${{ github.workspace }}\vcpkg_installed
+        # if you don't have vcpkg.json, replace hashFiles(...) with a fixed token
+        key: ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('vcpkg.json') }}
         restore-keys: |
+          ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-
           ${{ runner.os }}-vcpkg-
+
+    - name: Show cache result & inspect installed
+      run: |
+        echo "cache-hit(official)=${{ steps.cache-vcpkg.outputs.cache-hit }}"
+        if exist "%VCPKG_ROOT%\installed\%VCPKG_TRIPLET%" (
+          echo "Installed dir contents:"
+          dir "%VCPKG_ROOT%\installed\%VCPKG_TRIPLET%" /b
+        ) else (
+          echo "No installed dir at %VCPKG_ROOT%\installed\%VCPKG_TRIPLET%"
+        )
+        if exist "%GITHUB_WORKSPACE%\vcpkg_installed" (
+          echo "repo vcpkg_installed contents:"
+          dir "%GITHUB_WORKSPACE%\vcpkg_installed" /b
+        ) else (
+          echo "No repo vcpkg_installed at %GITHUB_WORKSPACE%\vcpkg_installed"
+        )
+      shell: cmd
 
     - name: Install dependencies on Windows
       if: steps.cache-vcpkg.outputs.cache-hit != 'true'
       run: |
-        git clone https://github.com/microsoft/vcpkg.git
-        ./vcpkg/bootstrap-vcpkg.bat
-        ./vcpkg/vcpkg install gdal:x64-windows-release
-        ./vcpkg/vcpkg install osg:x64-windows-release
-        tree ./vcpkg/installed /F /A
-
-    - name: Set VCPKG_ROOT
-      run: echo "VCPKG_ROOT=${{ github.workspace }}\\vcpkg" >> $env:GITHUB_ENV
+        git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
+        "%VCPKG_ROOT%\bootstrap-vcpkg.bat"
+        "%VCPKG_ROOT%\vcpkg.exe" install gdal[core]:%VCPKG_TRIPLET% openscenegraph:%VCPKG_TRIPLET%
+      shell: cmd
 
     - name: Build
-      run: cargo build --verbose --release
+      run: cargo build -vv --release
