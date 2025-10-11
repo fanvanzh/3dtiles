@@ -97,6 +97,11 @@ _3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
 # 生成compile_commands.json便于vscode索引C++头文件
 cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
+# 构建Docker镜像
+./build-dockerfile.sh
+./build-dockerfile.sh master
+./build-dockerfile.sh WallanceLee feature/Dockerfile
+
 # 编译
 ## Ubuntu
 ```
