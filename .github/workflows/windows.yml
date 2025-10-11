@@ -77,12 +77,6 @@ jobs:
         )
       shell: cmd
 
-    - name: Install dependencies on Windows
-      run: |
-        echo "Installing dependencies..."
-        "%VCPKG_ROOT%\vcpkg.exe" install gdal[core]:%VCPKG_TRIPLET% openscenegraph:%VCPKG_TRIPLET%
-      shell: cmd
-
     - name: Verify vcpkg installation
       run: |
         if not exist "%VCPKG_ROOT%\vcpkg.exe" (
