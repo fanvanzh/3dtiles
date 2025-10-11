@@ -1,6 +1,12 @@
 {
   "dependencies": [
-    "osg",
-    "gdal"
+    {
+        "name": "osg",
+        "platform": "windows"
+    },
+    {
+        "name": "gdal",
+        "platform": "windows"
+    }
   ]
 }
