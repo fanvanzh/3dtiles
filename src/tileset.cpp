@@ -161,6 +161,40 @@ transform_c(double center_x, double center_y, double height_min, double* ptr) {
     std::memcpy(ptr, v.data(), v.size() * 8);
 }
 
+// New function to handle ENU offsets in transform matrix
+extern "C" void
+transform_c_with_enu_offset(double center_x, double center_y, double height_min,
+                           double enu_offset_x, double enu_offset_y, double enu_offset_z,
+                           double* ptr) {
+    double radian_x = degree2rad( center_x );
+    double radian_y = degree2rad( center_y );
+
+    // Calculate base transform matrix
+    std::vector<double> v = transfrom_xyz(radian_x, radian_y, height_min);
+
+    // Apply ENU offset to the translation components (indices 12, 13, 14)
+    // Convert ENU offset to ECEF offset and add to translation
+    double lat_rad = degree2rad(center_y);
+    double lon_rad = degree2rad(center_x);
+
+    double sinLat = std::sin(lat_rad);
+    double cosLat = std::cos(lat_rad);
+    double sinLon = std::sin(lon_rad);
+    double cosLon = std::cos(lon_rad);
+
+    // ENU to ECEF transformation
+    double ecef_offset_x = -sinLon * enu_offset_x - sinLat * cosLon * enu_offset_y + cosLat * cosLon * enu_offset_z;
+    double ecef_offset_y =  cosLon * enu_offset_x - sinLat * sinLon * enu_offset_y + cosLat * sinLon * enu_offset_z;
+    double ecef_offset_z =  cosLat * enu_offset_y + sinLat * enu_offset_z;
+
+    // Add ECEF offset to translation components
+    v[12] += ecef_offset_x;
+    v[13] += ecef_offset_y;
+    v[14] += ecef_offset_z;
+
+    std::memcpy(ptr, v.data(), v.size() * 8);
+}
+
 bool
 write_tileset_box(Transform* trans, Box& box, double geometricError,
                     const char* b3dm_file, const char* json_file) {

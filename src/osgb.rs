@@ -27,6 +27,10 @@ extern "C" {
 
 	fn transform_c(radian_x: f64, radian_y: f64, height_min: f64, ptr: *mut f64);
 
+	fn transform_c_with_enu_offset(center_x: f64, center_y: f64, height_min: f64,
+	                               enu_offset_x: f64, enu_offset_y: f64, enu_offset_z: f64,
+	                               ptr: *mut f64);
+
     pub fn epsg_convert(insrs: i32, val: *mut f64, gdal: *const i8, proj: *const i8) -> bool;
 
     pub fn wkt_convert(gdal: *const u8, val: *mut f64, gdal: *const i8) -> bool;
@@ -67,6 +71,7 @@ pub fn osgb_batch_convert(
     center_y: f64,
     region_offset: Option<f64>,
     pbr_texture: bool,
+    enu_offset: Option<(f64, f64, f64)>,
 ) -> Result<(), Box<dyn Error>> {
     use std::fs::File;
     use std::io::prelude::*;
@@ -179,7 +184,13 @@ pub fn osgb_batch_convert(
     }
     let mut trans_vec = vec![0f64; 16];
     unsafe {
-        transform_c(center_x, center_y, tras_height, trans_vec.as_mut_ptr());
+        if let Some((enu_x, enu_y, enu_z)) = enu_offset {
+            // Use the ENU-aware transform function
+            transform_c_with_enu_offset(center_x, center_y, tras_height, enu_x, enu_y, enu_z, trans_vec.as_mut_ptr());
+        } else {
+            // Use standard transform function
+            transform_c(center_x, center_y, tras_height, trans_vec.as_mut_ptr());
+        }
     }
     let mut root_json = json!(
         {

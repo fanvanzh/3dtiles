@@ -13,10 +13,10 @@ pub mod fun_c;
 mod osgb;
 mod shape;
 
-use chrono::prelude::*;
-use serde::{Deserialize};
+ use chrono::prelude::*;
 use clap::{App, Arg};
 use log::{Level, LevelFilter};
+use serde::Deserialize;
 use std::io::Write;
 
 fn main() {
@@ -228,7 +228,8 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     let mut center_y = 0f64;
     let mut max_lvl = None;
     let mut trans_region = None;
-    let mut pbr_texture  = false;
+    let mut pbr_texture = false;
+    let mut enu_offset: Option<(f64, f64, f64)> = None;
 
     // try parse metadata.xml
     let metadata_file = dir.join("metadata.xml");
@@ -238,9 +239,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
             let mut buffer = String::new();
             if let Ok(_) = f.read_to_string(&mut buffer) {
                 //
-                if let Ok(metadata) =
-                    serde_xml_rs::from_str::<ModelMetadata>(&buffer)
-                {
+                if let Ok(metadata) = serde_xml_rs::from_str::<ModelMetadata>(&buffer) {
                     //println!("{:?}", metadata);
                     let v: Vec<&str> = metadata.SRS.split(":").collect();
                     if v.len() > 1 {
@@ -252,6 +251,33 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                                 if v1_num.is_ok() && v2_num.is_ok() {
                                     center_y = v1_num.unwrap();
                                     center_x = v2_num.unwrap();
+
+                                    // Parse and apply SRSOrigin offset
+                                    let origin_parts: Vec<&str> =
+                                        metadata.SRSOrigin.split(",").collect();
+                                    if origin_parts.len() >= 2 {
+                                        if let (Ok(offset_x), Ok(offset_y)) = (
+                                            origin_parts[0].parse::<f64>(),
+                                            origin_parts[1].parse::<f64>(),
+                                        ) {
+                                            // Parse Z offset (height) if available
+                                            let offset_z = if origin_parts.len() >= 3 {
+                                                origin_parts[2].parse::<f64>().unwrap_or(0.0)
+                                            } else {
+                                                0.0
+                                            };
+
+                                            // Store ENU offset for use in transform matrix
+                                            enu_offset = Some((offset_x, offset_y, offset_z));
+
+                                            info!("ENU SRSOrigin offset detected: x={}, y={}, z={}", offset_x, offset_y, offset_z);
+                                            info!("Using original center coordinates for transform matrix: lon={}, lat={}", center_x, center_y);
+                                        } else {
+                                            error!("Failed to parse SRSOrigin values");
+                                        }
+                                    } else {
+                                        error!("SRSOrigin format invalid, expected x,y,z");
+                                    }
                                 } else {
                                     error!("parse ENU point error");
                                 }
@@ -383,8 +409,9 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     }
     let tick = time::SystemTime::now();
     if let Err(e) = osgb::osgb_batch_convert(
-                        &dir, &dir_dest, max_lvl,
-                        center_x, center_y, trans_region, pbr_texture)
+        &dir, &dir_dest, max_lvl,
+        center_x, center_y, trans_region, pbr_texture,
+        enu_offset)
     {
         error!("{}", e);
         return;
