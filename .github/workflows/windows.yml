@@ -38,7 +38,7 @@ jobs:
           ${{ env.VCPKG_ROOT }}\downloads
           ${{ github.workspace }}\vcpkg_installed
         # if you don't have vcpkg.json, replace hashFiles(...) with a fixed token
-        key: ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('vcpkg.json') }}
+        key: ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('vcpkg.json') }}-v2
         restore-keys: |
           ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-
           ${{ runner.os }}-vcpkg-
@@ -60,12 +60,37 @@ jobs:
         )
       shell: cmd
 
-    - name: Install dependencies on Windows
-      if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+    - name: Setup vcpkg
       run: |
-        git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
-        "%VCPKG_ROOT%\bootstrap-vcpkg.bat"
+        if not exist "%VCPKG_ROOT%\vcpkg.exe" (
+          echo "Setting up vcpkg..."
+          if exist "%VCPKG_ROOT%" (
+            echo "Removing incomplete vcpkg directory..."
+            rmdir /s /q "%VCPKG_ROOT%"
+          )
+          echo "Cloning vcpkg..."
+          git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
+          echo "Bootstrapping vcpkg..."
+          "%VCPKG_ROOT%\bootstrap-vcpkg.bat"
+        ) else (
+          echo "vcpkg.exe already exists, skipping setup"
+        )
+      shell: cmd
+
+    - name: Install dependencies on Windows
+      run: |
+        echo "Installing dependencies..."
         "%VCPKG_ROOT%\vcpkg.exe" install gdal[core]:%VCPKG_TRIPLET% openscenegraph:%VCPKG_TRIPLET%
+      shell: cmd
+
+    - name: Verify vcpkg installation
+      run: |
+        if not exist "%VCPKG_ROOT%\vcpkg.exe" (
+          echo "ERROR: vcpkg.exe not found at %VCPKG_ROOT%\vcpkg.exe"
+          exit /b 1
+        )
+        echo "vcpkg.exe found, verifying installation..."
+        "%VCPKG_ROOT%\vcpkg.exe" version
       shell: cmd
 
     - name: Build
