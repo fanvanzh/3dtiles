@@ -36,9 +36,12 @@ jobs:
           ${{ env.VCPKG_ROOT }}\installed\${{ env.VCPKG_TRIPLET }}
           ${{ env.VCPKG_ROOT }}\packages
           ${{ env.VCPKG_ROOT }}\downloads
+          ${{ env.VCPKG_ROOT }}\vcpkg.exe
+          ${{ env.VCPKG_ROOT }}\scripts
+          ${{ env.VCPKG_ROOT }}\toolsrc
           ${{ github.workspace }}\vcpkg_installed
         # if you don't have vcpkg.json, replace hashFiles(...) with a fixed token
-        key: ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('vcpkg.json') }}-v2
+        key: ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('vcpkg.json') }}-v3
         restore-keys: |
           ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-
           ${{ runner.os }}-vcpkg-
@@ -63,13 +66,23 @@ jobs:
     - name: Setup vcpkg
       run: |
         if not exist "%VCPKG_ROOT%\vcpkg.exe" (
-          echo "Setting up vcpkg..."
-          if exist "%VCPKG_ROOT%" (
-            echo "Removing incomplete vcpkg directory..."
-            rmdir /s /q "%VCPKG_ROOT%"
+          echo "vcpkg.exe not found, setting up vcpkg..."
+          if not exist "%VCPKG_ROOT%" (
+            echo "Cloning vcpkg..."
+            git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
+          ) else (
+            echo "VCPKG_ROOT exists but incomplete, checking for .git..."
+            if not exist "%VCPKG_ROOT%\.git" (
+              echo "No .git found, removing incomplete directory..."
+              rmdir /s /q "%VCPKG_ROOT%"
+              echo "Cloning vcpkg..."
+              git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
+            ) else (
+              echo "Git repository exists, updating..."
+              cd /d "%VCPKG_ROOT%"
+              git pull origin master
+            )
           )
-          echo "Cloning vcpkg..."
-          git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
           echo "Bootstrapping vcpkg..."
           "%VCPKG_ROOT%\bootstrap-vcpkg.bat"
         ) else (
