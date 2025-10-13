@@ -5,6 +5,7 @@
 [![glTF status](https://img.shields.io/badge/glTF-2%2E0-green.svg?style=flat)](https://github.com/KhronosGroup/glTF)
 [![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/linux.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/linux.yml)
 [![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/windows.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/windows.yml)
+[![Action status](https://github.com/fanvanzh/3dtiles/actions/workflows/macOS-arm64.yml/badge.svg)](https://github.com/fanvanzh/3dtiles/actions/workflows/macOS-arm64.yml)
 
 3D-Tiles convertion:
 
