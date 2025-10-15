@@ -45,8 +45,6 @@ fn get_target_dir() -> std::path::PathBuf {
 
 fn build_linux_unkown() {
     // Probe Library Link for GDAL and OpenSceneGraph
-    pkg_config::Config::new().atleast_version("3.8.4").probe("gdal").unwrap();
-    pkg_config::Config::new().probe("openscenegraph").unwrap();
     let dst = Config::new(".").very_verbose(true).build();
     println!("cmake dst = {}", dst.display());
     // Link Search Path for C++ Implementation

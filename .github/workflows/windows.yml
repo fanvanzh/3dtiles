@@ -28,45 +28,9 @@ jobs:
         )
       shell: cmd
 
-    - name: Cache vcpkg artifacts
-      uses: actions/cache@v4
-      id: cache-vcpkg
-      with:
-        path: |
-          ${{ env.VCPKG_ROOT }}\installed\${{ env.VCPKG_TRIPLET }}
-          ${{ env.VCPKG_ROOT }}\packages
-          ${{ env.VCPKG_ROOT }}\downloads
-          ${{ env.VCPKG_ROOT }}\vcpkg.exe
-          ${{ env.VCPKG_ROOT }}\scripts
-          ${{ env.VCPKG_ROOT }}\toolsrc
-          ${{ github.workspace }}\vcpkg_installed
-        # if you don't have vcpkg.json, replace hashFiles(...) with a fixed token
-        key: ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('vcpkg.json') }}-v3
-        restore-keys: |
-          ${{ runner.os }}-vcpkg-${{ env.VCPKG_TRIPLET }}-
-          ${{ runner.os }}-vcpkg-
-
-    - name: Show cache result & inspect installed
-      run: |
-        echo "cache-hit(official)=${{ steps.cache-vcpkg.outputs.cache-hit }}"
-        if exist "%VCPKG_ROOT%\installed\%VCPKG_TRIPLET%" (
-          echo "Installed dir contents:"
-          dir "%VCPKG_ROOT%\installed\%VCPKG_TRIPLET%" /b
-        ) else (
-          echo "No installed dir at %VCPKG_ROOT%\installed\%VCPKG_TRIPLET%"
-        )
-        if exist "%GITHUB_WORKSPACE%\vcpkg_installed" (
-          echo "repo vcpkg_installed contents:"
-          dir "%GITHUB_WORKSPACE%\vcpkg_installed" /b
-        ) else (
-          echo "No repo vcpkg_installed at %GITHUB_WORKSPACE%\vcpkg_installed"
-        )
-      shell: cmd
-
     - name: Setup vcpkg
       run: |
-        if not exist "%VCPKG_ROOT%\vcpkg.exe" (
-          echo "vcpkg.exe not found, setting up vcpkg..."
+        echo "vcpkg.exe not found, setting up vcpkg..."
           if not exist "%VCPKG_ROOT%" (
             echo "Cloning vcpkg..."
             git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
@@ -85,9 +49,6 @@ jobs:
           )
           echo "Bootstrapping vcpkg..."
           "%VCPKG_ROOT%\bootstrap-vcpkg.bat"
-        ) else (
-          echo "vcpkg.exe already exists, skipping setup"
-        )
       shell: cmd
 
     - name: Verify vcpkg installation
