@@ -99,6 +99,34 @@ fn build_macos() {
     copy_proj_data("/opt/homebrew/opt/proj/share/");
 }
 
+fn build_macos_x86_64() {
+    // Probe Library Link for GDAL and OpenSceneGraph
+    pkg_config::Config::new().atleast_version("3.8.4").probe("gdal").unwrap();
+    pkg_config::Config::new().atleast_version("3.6.5").probe("OpenSceneGraph").unwrap();
+    // Get VCPKG_ROOT environment variable
+    let dst = Config::new(".").very_verbose(true).build();
+    println!("cmake dst = {}", dst.display());
+    // Link Search Path for C++ Implementation
+    println!("cargo:rustc-link-search=native={}/lib", dst.display());
+    // for FFI C++ static library
+    println!("cargo:rustc-link-lib=static=_3dtile");
+    // Link search paths
+    println!("cargo:rustc-link-search=native=/usr/local/lib");
+
+    // OSG libraries
+    println!("cargo:rustc-link-lib=osg");
+    println!("cargo:rustc-link-lib=osgDB");
+    println!("cargo:rustc-link-lib=osgUtil");
+    println!("cargo:rustc-link-lib=OpenThreads");
+
+    // GDAL library
+    println!("cargo:rustc-link-lib=gdal");
+    // Link Standard C++
+    println!("cargo:rustc-link-lib=c++");
+    copy_gdal_data("/usr/local/share/");
+    copy_proj_data("/usr/local/share/");
+}
+
 fn copy_gdal_data(share: &str) {
     let gdal_data = Path::new(share).join("gdal");
     let out_dir = get_target_dir()
@@ -183,6 +211,7 @@ fn main() {
             "x86_64-unknown-linux-gnu" => build_linux_unkown(),
             "x86_64-pc-windows-msvc" => build_win_msvc(),
             "aarch64-apple-darwin" => build_macos(),
+            "x86_64-apple-darwin" => build_macos_x86_64(),
             &_ => {}
         },
         _ => {}
