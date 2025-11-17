@@ -39,4 +39,8 @@ if (OpenSceneGraph_FOUND)
     target_include_directories(_3dtile PUBLIC ${OSG_INCLUDE_DIR})
 endif()
 
+add_subdirectory(thirdparty/draco ${CMAKE_BINARY_DIR}/draco_build)
+target_link_libraries(_3dtile PRIVATE draco)
+target_include_directories(_3dtile PUBLIC thirdparty/draco)
+
 install(TARGETS _3dtile DESTINATION lib)

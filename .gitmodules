@@ -1,0 +1,3 @@
+[submodule "thirdparty/draco"]
+	path = thirdparty/draco
+	url = https://github.com/google/draco
