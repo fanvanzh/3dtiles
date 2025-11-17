@@ -1,4 +1,4 @@
-name: macOS
+name: macOS-intel
 
 on:
   push:
