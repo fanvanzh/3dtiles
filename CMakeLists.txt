@@ -5,6 +5,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Add draco compression support
+option(ENABLE_OPTIMIZER "Enable optimizer" ON)
+if(ENABLE_OPTIMIZER)
+    add_definitions(-DOPTIMIZER)
+endif()
+
 if(APPLE)
     # 在 macOS 或其他 Apple 系统下
     add_compile_options(-Wno-error=unguarded-availability-new)
@@ -39,8 +45,14 @@ if (OpenSceneGraph_FOUND)
     target_include_directories(_3dtile PUBLIC ${OSG_INCLUDE_DIR})
 endif()
 
+# draco
 add_subdirectory(thirdparty/draco ${CMAKE_BINARY_DIR}/draco_build)
 target_link_libraries(_3dtile PRIVATE draco)
-target_include_directories(_3dtile PUBLIC thirdparty/draco)
+target_include_directories(_3dtile PUBLIC thirdparty/draco/src)
+
+# meshoptimizerrm
+add_subdirectory(thirdparty/meshoptimizer ${CMAKE_BINARY_DIR}/meshoptimizer_build)
+target_link_libraries(_3dtile PRIVATE meshoptimizer)
+target_include_directories(_3dtile PUBLIC thirdparty/meshoptimizer/src)
 
 install(TARGETS _3dtile DESTINATION lib)
