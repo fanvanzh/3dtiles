@@ -1,7 +1,10 @@
 #include "tiny_gltf.h"
 #include "earcut.hpp"
-#include "json.hpp"
 #include "extern.h"
+
+#include "draco/compression/encode.h"
+#include "draco/mesh/triangle_soup_mesh_builder.h"
+#include "json.hpp"
 
 /* vcpkg path */
 #ifdef _WIN32
@@ -27,7 +30,6 @@
 #include <osgUtil/SmoothingVisitor>
 
 #include <vector>
-#include <cmath>
 #include <array>
 
 using namespace std;
@@ -187,7 +189,7 @@ struct Polygon_Mesh
     Vextex vertex;
     Index  index;
     Normal normal;
-    // add some addition 
+    // add some addition
     float height;
 };
 
@@ -362,15 +364,15 @@ convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double hei
         }
         std::vector<int> indices = mapbox::earcut<int>(polygon);
         for (int idx = 0; idx < indices.size(); idx += 3) {
-            mesh.index.push_back({ 
-                pt_count + 2 * indices[idx], 
-                pt_count + 2 * indices[idx + 2], 
+            mesh.index.push_back({
+                pt_count + 2 * indices[idx],
+                pt_count + 2 * indices[idx + 2],
                 pt_count + 2 * indices[idx + 1] });
         }
         for (int idx = 0; idx < indices.size(); idx += 3) {
-            mesh.index.push_back({ 
-                pt_count + 2 * indices[idx] + 1, 
-                pt_count + 2 * indices[idx + 1] + 1, 
+            mesh.index.push_back({
+                pt_count + 2 * indices[idx] + 1,
+                pt_count + 2 * indices[idx + 1] + 1,
                 pt_count + 2 * indices[idx + 2] + 1});
         }
     }
@@ -393,8 +395,7 @@ shp23dtile(const char* filename, int layer_id,
         height_field = height;
     }
     GDALAllRegister();
-    GDALDataset       *poDS;
-    poDS = (GDALDataset*)GDALOpenEx(
+    GDALDataset* poDS = (GDALDataset*)GDALOpenEx(
         filename, GDAL_OF_VECTOR,
         NULL, NULL, NULL);
     if (poDS == NULL)
@@ -448,12 +449,12 @@ shp23dtile(const char* filename, int layer_id,
         root.add(id, bound);
         OGRFeature::DestroyFeature(poFeature);
     }
-    // iter all node and convert to obj 
+    // iter all node and convert to obj
     std::vector<void*> items_array;
     root.get_all(items_array);
     //
     int field_index = -1;
-    
+
     if (!height_field.empty()) {
         field_index = poLayer->GetLayerDefn()->GetFieldIndex(height_field.c_str());
         if (field_index == -1) {
@@ -469,7 +470,7 @@ shp23dtile(const char* filename, int layer_id,
         sprintf(b3dm_file, "%s/tile/%d/%d", dest, _node->_z, _node->_x);
 #endif
         mkdirs(b3dm_file);
-        // fix the box 
+        // fix the box
         {
             OGREnvelope node_box;
             for (auto id : _node->get_ids()) {
@@ -551,7 +552,7 @@ shp23dtile(const char* filename, int layer_id,
         const double pi = std::acos(-1);
         double radian_x = degree2rad(center_x);
         double radian_y = degree2rad(center_y);
-        write_tileset(radian_x, radian_y, 
+        write_tileset(radian_x, radian_y,
             longti_to_meter(degree2rad(box_width) * 1.05, radian_y),
             lati_to_meter(degree2rad(box_height)  * 1.05),
             0 , max_height, 100,
@@ -562,12 +563,12 @@ shp23dtile(const char* filename, int layer_id,
     return true;
 }
 
-template<class T> 
+template<class T>
 void put_val(std::vector<unsigned char>& buf, T val) {
     buf.insert(buf.end(), (unsigned char*)&val, (unsigned char*)&val + sizeof(T));
 }
 
-template<class T> 
+template<class T>
 void put_val(std::string& buf, T val) {
     buf.append((unsigned char*)&val, (unsigned char*)&val + sizeof(T));
 }
@@ -599,8 +600,90 @@ tinygltf::Material make_color_material(double r, double g, double b) {
     return material;
 }
 
+std::string compress_mesh_with_draco(const Polygon_Mesh& mesh) {
+    draco::TriangleSoupMeshBuilder mesh_builder;
+    const int num_faces = mesh.index.size();
+    if (num_faces == 0) {
+        return "";
+    }
+
+    mesh_builder.Start(num_faces);
+
+    // Add position attribute
+    const int pos_att_id = mesh_builder.AddAttribute(
+        draco::GeometryAttribute::POSITION, 3, draco::DT_FLOAT32);
+
+    // Add normal attribute if available
+    int normal_att_id = -1;
+    if (!mesh.normal.empty()) {
+        normal_att_id = mesh_builder.AddAttribute(
+            draco::GeometryAttribute::NORMAL, 3, draco::DT_FLOAT32);
+    }
+
+    // Set attribute values for each face
+    for (int i = 0; i < num_faces; ++i) {
+        // Get the three vertices of the face
+        const int idx0 = mesh.index[i][0];
+        const int idx1 = mesh.index[i][1];
+        const int idx2 = mesh.index[i][2];
+
+        // Set position values for each corner of the face
+        const float pos0[3] = {mesh.vertex[idx0][0], mesh.vertex[idx0][1], mesh.vertex[idx0][2]};
+        const float pos1[3] = {mesh.vertex[idx1][0], mesh.vertex[idx1][1], mesh.vertex[idx1][2]};
+        const float pos2[3] = {mesh.vertex[idx2][0], mesh.vertex[idx2][1], mesh.vertex[idx2][2]};
+
+        mesh_builder.SetAttributeValuesForFace(pos_att_id, draco::FaceIndex(i),
+                                              pos0, pos1, pos2);
+
+        // Set normal values if available
+        if (normal_att_id >= 0 && idx0 < mesh.normal.size() && idx1 < mesh.normal.size() && idx2 < mesh.normal.size()) {
+            const float norm0[3] = {mesh.normal[idx0][0], mesh.normal[idx0][1], mesh.normal[idx0][2]};
+            const float norm1[3] = {mesh.normal[idx1][0], mesh.normal[idx1][1], mesh.normal[idx1][2]};
+            const float norm2[3] = {mesh.normal[idx2][0], mesh.normal[idx2][1], mesh.normal[idx2][2]};
+
+            mesh_builder.SetAttributeValuesForFace(normal_att_id, draco::FaceIndex(i),
+                                                  norm0, norm1, norm2);
+        }
+    }
+
+    // Finalize the mesh
+    std::unique_ptr<draco::Mesh> draco_mesh = mesh_builder.Finalize();
+    if (!draco_mesh) {
+        return "";
+    }
+
+    // Encode the mesh with Draco
+    draco::Encoder encoder;
+    encoder.SetEncodingMethod(draco::MESH_EDGEBREAKER_ENCODING);
+    encoder.SetAttributeQuantization(draco::GeometryAttribute::POSITION, 14);
+    if (normal_att_id >= 0) {
+        encoder.SetAttributeQuantization(draco::GeometryAttribute::NORMAL, 10);
+    }
+    encoder.SetSpeedOptions(5, 5);
+
+    draco::EncoderBuffer buffer;
+    const draco::Status status = encoder.EncodeMeshToBuffer(*draco_mesh, &buffer);
+    if (!status.ok()) {
+        return "";
+    }
+
+    return std::string(buffer.data(), buffer.size());
+}
+
 // convert poly-mesh to glb buffer
 std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
+    std::vector<std::string> compressed_meshes;
+
+    for (const auto& mesh : meshes) {
+        std::string compressed_data = compress_mesh_with_draco(mesh);
+        if (!compressed_data.empty()) {
+            compressed_meshes.push_back(compressed_data);
+        } else {
+            // If compression fails, we'll fall back to normal mesh data
+            compressed_meshes.push_back("");
+        }
+    }
+
     vector<osg::ref_ptr<osg::Geometry>> osg_Geoms;
     for (auto& mesh : meshes) {
         osg_Geoms.push_back(make_triangle_mesh(mesh));
@@ -610,6 +693,11 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     // model.name = model_name;
     // only one buffer
     tinygltf::Buffer buffer;
+
+    // Add KHR_draco_mesh_compression extension to the model
+    model.extensionsUsed.push_back("KHR_draco_mesh_compression");
+    model.extensionsRequired.push_back("KHR_draco_mesh_compression");
+
     // buffer_view {index,vertex,normal(texcoord,image)}
     uint32_t buf_offset = 0;
     auto calc_offset = [&]() -> int{
@@ -622,7 +710,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
         for (int i = 0; i < meshes.size(); i++) {
             if (osg_Geoms[i]->getNumPrimitiveSets() == 0) continue;
             if (j == 0) {
-                // indc
+                // get index data
                 osg::PrimitiveSet* ps = osg_Geoms[i]->getPrimitiveSet(0);
                 int idx_size = ps->getNumIndices();
                 int max_idx = 0;
@@ -635,7 +723,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                     put_val(buffer.data, idx);
                     SET_MAX(max_idx, idx);
                 }
-                    
+
                 tinygltf::Accessor acc;
                 acc.bufferView = 0;
                 acc.byteOffset = acc_offset[j];
@@ -648,6 +736,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                 acc.minValues = { 0.0 };
                 model.accessors.push_back(acc);
             }else if ( j == 1) {
+                // get vertex data
                 osg::Array* va = osg_Geoms[i]->getVertexArray();
                 osg::Vec3Array* v3f = (osg::Vec3Array*)va;
                 int vec_size = v3f->size();
@@ -686,7 +775,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                 {
                     osg::Vec3f point = v3f->at(vidx);
                     vector<float> normal = { point.x(), point.y(), point.z() };
-                    
+
                     for (int i = 0; i < 3; i++)
                     {
                         put_val(buffer.data, normal[i]);
@@ -745,12 +834,55 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
         tinygltf::Mesh mesh;
         mesh.name = meshes[i].mesh_name;
         tinygltf::Primitive primits;
-        primits.attributes = { 
-            std::pair<std::string,int>("POSITION", 1 * meshes.size() + i),
-            std::pair<std::string,int>("NORMAL",   2 * meshes.size() + i),
-            std::pair<std::string,int>("_BATCHID", 3 * meshes.size() + i),
-        };
-        primits.indices = i;
+
+        // Always use Draco compression
+        if (i < compressed_meshes.size() && !compressed_meshes[i].empty()) {
+            // Use Draco compressed data
+            // Add compressed data to buffer
+            size_t draco_buffer_start = buffer.data.size();
+            for (const auto& byte : compressed_meshes[i]) {
+                buffer.data.push_back(byte);
+            }
+
+            // Add buffer view for Draco compressed data
+            tinygltf::BufferView draco_bv;
+            draco_bv.buffer = 0;
+            draco_bv.byteOffset = draco_buffer_start;
+            draco_bv.byteLength = compressed_meshes[i].size();
+            int draco_buffer_view_idx = model.bufferViews.size();
+            model.bufferViews.push_back(draco_bv);
+
+            // Create Draco extension for the primitive using extras field
+            // Since tinygltf doesn't have a direct extensions field for Primitive,
+            // we'll use the extras field to store the extension data
+            tinygltf::Value::Object draco_ext_obj;
+            draco_ext_obj["bufferView"] = tinygltf::Value(draco_buffer_view_idx);
+
+            // Define attributes mapping (this is a simplified version)
+            tinygltf::Value::Object attributes_obj;
+            attributes_obj["POSITION"] = tinygltf::Value(0); // Position attribute ID
+            if (!meshes[i].normal.empty()) {
+                attributes_obj["NORMAL"] = tinygltf::Value(1); // Normal attribute ID
+            }
+            draco_ext_obj["attributes"] = tinygltf::Value(attributes_obj);
+
+            // Add the Draco extension to the primitive's extras
+            tinygltf::Value::Object extras_obj;
+            extras_obj["KHR_draco_mesh_compression"] = tinygltf::Value(draco_ext_obj);
+            primits.extras = tinygltf::Value(extras_obj);
+
+            // For Draco compressed meshes, we don't need separate index/vertex buffer views
+            // The Draco extension contains all the necessary data
+        } else {
+            // Use standard (uncompressed) data
+            primits.attributes = {
+                std::pair<std::string,int>("POSITION", 1 * meshes.size() + i),
+                std::pair<std::string,int>("NORMAL",   2 * meshes.size() + i),
+                std::pair<std::string,int>("_BATCHID", 3 * meshes.size() + i),
+            };
+            primits.indices = i;
+        }
+
         if(use_multi_material) {
             //TODO: turn height to rgb(r,g,b)
             tinygltf::Material material =  make_color_material(1.0, 0.0, 0.0);
@@ -808,14 +940,14 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     model.buffers.push_back(std::move(buffer));
     model.asset.version = "2.0";
     model.asset.generator = "fanfan";
-    
+
     std::string buf = gltf.Serialize(&model);
     return buf;
 }
 
 std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = false) {
     using nlohmann::json;
-    
+
     std::string feature_json_string;
     feature_json_string += "{\"BATCH_LENGTH\":";
     feature_json_string += std::to_string(meshes.size());
@@ -823,7 +955,7 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = fals
     while (feature_json_string.size() % 4 != 0 ) {
         feature_json_string.push_back(' ');
     }
-    
+
     json batch_json;
     std::vector<int> ids;
     for (int i = 0; i < meshes.size(); ++i) {
@@ -862,7 +994,7 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = fals
     int batch_json_len = batch_json_string.size();
     int batch_bin_len = 0;
     int total_len = 28 /*header size*/ + feature_json_len + batch_json_len + glb_buf.size();
-    
+
     std::string b3dm_buf;
     b3dm_buf += "b3dm";
     int version = 1;

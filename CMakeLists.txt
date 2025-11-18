@@ -1,7 +1,7 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.22)
 
 PROJECT(3dtiles)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -46,13 +46,28 @@ if (OpenSceneGraph_FOUND)
 endif()
 
 # draco
-add_subdirectory(thirdparty/draco ${CMAKE_BINARY_DIR}/draco_build)
-target_link_libraries(_3dtile PRIVATE draco)
-target_include_directories(_3dtile PUBLIC thirdparty/draco/src)
+add_subdirectory(thirdparty/draco)
+if(TARGET draco)
+    target_link_libraries(_3dtile PRIVATE draco)
+    target_include_directories(_3dtile PUBLIC
+        ${CMAKE_BINARY_DIR}
+        thirdparty/draco/src
+    )
+elseif(TARGET draco_static)
+    target_link_libraries(_3dtile PRIVATE draco_static)
+    target_include_directories(_3dtile PUBLIC
+        ${CMAKE_BINARY_DIR}
+        thirdparty/draco/src
+    )
+else()
+    target_link_libraries(_3dtile PRIVATE draco_shared)
+    target_include_directories(_3dtile PUBLIC
+        ${CMAKE_BINARY_DIR}
+        thirdparty/draco/src
+    )
+endif()
 
-# meshoptimizerrm
-add_subdirectory(thirdparty/meshoptimizer ${CMAKE_BINARY_DIR}/meshoptimizer_build)
+# meshoptimizer
+add_subdirectory(thirdparty/meshoptimizer)
 target_link_libraries(_3dtile PRIVATE meshoptimizer)
-target_include_directories(_3dtile PUBLIC thirdparty/meshoptimizer/src)
-
 install(TARGETS _3dtile DESTINATION lib)

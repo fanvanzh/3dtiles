@@ -12,6 +12,11 @@ fn build_win_msvc() {
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
     // for FFI C++ static library
     println!("cargo:rustc-link-lib=static=_3dtile");
+
+    // Link Search Path for Draco library
+    println!("cargo:rustc-link-search=native={}/thirdparty/draco", dst.display());
+    println!("cargo:rustc-link-lib=static=draco");
+
     let out_dir = env::var("OUT_DIR").unwrap();
     println!("cargo:warning=out_dir = {}", &out_dir);
     print_vcpkg_tree(Path::new(&out_dir)).unwrap();
@@ -51,6 +56,11 @@ fn build_linux_unkown() {
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
     // for FFI C++ static library
     println!("cargo:rustc-link-lib=static=_3dtile");
+
+    // Link Search Path for Draco library
+    println!("cargo:rustc-link-search=native={}/thirdparty/draco", dst.display());
+    println!("cargo:rustc-link-lib=static=draco");
+
     // -------------
     println!("cargo:rustc-link-search=native=/usr/lib/x86_64-linux-gnu");
     println!("cargo:rustc-link-search=native=./vcpkg/installed/x64-linux-release/lib");
@@ -80,6 +90,11 @@ fn build_macos() {
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
     // for FFI C++ static library
     println!("cargo:rustc-link-lib=static=_3dtile");
+
+    // Link Search Path for Draco library
+    println!("cargo:rustc-link-search=native={}/thirdparty/draco", dst.display());
+    println!("cargo:rustc-link-lib=static=draco");
+
     // Link search paths
     println!("cargo:rustc-link-search=native=/opt/homebrew/lib");
     println!("cargo:rustc-link-search=native=/opt/homebrew/opt/gdal/lib");
@@ -110,6 +125,11 @@ fn build_macos_x86_64() {
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
     // for FFI C++ static library
     println!("cargo:rustc-link-lib=static=_3dtile");
+
+    // Link Search Path for Draco library
+    println!("cargo:rustc-link-search=native={}/thirdparty/draco", dst.display());
+    println!("cargo:rustc-link-lib=static=draco");
+
     // Link search paths
     println!("cargo:rustc-link-search=native=/usr/local/lib");
 
