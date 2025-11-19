@@ -10,6 +10,9 @@
 #ifndef EIGEN_TYPE_CASTING_SVE_H
 #define EIGEN_TYPE_CASTING_SVE_H
 
+// IWYU pragma: private
+#include "../../InternalHeaderCheck.h"
+
 namespace Eigen {
 namespace internal {
 
@@ -25,12 +28,12 @@ struct type_casting_traits<numext::int32_t, float> {
 
 template <>
 EIGEN_STRONG_INLINE PacketXf pcast<PacketXi, PacketXf>(const PacketXi& a) {
-  return svcvt_f32_s32_z(svptrue_b32(), a);
+  return svcvt_f32_s32_x(svptrue_b32(), a);
 }
 
 template <>
 EIGEN_STRONG_INLINE PacketXi pcast<PacketXf, PacketXi>(const PacketXf& a) {
-  return svcvt_s32_f32_z(svptrue_b32(), a);
+  return svcvt_s32_f32_x(svptrue_b32(), a);
 }
 
 template <>
@@ -46,4 +49,4 @@ EIGEN_STRONG_INLINE PacketXi preinterpret<PacketXi, PacketXf>(const PacketXf& a)
 }  // namespace internal
 }  // namespace Eigen
 
-#endif // EIGEN_TYPE_CASTING_SVE_H
+#endif  // EIGEN_TYPE_CASTING_SVE_H

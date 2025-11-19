@@ -21,6 +21,9 @@
 #ifndef EIGEN_TYPE_CASTING_SYCL_H
 #define EIGEN_TYPE_CASTING_SYCL_H
 
+// IWYU pragma: private
+#include "../../InternalHeaderCheck.h"
+
 namespace Eigen {
 
 namespace internal {
@@ -31,10 +34,9 @@ struct type_casting_traits<float, int> {
 };
 
 template <>
-EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE cl::sycl::cl_int4
-pcast<cl::sycl::cl_float4, cl::sycl::cl_int4>(const cl::sycl::cl_float4& a) {
-  return a
-      .template convert<cl::sycl::cl_int, cl::sycl::rounding_mode::automatic>();
+EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE cl::sycl::cl_int4 pcast<cl::sycl::cl_float4, cl::sycl::cl_int4>(
+    const cl::sycl::cl_float4& a) {
+  return a.template convert<cl::sycl::cl_int, cl::sycl::rounding_mode::automatic>();
 }
 
 template <>
@@ -43,10 +45,9 @@ struct type_casting_traits<int, float> {
 };
 
 template <>
-EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE cl::sycl::cl_float4
-pcast<cl::sycl::cl_int4, cl::sycl::cl_float4>(const cl::sycl::cl_int4& a) {
-  return a.template convert<cl::sycl::cl_float,
-                            cl::sycl::rounding_mode::automatic>();
+EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE cl::sycl::cl_float4 pcast<cl::sycl::cl_int4, cl::sycl::cl_float4>(
+    const cl::sycl::cl_int4& a) {
+  return a.template convert<cl::sycl::cl_float, cl::sycl::rounding_mode::automatic>();
 }
 
 template <>
@@ -55,14 +56,11 @@ struct type_casting_traits<double, float> {
 };
 
 template <>
-EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE cl::sycl::cl_float4
-pcast<cl::sycl::cl_double2, cl::sycl::cl_float4>(
+EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE cl::sycl::cl_float4 pcast<cl::sycl::cl_double2, cl::sycl::cl_float4>(
     const cl::sycl::cl_double2& a, const cl::sycl::cl_double2& b) {
-  auto a1 = a.template convert<cl::sycl::cl_float,
-                               cl::sycl::rounding_mode::automatic>();
-  auto b1 = b.template convert<cl::sycl::cl_float,
-                               cl::sycl::rounding_mode::automatic>();
-  return cl::sycl::float4(a1.x(), a1.y(), b1.x(), b1.y());
+  auto a1 = a.template convert<cl::sycl::cl_float, cl::sycl::rounding_mode::automatic>();
+  auto b1 = b.template convert<cl::sycl::cl_float, cl::sycl::rounding_mode::automatic>();
+  return cl::sycl::cl_float4(a1.x(), a1.y(), b1.x(), b1.y());
 }
 
 template <>
@@ -71,8 +69,8 @@ struct type_casting_traits<float, double> {
 };
 
 template <>
-EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE cl::sycl::cl_double2
-pcast<cl::sycl::cl_float4, cl::sycl::cl_double2>(const cl::sycl::cl_float4& a) {
+EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE cl::sycl::cl_double2 pcast<cl::sycl::cl_float4, cl::sycl::cl_double2>(
+    const cl::sycl::cl_float4& a) {
   // Simply discard the second half of the input
   return cl::sycl::cl_double2(a.x(), a.y());
 }
