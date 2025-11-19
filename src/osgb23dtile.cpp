@@ -17,8 +17,6 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define TINYGLTF_IMPLEMENTATION
 #include "tiny_gltf.h"
-#include "stb_image_write.h"
-#include "dxt_img.h"
 #include "extern.h"
 #include "GeoTransform.h"
 
@@ -451,97 +449,12 @@ R"(
 })";
 }
 
-void make_gltf2_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& buffer) {
-    model.extensionsRequired = { "KHR_techniques_webgl" };
-    model.extensionsUsed = { "KHR_techniques_webgl" };
-    // add vs shader
-    {
-        tinygltf::BufferView bfv_vs;
-        bfv_vs.buffer = 0;
-        bfv_vs.byteOffset = buffer.data.size();
-        bfv_vs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-
-        std::string vs_shader = vs_str();
-
-        buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
-        bfv_vs.byteLength = vs_shader.size();
-        alignment_buffer(buffer.data);
-        model.bufferViews.push_back(bfv_vs);
-
-        tinygltf::Shader shader;
-        shader.bufferView = model.bufferViews.size() - 1;
-        shader.type = TINYGLTF_SHADER_TYPE_VERTEX_SHADER;
-        model.extensions.KHR_techniques_webgl.shaders.push_back(shader);
-    }
-    // add fs shader
-    {
-        tinygltf::BufferView bfv_fs;
-        bfv_fs.buffer = 0;
-        bfv_fs.byteOffset = buffer.data.size();
-        bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-        std::string fs_shader = fs_str();
-        buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
-        bfv_fs.byteLength = fs_shader.size();
-        alignment_buffer(buffer.data);
-        model.bufferViews.push_back(bfv_fs);
-
-        tinygltf::Shader shader;
-        shader.bufferView = model.bufferViews.size() - 1;
-        shader.type = TINYGLTF_SHADER_TYPE_FRAGMENT_SHADER;
-        model.extensions.KHR_techniques_webgl.shaders.push_back(shader);
-    }
-    // tech
-    {
-        tinygltf::Technique tech;
-        tech.tech_string = tech_string();
-        model.extensions.KHR_techniques_webgl.techniques = { tech };
-    }
-    // program
-    {
-        tinygltf::Program prog;
-        prog.prog_string = program(0, 1);
-        model.extensions.KHR_techniques_webgl.programs = { prog };
-    }
-
-    for (int i = 0; i < mat_size; i++)
-    {
-        tinygltf::Material material;
-        material.name = "osgb";
-        char shaderBuffer[512];
-        sprintf(shaderBuffer, R"(
-{
-"extensions": {
-"KHR_techniques_webgl": {
-"technique": 0,
-"values": {
-"u_diffuse": {
-"index": %d,
-"texCoord": 0
-}
-}
-}
-}
-}
-)", i);
-        material.shaderMaterial = shaderBuffer;
-        model.materials.push_back(material);
-    }
-}
-
 tinygltf::Material make_color_material_osgb(double r, double g, double b) {
     tinygltf::Material material;
     material.name = "default";
-    tinygltf::Parameter baseColorFactor;
-    baseColorFactor.number_array = { r, g, b, 1.0 };
-    material.values["baseColorFactor"] = baseColorFactor;
-
-    tinygltf::Parameter metallicFactor;
-    metallicFactor.number_value = new double(0);
-    material.values["metallicFactor"] = metallicFactor;
-    tinygltf::Parameter roughnessFactor;
-    roughnessFactor.number_value = new double(1);
-    material.values["roughnessFactor"] = roughnessFactor;
-    //
+    material.pbrMetallicRoughness.baseColorFactor = {r, g, b, 1.0};
+    material.pbrMetallicRoughness.metallicFactor = 0.0;
+    material.pbrMetallicRoughness.roughnessFactor = 1.0;
     return material;
 }
 
@@ -1016,10 +929,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
     for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
     {
         tinygltf::Material mat = make_color_material_osgb(1.0, 1.0, 1.0);
-        mat.b_unlit = true; // use KHR_materials_unlit
-        tinygltf::Parameter baseColorTexture;
-        baseColorTexture.json_int_value = { std::pair<string,int>("index",i) };
-        mat.values["baseColorTexture"] = baseColorTexture;
+        mat.pbrMetallicRoughness.baseColorTexture.index = i;
         model.materials.push_back(mat);
     }
 
@@ -1039,7 +949,11 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
     model.asset.version = "2.0";
     model.asset.generator = "fanvanzh";
 
-    glb_buff = gltf.Serialize(&model);
+    std::ostringstream ss;
+    bool res = gltf.WriteGltfSceneToStream(&model, ss, false, true);
+    if (res) {
+        glb_buff = ss.str();
+    }
     return true;
 }
 

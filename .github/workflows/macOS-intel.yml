@@ -13,13 +13,11 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - name: Set up Homebrew
-      id: set-up-homebrew
-      uses: Homebrew/actions/setup-homebrew@main
+    - name: Setup anew (or from cache) vcpkg (and does not build any package)
+      uses: lukka/run-vcpkg@v11
 
-    - name: Install dependencies on macOS
-      run: |
-        brew install gdal open-scene-graph
+    - name: Install automake (including aclocal)
+      run: brew install automake libtool
 
     - name: Install Rust toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1

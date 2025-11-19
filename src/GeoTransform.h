@@ -1,15 +1,7 @@
 #pragma once
 /* vcpkg path */
-#ifdef _WIN32
-    #include <ogr_spatialref.h>
-    #include <ogrsf_frmts.h>
-#elif __APPLE__ 
-    #include <ogr_spatialref.h>
-    #include <ogrsf_frmts.h>
-#else
-    #include <gdal/ogr_spatialref.h>
-    #include <gdal/ogrsf_frmts.h>
-#endif
+#include <ogr_spatialref.h>
+#include <ogrsf_frmts.h>
 
 #include "glm/glm.hpp"
 

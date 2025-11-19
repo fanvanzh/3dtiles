@@ -7,13 +7,7 @@
 #include "json.hpp"
 
 /* vcpkg path */
-#ifdef _WIN32
-    #include <ogrsf_frmts.h>
-#elif __APPLE__
-    #include <ogrsf_frmts.h>
-#else
-    #include <gdal/ogrsf_frmts.h>
-#endif
+#include <ogrsf_frmts.h>
 
 #include <osg/Material>
 #include <osg/PagedLOD>
@@ -588,103 +582,15 @@ tinygltf::Material make_color_material(double r, double g, double b) {
     char buf[512];
     sprintf(buf,"default_%.1f_%.1f_%.1f",r,g,b);
     material.name = buf;
-    tinygltf::Parameter baseColorFactor;
-    baseColorFactor.number_array = { r,g,b,1 };
-    material.values["baseColorFactor"] = baseColorFactor;
-    tinygltf::Parameter metallicFactor;
-    metallicFactor.number_value = new double(0.3);
-    material.values["metallicFactor"] = metallicFactor;
-    tinygltf::Parameter roughnessFactor;
-    roughnessFactor.number_value = new double(0.7);
-    material.values["roughnessFactor"] = roughnessFactor;
+    material.pbrMetallicRoughness.baseColorFactor = { r,g,b,1 };
+    material.pbrMetallicRoughness.roughnessFactor = 0.7;
+    material.pbrMetallicRoughness.metallicFactor = 0.3;
     return material;
 }
 
-std::string compress_mesh_with_draco(const Polygon_Mesh& mesh) {
-    draco::TriangleSoupMeshBuilder mesh_builder;
-    const int num_faces = mesh.index.size();
-    if (num_faces == 0) {
-        return "";
-    }
-
-    mesh_builder.Start(num_faces);
-
-    // Add position attribute
-    const int pos_att_id = mesh_builder.AddAttribute(
-        draco::GeometryAttribute::POSITION, 3, draco::DT_FLOAT32);
-
-    // Add normal attribute if available
-    int normal_att_id = -1;
-    if (!mesh.normal.empty()) {
-        normal_att_id = mesh_builder.AddAttribute(
-            draco::GeometryAttribute::NORMAL, 3, draco::DT_FLOAT32);
-    }
-
-    // Set attribute values for each face
-    for (int i = 0; i < num_faces; ++i) {
-        // Get the three vertices of the face
-        const int idx0 = mesh.index[i][0];
-        const int idx1 = mesh.index[i][1];
-        const int idx2 = mesh.index[i][2];
-
-        // Set position values for each corner of the face
-        const float pos0[3] = {mesh.vertex[idx0][0], mesh.vertex[idx0][1], mesh.vertex[idx0][2]};
-        const float pos1[3] = {mesh.vertex[idx1][0], mesh.vertex[idx1][1], mesh.vertex[idx1][2]};
-        const float pos2[3] = {mesh.vertex[idx2][0], mesh.vertex[idx2][1], mesh.vertex[idx2][2]};
-
-        mesh_builder.SetAttributeValuesForFace(pos_att_id, draco::FaceIndex(i),
-                                              pos0, pos1, pos2);
-
-        // Set normal values if available
-        if (normal_att_id >= 0 && idx0 < mesh.normal.size() && idx1 < mesh.normal.size() && idx2 < mesh.normal.size()) {
-            const float norm0[3] = {mesh.normal[idx0][0], mesh.normal[idx0][1], mesh.normal[idx0][2]};
-            const float norm1[3] = {mesh.normal[idx1][0], mesh.normal[idx1][1], mesh.normal[idx1][2]};
-            const float norm2[3] = {mesh.normal[idx2][0], mesh.normal[idx2][1], mesh.normal[idx2][2]};
-
-            mesh_builder.SetAttributeValuesForFace(normal_att_id, draco::FaceIndex(i),
-                                                  norm0, norm1, norm2);
-        }
-    }
-
-    // Finalize the mesh
-    std::unique_ptr<draco::Mesh> draco_mesh = mesh_builder.Finalize();
-    if (!draco_mesh) {
-        return "";
-    }
-
-    // Encode the mesh with Draco
-    draco::Encoder encoder;
-    encoder.SetEncodingMethod(draco::MESH_EDGEBREAKER_ENCODING);
-    encoder.SetAttributeQuantization(draco::GeometryAttribute::POSITION, 14);
-    if (normal_att_id >= 0) {
-        encoder.SetAttributeQuantization(draco::GeometryAttribute::NORMAL, 10);
-    }
-    encoder.SetSpeedOptions(5, 5);
-
-    draco::EncoderBuffer buffer;
-    const draco::Status status = encoder.EncodeMeshToBuffer(*draco_mesh, &buffer);
-    if (!status.ok()) {
-        return "";
-    }
-
-    return std::string(buffer.data(), buffer.size());
-}
-
 // convert poly-mesh to glb buffer
-std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
-    std::vector<std::string> compressed_meshes;
-
-    for (const auto& mesh : meshes) {
-        std::string compressed_data = compress_mesh_with_draco(mesh);
-        if (!compressed_data.empty()) {
-            compressed_meshes.push_back(compressed_data);
-        } else {
-            // If compression fails, we'll fall back to normal mesh data
-            compressed_meshes.push_back("");
-        }
-    }
-
-    vector<osg::ref_ptr<osg::Geometry>> osg_Geoms;
+std::string make_polymesh(std::vector<Polygon_Mesh> &meshes) {
+  vector<osg::ref_ptr<osg::Geometry>> osg_Geoms;
     for (auto& mesh : meshes) {
         osg_Geoms.push_back(make_triangle_mesh(mesh));
     }
@@ -693,11 +599,6 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     // model.name = model_name;
     // only one buffer
     tinygltf::Buffer buffer;
-
-    // Add KHR_draco_mesh_compression extension to the model
-    model.extensionsUsed.push_back("KHR_draco_mesh_compression");
-    model.extensionsRequired.push_back("KHR_draco_mesh_compression");
-
     // buffer_view {index,vertex,normal(texcoord,image)}
     uint32_t buf_offset = 0;
     auto calc_offset = [&]() -> int{
@@ -710,7 +611,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
         for (int i = 0; i < meshes.size(); i++) {
             if (osg_Geoms[i]->getNumPrimitiveSets() == 0) continue;
             if (j == 0) {
-                // get index data
+                // indc
                 osg::PrimitiveSet* ps = osg_Geoms[i]->getPrimitiveSet(0);
                 int idx_size = ps->getNumIndices();
                 int max_idx = 0;
@@ -736,7 +637,6 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
                 acc.minValues = { 0.0 };
                 model.accessors.push_back(acc);
             }else if ( j == 1) {
-                // get vertex data
                 osg::Array* va = osg_Geoms[i]->getVertexArray();
                 osg::Vec3Array* v3f = (osg::Vec3Array*)va;
                 int vec_size = v3f->size();
@@ -834,55 +734,12 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
         tinygltf::Mesh mesh;
         mesh.name = meshes[i].mesh_name;
         tinygltf::Primitive primits;
-
-        // Always use Draco compression
-        if (i < compressed_meshes.size() && !compressed_meshes[i].empty()) {
-            // Use Draco compressed data
-            // Add compressed data to buffer
-            size_t draco_buffer_start = buffer.data.size();
-            for (const auto& byte : compressed_meshes[i]) {
-                buffer.data.push_back(byte);
-            }
-
-            // Add buffer view for Draco compressed data
-            tinygltf::BufferView draco_bv;
-            draco_bv.buffer = 0;
-            draco_bv.byteOffset = draco_buffer_start;
-            draco_bv.byteLength = compressed_meshes[i].size();
-            int draco_buffer_view_idx = model.bufferViews.size();
-            model.bufferViews.push_back(draco_bv);
-
-            // Create Draco extension for the primitive using extras field
-            // Since tinygltf doesn't have a direct extensions field for Primitive,
-            // we'll use the extras field to store the extension data
-            tinygltf::Value::Object draco_ext_obj;
-            draco_ext_obj["bufferView"] = tinygltf::Value(draco_buffer_view_idx);
-
-            // Define attributes mapping (this is a simplified version)
-            tinygltf::Value::Object attributes_obj;
-            attributes_obj["POSITION"] = tinygltf::Value(0); // Position attribute ID
-            if (!meshes[i].normal.empty()) {
-                attributes_obj["NORMAL"] = tinygltf::Value(1); // Normal attribute ID
-            }
-            draco_ext_obj["attributes"] = tinygltf::Value(attributes_obj);
-
-            // Add the Draco extension to the primitive's extras
-            tinygltf::Value::Object extras_obj;
-            extras_obj["KHR_draco_mesh_compression"] = tinygltf::Value(draco_ext_obj);
-            primits.extras = tinygltf::Value(extras_obj);
-
-            // For Draco compressed meshes, we don't need separate index/vertex buffer views
-            // The Draco extension contains all the necessary data
-        } else {
-            // Use standard (uncompressed) data
-            primits.attributes = {
-                std::pair<std::string,int>("POSITION", 1 * meshes.size() + i),
-                std::pair<std::string,int>("NORMAL",   2 * meshes.size() + i),
-                std::pair<std::string,int>("_BATCHID", 3 * meshes.size() + i),
-            };
-            primits.indices = i;
-        }
-
+        primits.attributes = {
+            std::pair<std::string,int>("POSITION", 1 * meshes.size() + i),
+            std::pair<std::string,int>("NORMAL",   2 * meshes.size() + i),
+            std::pair<std::string,int>("_BATCHID", 3 * meshes.size() + i),
+        };
+        primits.indices = i;
         if(use_multi_material) {
             //TODO: turn height to rgb(r,g,b)
             tinygltf::Material material =  make_color_material(1.0, 0.0, 0.0);
@@ -913,35 +770,16 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     if (use_multi_material) {
         // code has realized about
     } else {
-        tinygltf::Material material;
-        material.name = "default";
-//      tinygltf::Parameter baseColorFactor;
-//      baseColorFactor.number_array = { 1,1,1,1 };
-//      material.values["baseColorFactor"] = baseColorFactor;
-        tinygltf::Parameter metallicFactor;
-        metallicFactor.number_value = new double(0.3);
-        material.values["metallicFactor"] = metallicFactor;
-        tinygltf::Parameter roughnessFactor;
-        roughnessFactor.number_value = new double(0.7);
-        material.values["roughnessFactor"] = roughnessFactor;
-        /// ---------
-//      tinygltf::Parameter emissiveFactor;
-//      emissiveFactor.number_array = { 0,0,0 };
-//      material.additionalValues["emissiveFactor"] = emissiveFactor;
-//      tinygltf::Parameter alphaMode;
-//      alphaMode.string_value = "OPAQUE";
-//      material.additionalValues["alphaMode"] = alphaMode;
-//      tinygltf::Parameter doubleSided;
-//      doubleSided.bool_value = false;
-//      material.additionalValues["doubleSided"] = doubleSided;
-        model.materials = { material };
+        model.materials = { make_color_material(1.0, 1.0, 1.0) };
     }
 
     model.buffers.push_back(std::move(buffer));
     model.asset.version = "2.0";
     model.asset.generator = "fanfan";
 
-    std::string buf = gltf.Serialize(&model);
+    std::ostringstream ss;
+    bool res = gltf.WriteGltfSceneToStream(&model, ss, false, true);
+    std::string buf = ss.str();
     return buf;
 }
 

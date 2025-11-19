@@ -17,51 +17,8 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - name: Debug paths
-      run: |
-        echo GITHUB_WORKSPACE=${{ github.workspace }}
-        echo VCPKG_ROOT=%VCPKG_ROOT%
-        echo WORKDIR=%CD%
-        if exist "%VCPKG_ROOT%" (
-          echo "VCPKG_ROOT exists, listing:"
-          dir "%VCPKG_ROOT%" /b
-        ) else (
-          echo "VCPKG_ROOT not found (expected on first run)"
-        )
-      shell: cmd
-
-    - name: Setup vcpkg
-      run: |
-        echo "vcpkg.exe not found, setting up vcpkg..."
-          if not exist "%VCPKG_ROOT%" (
-            echo "Cloning vcpkg..."
-            git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
-          ) else (
-            echo "VCPKG_ROOT exists but incomplete, checking for .git..."
-            if not exist "%VCPKG_ROOT%\.git" (
-              echo "No .git found, removing incomplete directory..."
-              rmdir /s /q "%VCPKG_ROOT%"
-              echo "Cloning vcpkg..."
-              git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
-            ) else (
-              echo "Git repository exists, updating..."
-              cd /d "%VCPKG_ROOT%"
-              git pull origin master
-            )
-          )
-          echo "Bootstrapping vcpkg..."
-          "%VCPKG_ROOT%\bootstrap-vcpkg.bat"
-      shell: cmd
-
-    - name: Verify vcpkg installation
-      run: |
-        if not exist "%VCPKG_ROOT%\vcpkg.exe" (
-          echo "ERROR: vcpkg.exe not found at %VCPKG_ROOT%\vcpkg.exe"
-          exit /b 1
-        )
-        echo "vcpkg.exe found, verifying installation..."
-        "%VCPKG_ROOT%\vcpkg.exe" version
-      shell: cmd
+    - name: Setup anew (or from cache) vcpkg (and does not build any package)
+      uses: lukka/run-vcpkg@v11
 
     - name: Build
       run: cargo build -vv --release
