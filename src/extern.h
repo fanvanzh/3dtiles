@@ -5,7 +5,7 @@ extern "C" bool write_file(const char* filename, const char* buf, unsigned long 
 extern "C" void log_error(const char* msg);
 
 
-#ifdef WIN32
+#if defined(WIN32) && defined(_MSC_VER)
 #define LOG_E(fmt,...) \
 			char buf[512];\
 			sprintf(buf,fmt,__VA_ARGS__);\
