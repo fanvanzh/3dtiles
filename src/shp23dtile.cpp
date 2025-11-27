@@ -588,6 +588,16 @@ tinygltf::Material make_color_material(double r, double g, double b) {
     return material;
 }
 
+tinygltf::BufferView create_buffer_view(int target, int byteOffset, int byteLength) {
+  tinygltf::BufferView bfv;
+  bfv.buffer = 0;
+  bfv.target = target;
+  bfv.byteOffset = byteOffset;
+  bfv.byteLength = byteLength;
+  return bfv;
+}
+
+
 // convert poly-mesh to glb buffer
 std::string make_polymesh(std::vector<Polygon_Mesh> &meshes) {
   vector<osg::ref_ptr<osg::Geometry>> osg_Geoms;
@@ -600,169 +610,174 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes) {
     // only one buffer
     tinygltf::Buffer buffer;
     // buffer_view {index,vertex,normal(texcoord,image)}
-    uint32_t buf_offset = 0;
-    auto calc_offset = [&]() -> int{
-        return buffer.data.size() - buf_offset;
-    };
-    uint32_t acc_offset[4] = {0,0,0,0};
-    int buf_times = 4;
-    for (int j = 0; j < buf_times; j++)
-    {
-        for (int i = 0; i < meshes.size(); i++) {
-            if (osg_Geoms[i]->getNumPrimitiveSets() == 0) continue;
-            if (j == 0) {
-                // indc
-                osg::PrimitiveSet* ps = osg_Geoms[i]->getPrimitiveSet(0);
-                int idx_size = ps->getNumIndices();
-                int max_idx = 0;
-
-                const osg::DrawElementsUShort* drawElements = static_cast<const osg::DrawElementsUShort*>(ps);
-                int IndNum = drawElements->getNumIndices();
-                for (int m = 0; m < IndNum; m++)
-                {
-                    unsigned short idx = drawElements->at(m);
-                    put_val(buffer.data, idx);
-                    SET_MAX(max_idx, idx);
-                }
-
-                tinygltf::Accessor acc;
-                acc.bufferView = 0;
-                acc.byteOffset = acc_offset[j];
-                alignment_buffer(buffer.data);
-                acc_offset[j] = calc_offset();
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
-                acc.count = idx_size;
-                acc.type = TINYGLTF_TYPE_SCALAR;
-                acc.maxValues = { (double)max_idx };
-                acc.minValues = { 0.0 };
-                model.accessors.push_back(acc);
-            }else if ( j == 1) {
-                osg::Array* va = osg_Geoms[i]->getVertexArray();
-                osg::Vec3Array* v3f = (osg::Vec3Array*)va;
-                int vec_size = v3f->size();
-                std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
-                std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
-                for (int vidx = 0; vidx < vec_size; vidx++) {
-                    osg::Vec3f point = v3f->at(vidx);
-                    vector<float> vertex = { point.x(), point.y(), point.z()};
-                    for (int i = 0; i < 3; i++)
-                    {
-                        put_val(buffer.data, vertex[i]);
-                        SET_MAX(box_max[i], vertex[i]);
-                        SET_MIN(box_min[i], vertex[i]);
-                    }
-                }
-                tinygltf::Accessor acc;
-                acc.bufferView = 1;
-                acc.byteOffset = acc_offset[j];
-                alignment_buffer(buffer.data);
-                acc_offset[j] = calc_offset();
-                acc.count = vec_size;
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-                acc.type = TINYGLTF_TYPE_VEC3;
-                acc.maxValues = box_max;
-                acc.minValues = box_min;
-                model.accessors.push_back(acc);
-            }else if ( j == 2) {
-                // normal
-                osg::Array* na = osg_Geoms[i]->getNormalArray();
-                if (!na) continue;
-                osg::Vec3Array* v3f = (osg::Vec3Array*)na;
-                std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
-                std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
-                int normal_size = v3f->size();
-                for (int vidx = 0; vidx < normal_size; vidx++)
-                {
-                    osg::Vec3f point = v3f->at(vidx);
-                    vector<float> normal = { point.x(), point.y(), point.z() };
-
-                    for (int i = 0; i < 3; i++)
-                    {
-                        put_val(buffer.data, normal[i]);
-                        SET_MAX(box_max[i], normal[i]);
-                        SET_MIN(box_min[i], normal[i]);
-                    }
-                }
-                tinygltf::Accessor acc;
-                acc.bufferView = 2;
-                acc.byteOffset = acc_offset[j];
-                alignment_buffer(buffer.data);
-                acc_offset[j] = calc_offset();
-                acc.count = normal_size;
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-                acc.type = TINYGLTF_TYPE_VEC3;
-                acc.minValues = box_min;
-                acc.maxValues = box_max;
-                model.accessors.push_back(acc);
-            }else if ( j == 3) {
-                // batch id
-                unsigned short batch_id = i;
-                for (auto& vertex : meshes[i].vertex) {
-                    put_val(buffer.data, batch_id);
-                }
-                tinygltf::Accessor acc;
-                acc.bufferView = 3;
-                acc.byteOffset = acc_offset[j];
-                alignment_buffer(buffer.data);
-                acc_offset[j] = calc_offset();
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
-                acc.count = meshes[i].vertex.size();
-                acc.type = TINYGLTF_TYPE_SCALAR;
-                acc.maxValues = { (double)i };
-                acc.minValues = { (double)batch_id };
-                model.accessors.push_back(acc);
-            }
-        }
-        tinygltf::BufferView bfv;
-        bfv.buffer = 0;
-        if (j == 0 || j == 3) {
-            bfv.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
-        }
-        else {
-            bfv.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-            bfv.byteStride = 4 * 3;
-        }
-        bfv.byteOffset = buf_offset;
-        alignment_buffer(buffer.data);
-        bfv.byteLength = calc_offset();
-        buf_offset = buffer.data.size();
-        model.bufferViews.push_back(bfv);
-    }
-
     bool use_multi_material = false;
-    for (int i = 0; i < meshes.size(); i++) {
-        tinygltf::Mesh mesh;
-        mesh.name = meshes[i].mesh_name;
-        tinygltf::Primitive primits;
-        primits.attributes = {
-            std::pair<std::string,int>("POSITION", 1 * meshes.size() + i),
-            std::pair<std::string,int>("NORMAL",   2 * meshes.size() + i),
-            std::pair<std::string,int>("_BATCHID", 3 * meshes.size() + i),
-        };
-        primits.indices = i;
-        if(use_multi_material) {
-            //TODO: turn height to rgb(r,g,b)
-            tinygltf::Material material =  make_color_material(1.0, 0.0, 0.0);
-            model.materials.push_back(material);
-            primits.material = i;
-        } else {
-            primits.material = 0;
-        }
-        primits.mode = TINYGLTF_MODE_TRIANGLES;
-        mesh.primitives = {
-            primits
-        };
-        model.meshes.push_back(mesh);
-    }
-
-    for (int i = 0; i < meshes.size(); i++) {
-        tinygltf::Node node;
-        node.mesh = i;
-        model.nodes.push_back(node);
-    }
     tinygltf::Scene sence;
     for (int i = 0; i < meshes.size(); i++) {
-        sence.nodes.push_back(i);
+      if (osg_Geoms[i]->getNumPrimitiveSets() == 0)
+        continue;
+      int index_accessor_index = -1;
+      int vertex_accessor_index = -1;
+      int normal_accessor_index = -1;
+      int batchid_accessor_index = -1;
+      {
+        // indc
+        osg::PrimitiveSet *ps = osg_Geoms[i]->getPrimitiveSet(0);
+        int idx_size = ps->getNumIndices();
+        int max_idx = 0;
+
+        const osg::DrawElementsUShort *drawElements =
+            static_cast<const osg::DrawElementsUShort *>(ps);
+        int IndNum = drawElements->getNumIndices();
+        int byteOffset = buffer.data.size();
+        for (int m = 0; m < IndNum; m++) {
+          unsigned short idx = drawElements->at(m);
+          put_val(buffer.data, idx);
+          SET_MAX(max_idx, idx);
+        }
+
+        index_accessor_index = model.accessors.size();
+
+        tinygltf::Accessor acc;
+        acc.bufferView = model.bufferViews.size();
+        acc.byteOffset = 0;
+        alignment_buffer(buffer.data);
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+        acc.count = idx_size;
+        acc.type = TINYGLTF_TYPE_SCALAR;
+        acc.maxValues = {(double)max_idx};
+        acc.minValues = {0.0};
+        model.accessors.push_back(acc);
+
+        tinygltf::BufferView bfv =
+            create_buffer_view(TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER, byteOffset,
+                               buffer.data.size() - byteOffset);
+        model.bufferViews.push_back(bfv);
+      }
+      {
+        osg::Array *va = osg_Geoms[i]->getVertexArray();
+        osg::Vec3Array *v3f = (osg::Vec3Array *)va;
+        int vec_size = v3f->size();
+        std::vector<double> box_max = {-1e38, -1e38, -1e38};
+        std::vector<double> box_min = {1e38, 1e38, 1e38};
+        int byteOffset = buffer.data.size();
+        for (int vidx = 0; vidx < vec_size; vidx++) {
+          osg::Vec3f point = v3f->at(vidx);
+          vector<float> vertex = {point.x(), point.y(), point.z()};
+          for (int i = 0; i < 3; i++) {
+            put_val(buffer.data, vertex[i]);
+            SET_MAX(box_max[i], vertex[i]);
+            SET_MIN(box_min[i], vertex[i]);
+          }
+        }
+
+        vertex_accessor_index = model.accessors.size();
+        tinygltf::Accessor acc;
+        acc.bufferView = model.bufferViews.size();
+        acc.byteOffset = 0;
+        alignment_buffer(buffer.data);
+        acc.count = vec_size;
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+        acc.type = TINYGLTF_TYPE_VEC3;
+        acc.maxValues = box_max;
+        acc.minValues = box_min;
+        model.accessors.push_back(acc);
+
+        tinygltf::BufferView bfv =
+            create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
+                               buffer.data.size() - byteOffset);
+        model.bufferViews.push_back(bfv);
+      }
+      {
+        // normal
+        osg::Array *na = osg_Geoms[i]->getNormalArray();
+        if (!na)
+          continue;
+        osg::Vec3Array *v3f = (osg::Vec3Array *)na;
+        std::vector<double> box_max = {-1e38, -1e38, -1e38};
+        std::vector<double> box_min = {1e38, 1e38, 1e38};
+        int normal_size = v3f->size();
+        int byteOffset = buffer.data.size();
+        for (int vidx = 0; vidx < normal_size; vidx++) {
+          osg::Vec3f point = v3f->at(vidx);
+          vector<float> normal = {point.x(), point.y(), point.z()};
+
+          for (int i = 0; i < 3; i++) {
+            put_val(buffer.data, normal[i]);
+            SET_MAX(box_max[i], normal[i]);
+            SET_MIN(box_min[i], normal[i]);
+          }
+        }
+        normal_accessor_index = model.accessors.size();
+        tinygltf::Accessor acc;
+        acc.bufferView = model.bufferViews.size();
+        acc.byteOffset = 0;
+        alignment_buffer(buffer.data);
+        acc.count = normal_size;
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+        acc.type = TINYGLTF_TYPE_VEC3;
+        acc.minValues = box_min;
+        acc.maxValues = box_max;
+        model.accessors.push_back(acc);
+
+        tinygltf::BufferView bfv =
+            create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
+                               buffer.data.size() - byteOffset);
+        model.bufferViews.push_back(bfv);
+      }
+      {
+        // batch id
+        unsigned short batch_id = i;
+        int byteOffset = buffer.data.size();
+        for (auto &vertex : meshes[i].vertex) {
+          put_val(buffer.data, batch_id);
+        }
+        batchid_accessor_index = model.accessors.size();
+        tinygltf::Accessor acc;
+        acc.bufferView = model.bufferViews.size();
+        acc.byteOffset = 0;
+        alignment_buffer(buffer.data);
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+        acc.count = meshes[i].vertex.size();
+        acc.type = TINYGLTF_TYPE_SCALAR;
+        acc.maxValues = {(double)i};
+        acc.minValues = {(double)batch_id};
+        model.accessors.push_back(acc);
+
+        tinygltf::BufferView bfv =
+            create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
+                               buffer.data.size() - byteOffset);
+        model.bufferViews.push_back(bfv);
+      }
+
+      // 生成mesh
+      tinygltf::Mesh mesh;
+      mesh.name = meshes[i].mesh_name;
+      tinygltf::Primitive primits;
+      primits.attributes = {
+          std::pair<std::string, int>("POSITION", vertex_accessor_index),
+          std::pair<std::string, int>("NORMAL", normal_accessor_index),
+          std::pair<std::string, int>("_BATCHID", batchid_accessor_index),
+      };
+      primits.indices = index_accessor_index;
+      if (use_multi_material) {
+        // TODO: turn height to rgb(r,g,b)
+        tinygltf::Material material = make_color_material(1.0, 0.0, 0.0);
+        model.materials.push_back(material);
+        primits.material = i;
+      } else {
+        primits.material = 0;
+      }
+      primits.mode = TINYGLTF_MODE_TRIANGLES;
+      mesh.primitives = {primits};
+      model.meshes.push_back(mesh);
+
+      // 生成node
+      tinygltf::Node node;
+      node.mesh = model.meshes.size() - 1;
+      model.nodes.push_back(node);
+
+      // 写入scene
+      sence.nodes.push_back(model.nodes.size() - 1);
     }
     model.scenes = { sence };
     model.defaultScene = 0;
