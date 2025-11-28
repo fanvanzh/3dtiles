@@ -1,6 +1,0 @@
-[submodule "thirdparty/draco"]
-	path = thirdparty/draco
-	url = https://github.com/google/draco
-[submodule "thirdparty/meshoptimizer"]
-	path = thirdparty/meshoptimizer
-	url = https://github.com/zeux/meshoptimizer
