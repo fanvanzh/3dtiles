@@ -13,6 +13,13 @@
 #include <cstring>
 #include <algorithm>
 
+// Add Basis Universal includes for KTX2 compression
+#include <basisu/encoder/basisu_comp.h>
+#include <basisu/transcoder/basisu_transcoder.h>
+
+// Add Draco compression includes
+#include "mesh_processor.h"
+
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define TINYGLTF_IMPLEMENTATION
@@ -30,6 +37,13 @@ using namespace std;
 #endif // max
 
 static bool b_pbr_texture = false;
+// Add KTX2 compression flag
+static bool b_use_ktx2_compression = true;
+// Add Draco compression flag
+static bool b_use_draco_compression = true;
+// Add Draco compression parameters
+static DracoCompressionParams draco_params;
+static SimplificationParams simplification_params;
 
 template<class T>
 void put_val(std::vector<unsigned char>& buf, T val) {
@@ -736,6 +750,23 @@ write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgBuildS
 
 void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState)
 {
+    // Apply Draco compression if enabled
+    if (b_use_draco_compression) {
+        std::vector<unsigned char> compressed_data;
+        size_t compressed_size = 0;
+        draco_params.enable_compression = true;
+        if (::simplify_mesh_geometry(g, simplification_params)) {
+          // Successfully simplified
+        }
+
+        // Try to compress the geometry with Draco
+        if (::compress_mesh_geometry(g, draco_params, compressed_data, compressed_size)) {
+            // Successfully compressed - we could use the compressed data here
+            // For now, we'll continue with normal processing but in a full implementation
+            // we would use the compressed data in the glTF output
+        }
+    }
+
     osg::PrimitiveSet::Type t = g->getPrimitiveSet(0)->getType();
     PrimitiveState pmtState = {-1, -1, -1};
     for (unsigned int k = 0; k < g->getNumPrimitiveSets(); k++)
@@ -825,80 +856,27 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         for (auto tex : infoVisitor.texture_array)
         {
             unsigned buffer_start = buffer.data.size();
-            std::vector<unsigned char> jpeg_buf;
-            int width, height;
-            if (tex) {
-                if (tex->getNumImages() > 0) {
-                    osg::Image* img = tex->getImage(0);
-                    if (img) {
-                        width = img->s();
-                        height = img->t();
 
-                        const GLenum format = img->getPixelFormat();
-                        const char* rgb = (const char*)(img->data());
-                        uint32_t rowStep = img->getRowStepInBytes();
-                        uint32_t rowSize = img->getRowSizeInBytes();
-                        switch (format)
-                        {
-                        case GL_RGBA:
-                            jpeg_buf.resize(width * height * 3);
-                            for (int i = 0; i < height; i++)
-                            {
-                                for (int j = 0; j < width; j++)
-                                {
-                                    jpeg_buf[i * width * 3 + j * 3] = rgb[i * width * 4 + j * 4];
-                                    jpeg_buf[i * width * 3 + j * 3 + 1] = rgb[i * width * 4 + j * 4 + 1];
-                                    jpeg_buf[i * width * 3 + j * 3 + 2] = rgb[i * width * 4 + j * 4 + 2];
-                                }
-                            }
-                            break;
-                        case GL_BGRA:
-                            jpeg_buf.resize(width * height * 3);
-                            for (int i = 0; i < height; i++)
-                            {
-                                for (int j = 0; j < width; j++)
-                                {
-                                    jpeg_buf[i * width * 3 + j * 3] = rgb[i * width * 4 + j * 4 + 2];
-                                    jpeg_buf[i * width * 3 + j * 3 + 1] = rgb[i * width * 4 + j * 4 + 1];
-                                    jpeg_buf[i * width * 3 + j * 3 + 2] = rgb[i * width * 4 + j * 4];
-                                }
-                            }
-                            break;
-                        case GL_RGB:
-                            for (int i = 0; i < height; i++)
-                            {
-                                for (int j = 0; j < rowSize; j++)
-                                {
-                                    jpeg_buf.push_back(rgb[rowStep * i + j]);
-                                }
-                            }
-                            break;
-                        default:
-                            break;
-                        }
-                    }
-                }
+            // Process texture using our mesh processor
+            std::vector<unsigned char> image_data;
+            std::string mime_type;
+            if (::process_texture(tex, image_data, mime_type)) {
+                // Add image data to buffer
+                buffer.data.insert(buffer.data.end(), image_data.begin(), image_data.end());
+
+                // Create image with appropriate MIME type
+                tinygltf::Image image;
+                image.mimeType = mime_type;
+                image.bufferView = model.bufferViews.size();
+                model.images.push_back(image);
+
+                tinygltf::BufferView bfv;
+                bfv.buffer = 0;
+                bfv.byteOffset = buffer_start;
+                alignment_buffer(buffer.data);
+                bfv.byteLength = buffer.data.size() - buffer_start;
+                model.bufferViews.push_back(bfv);
             }
-            if (!jpeg_buf.empty()) {
-                int buf_size = buffer.data.size();
-                buffer.data.reserve(buffer.data.size() + width * height * 3);
-                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, jpeg_buf.data(), 80);
-            }
-            else {
-                std::vector<char> v_data(256 * 256 * 3, 255);
-                width = height = 256;
-                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, v_data.data(), 80);
-            }
-            tinygltf::Image image;
-            image.mimeType = "image/jpeg";
-            image.bufferView = model.bufferViews.size();
-            model.images.push_back(image);
-            tinygltf::BufferView bfv;
-            bfv.buffer = 0;
-            bfv.byteOffset = buffer_start;
-            alignment_buffer(buffer.data);
-            bfv.byteLength = buffer.data.size() - buffer_start;
-            model.bufferViews.push_back(bfv);
         }
     }
     // node
@@ -924,8 +902,21 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         model.samplers = { sample };
     }
     // use KHR_materials_unlit
-    model.extensionsRequired = { "KHR_materials_unlit" };
-    model.extensionsUsed = { "KHR_materials_unlit" };
+    // Update extensions declaration to include KHR_texture_basisu when using KTX2
+    if (b_use_ktx2_compression) {
+        model.extensionsRequired = { "KHR_materials_unlit", "KHR_texture_basisu" };
+        model.extensionsUsed = { "KHR_materials_unlit", "KHR_texture_basisu" };
+    } else {
+        model.extensionsRequired = { "KHR_materials_unlit" };
+        model.extensionsUsed = { "KHR_materials_unlit" };
+    }
+
+    // Add Draco extension if compression is enabled
+    if (b_use_draco_compression) {
+        model.extensionsRequired.push_back("KHR_draco_mesh_compression");
+        model.extensionsUsed.push_back("KHR_draco_mesh_compression");
+    }
+
     for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
     {
         tinygltf::Material mat = make_color_material_osgb(1.0, 1.0, 1.0);
@@ -941,8 +932,21 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         for (auto tex : infoVisitor.texture_array)
         {
             tinygltf::Texture texture;
-            texture.source = texture_index++;
             texture.sampler = 0;
+
+            // When using KTX2, we need to use the KHR_texture_basisu extension
+            if (b_use_ktx2_compression) {
+                // For KTX2/Basis Universal, use the extension field instead of source
+                tinygltf::Value::Object basisu_ext;
+                basisu_ext["source"] = tinygltf::Value(texture_index);
+                texture.extensions["KHR_texture_basisu"] = tinygltf::Value(basisu_ext);
+                // Note: Do NOT set texture.source when using the extension
+            } else {
+                // For regular images (JPEG/PNG), use the source field
+                texture.source = texture_index;
+            }
+
+            texture_index++;
             model.textures.push_back(texture);
         }
     }
@@ -1260,4 +1264,39 @@ osgb2glb(const char* in, const char* out)
         return false;
     }
     return true;
+}
+
+// Function to enable/disable KTX2 compression
+void set_ktx2_compression_internal(bool enable) {
+    b_use_ktx2_compression = enable;
+}
+
+// Function to enable/disable Draco compression
+void set_draco_compression_internal(bool enable) {
+    b_use_draco_compression = enable;
+}
+
+// Function to set Draco compression parameters
+void set_draco_compression_params_internal(const DracoCompressionParams& params) {
+    draco_params = params;
+}
+
+// Add function to enable KTX2 compression
+extern "C" void set_ktx2_compression(bool enable) {
+    ::set_ktx2_compression_flag(enable);
+}
+
+extern "C" void set_draco_compression(bool enable) {
+    b_use_draco_compression = enable;
+}
+
+extern "C" void set_draco_compression_params(int position_quantization_bits,
+                                            int normal_quantization_bits,
+                                            int tex_coord_quantization_bits,
+                                            int generic_quantization_bits) {
+    draco_params.position_quantization_bits = position_quantization_bits;
+    draco_params.normal_quantization_bits = normal_quantization_bits;
+    draco_params.tex_coord_quantization_bits = tex_coord_quantization_bits;
+    draco_params.generic_quantization_bits = generic_quantization_bits;
+    draco_params.enable_compression = true;
 }

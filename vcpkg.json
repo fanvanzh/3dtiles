@@ -18,7 +18,10 @@
       "name": "gdal",
       "default-features": false,
       "features": ["geos", "gif", "iconv", "jpeg", "libkml", "libspatialite", "openjpeg", "png", "recommended-features" ,"sqlite3", "webp", "zstd"]
-    }
+    },
+    "basisu",
+    "draco",
+    "meshoptimizer"
   ],
   "overrides": [
     {

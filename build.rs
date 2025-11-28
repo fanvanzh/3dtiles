@@ -48,6 +48,8 @@ fn build_win_msvc() {
 
     // 4. GDAL dependencies
     println!("cargo:rustc-link-lib=gdal");
+    println!("cargo:rustc-link-lib=basisu_encoder");
+    println!("cargo:rustc-link-lib=meshoptimizer");
 
     // copy gdal and proj data
     let vcpkg_share_dir = vcpkg_installed_dir.join("share");
@@ -155,13 +157,14 @@ fn build_linux_unknown() {
     println!("cargo:rustc-link-lib=tiff");
     println!("cargo:rustc-link-lib=webp");
     println!("cargo:rustc-link-lib=xml2");
-    println!("cargo:rustc-link-lib=zstd");
     println!("cargo:rustc-link-lib=lzma");
     println!("cargo:rustc-link-lib=openjp2");
     println!("cargo:rustc-link-lib=qhullstatic_r");
     println!("cargo:rustc-link-lib=minizip");
     println!("cargo:rustc-link-lib=spatialite");
     println!("cargo:rustc-link-lib=freexl");
+    println!("cargo:rustc-link-lib=basisu_encoder");
+    println!("cargo:rustc-link-lib=meshoptimizer");
 
     let vcpkg_share_dir = vcpkg_installed_dir.join("share");
     copy_gdal_data(vcpkg_share_dir.to_str().unwrap());
@@ -173,6 +176,7 @@ fn build_macos() {
     // Get VCPKG_ROOT environment variable
     let dst = Config::new(".")
         .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
+        .define("VCPKG_INSTALL_OPTIONS", "--allow-unsupported")
         .define("CMAKE_C_COMPILER", "/usr/bin/clang")
         .define("CMAKE_CXX_COMPILER", "/usr/bin/clang++")
         .define("CMAKE_MAKE_PROGRAM", "/usr/bin/make")
@@ -250,13 +254,14 @@ fn build_macos() {
     println!("cargo:rustc-link-lib=tiff");
     println!("cargo:rustc-link-lib=webp");
     println!("cargo:rustc-link-lib=xml2");
-    println!("cargo:rustc-link-lib=zstd");
     println!("cargo:rustc-link-lib=lzma");
     println!("cargo:rustc-link-lib=openjp2");
     println!("cargo:rustc-link-lib=qhullstatic_r");
     println!("cargo:rustc-link-lib=minizip");
     println!("cargo:rustc-link-lib=spatialite");
     println!("cargo:rustc-link-lib=freexl");
+    println!("cargo:rustc-link-lib=basisu_encoder");
+    println!("cargo:rustc-link-lib=meshoptimizer");
 
     // 7. System libraries / frameworks
     println!("cargo:rustc-link-lib=c++");
@@ -362,13 +367,14 @@ fn build_macos_x86_64() {
     println!("cargo:rustc-link-lib=tiff");
     println!("cargo:rustc-link-lib=webp");
     println!("cargo:rustc-link-lib=xml2");
-    println!("cargo:rustc-link-lib=zstd");
     println!("cargo:rustc-link-lib=lzma");
     println!("cargo:rustc-link-lib=openjp2");
     println!("cargo:rustc-link-lib=qhullstatic_r");
     println!("cargo:rustc-link-lib=minizip");
     println!("cargo:rustc-link-lib=spatialite");
     println!("cargo:rustc-link-lib=freexl");
+    println!("cargo:rustc-link-lib=basisu_encoder");
+    println!("cargo:rustc-link-lib=meshoptimizer");
 
     // 7. System libraries / frameworks
     println!("cargo:rustc-link-lib=c++");

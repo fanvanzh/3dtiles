@@ -76,29 +76,11 @@ if (OpenSceneGraph_FOUND)
     target_include_directories(_3dtile PUBLIC ${OSG_INCLUDE_DIR})
 endif()
 
-# draco
-add_subdirectory(thirdparty/draco)
-if(TARGET draco)
-    target_link_libraries(_3dtile PRIVATE draco)
-    target_include_directories(_3dtile PUBLIC
-        ${CMAKE_BINARY_DIR}
-        thirdparty/draco/src
-    )
-elseif(TARGET draco_static)
-    target_link_libraries(_3dtile PRIVATE draco_static)
-    target_include_directories(_3dtile PUBLIC
-        ${CMAKE_BINARY_DIR}
-        thirdparty/draco/src
-    )
-else()
-    target_link_libraries(_3dtile PRIVATE draco_shared)
-    target_include_directories(_3dtile PUBLIC
-        ${CMAKE_BINARY_DIR}
-        thirdparty/draco/src
-    )
-endif()
+find_package(basisu CONFIG REQUIRED)
+target_link_libraries(_3dtile PRIVATE basisu::basisu_encoder)
+find_package(draco CONFIG REQUIRED)
+target_link_libraries(_3dtile PRIVATE draco::draco)
+find_package(meshoptimizer CONFIG REQUIRED)
+target_link_libraries(_3dtile PRIVATE meshoptimizer::meshoptimizer)
 
-# meshoptimizer
-add_subdirectory(thirdparty/meshoptimizer)
-target_link_libraries(_3dtile PRIVATE meshoptimizer)
 install(TARGETS _3dtile DESTINATION lib)
