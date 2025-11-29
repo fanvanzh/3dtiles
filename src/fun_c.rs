@@ -1,5 +1,5 @@
 #[no_mangle]
-pub extern "C" fn write_file(file_name: *const i8, buf: *const u8, buf_len: u32) -> bool {
+pub extern "C" fn write_file(file_name: *const libc::c_char, buf: *const u8, buf_len: u32) -> bool {
     use std::ffi;
     use std::fs::File;
     use std::io::prelude::*;
@@ -27,7 +27,7 @@ pub extern "C" fn write_file(file_name: *const i8, buf: *const u8, buf_len: u32)
 }
 
 #[no_mangle]
-pub extern "C" fn mkdirs(path: *const i8) -> bool {
+pub extern "C" fn mkdirs(path: *const libc::c_char) -> bool {
     use std::ffi;
     use std::fs;
     unsafe {
@@ -48,7 +48,7 @@ pub extern "C" fn mkdirs(path: *const i8) -> bool {
 }
 
 #[no_mangle]
-pub extern "C" fn log_error(msg: *const i8) {
+pub extern "C" fn log_error(msg: *const libc::c_char) {
     use std::ffi::CStr;
     unsafe {
         let input = CStr::from_ptr(msg);

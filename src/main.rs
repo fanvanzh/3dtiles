@@ -365,7 +365,8 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                                 // println!("{:?}", wkt);
                                 let c_str = CString::new(gdal_data).unwrap();
                                 let ptr = c_str.as_ptr();
-                                let wkt_ptr = wkt.as_ptr();
+                                let wkt_cstr = CString::new(wkt).unwrap();
+                                let wkt_ptr = wkt_cstr.as_ptr();
                                 if osgb::wkt_convert(wkt_ptr, pt.as_mut_ptr(), ptr) {
                                     center_x = pt[0];
                                     center_y = pt[1];
