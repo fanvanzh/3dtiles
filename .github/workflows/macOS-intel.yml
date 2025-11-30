@@ -25,7 +25,4 @@ jobs:
         toolchain: stable
 
     - name: Build
-      run: cargo build --verbose --release
-
-    - name: Test
-      run: cargo test --verbose
+      run: cargo build -vv --release

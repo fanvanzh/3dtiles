@@ -7,7 +7,7 @@ fn build_win_msvc() {
     // Get VCPKG_ROOT environment variable
     let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap();
     let dst = Config::new(".")
-        .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
+        .define("CMAKE_TOOLCHAIN_FILE", format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
         .very_verbose(true)
         .build();
     println!("cmake dst = {}", dst.display());
@@ -38,10 +38,12 @@ fn build_win_msvc() {
     // 1. FFI static
     println!("cargo:rustc-link-lib=static=_3dtile");
 
-     // 2. OSG
+    // 2. OSG
     println!("cargo:rustc-link-lib=osgUtil");
     println!("cargo:rustc-link-lib=osgDB");
     println!("cargo:rustc-link-lib=osg");
+    let osg_plugins_lib = vcpkg_installed_lib_dir.join("osgPlugins-3.6.5");
+    println!("cargo:rustc-link-search=native={}", osg_plugins_lib.display());
 
     // 3. OpenThreads (依赖 _3dtile)
     println!("cargo:rustc-link-lib=OpenThreads");
@@ -55,6 +57,10 @@ fn build_win_msvc() {
     let vcpkg_share_dir = vcpkg_installed_dir.join("share");
     copy_gdal_data(vcpkg_share_dir.to_str().unwrap());
     copy_proj_data(vcpkg_share_dir.to_str().unwrap());
+
+    // copy OSG plugins
+    let osg_plugins_src = vcpkg_installed_lib_dir.join("osgPlugins-3.6.5");
+    copy_osg_plugins(osg_plugins_src.to_str().unwrap());
 }
 
 fn get_target_dir() -> std::path::PathBuf {
@@ -114,9 +120,10 @@ fn build_linux_unknown() {
     println!("cargo:rustc-link-lib=dl");
     println!("cargo:rustc-link-lib=pthread");
 
+    // Note: On Linux, OSG plugins are static libraries (.a) that must be linked at build time
     println!("cargo:rustc-link-lib=osgdb_jpeg");
-    println!("cargo:rustc-link-lib=osgdb_serializers_osg");
     println!("cargo:rustc-link-lib=osgdb_osg");
+    println!("cargo:rustc-link-lib=osgdb_serializers_osg");
     println!("cargo:rustc-link-lib=osgUtil");
     println!("cargo:rustc-link-lib=osgDB");
     println!("cargo:rustc-link-lib=osg");
@@ -169,6 +176,10 @@ fn build_linux_unknown() {
     let vcpkg_share_dir = vcpkg_installed_dir.join("share");
     copy_gdal_data(vcpkg_share_dir.to_str().unwrap());
     copy_proj_data(vcpkg_share_dir.to_str().unwrap());
+
+    // copy OSG plugins
+    let osg_plugins_src = vcpkg_installed_lib_dir.join("osgPlugins-3.6.5");
+    copy_osg_plugins(osg_plugins_src.to_str().unwrap());
 }
 
 fn build_macos() {
@@ -213,10 +224,10 @@ fn build_macos() {
     println!("cargo:rustc-link-lib=static=_3dtile");
 
     // 2. OSG
-    // println!("cargo:rustc-link-lib=osgdb_jp2");
+    // Note: On macOS ARM64, OSG plugins are static libraries (.a) that must be linked at build time
     println!("cargo:rustc-link-lib=osgdb_jpeg");
-    println!("cargo:rustc-link-lib=osgdb_serializers_osg");
     println!("cargo:rustc-link-lib=osgdb_osg");
+    println!("cargo:rustc-link-lib=osgdb_serializers_osg");
     println!("cargo:rustc-link-lib=osgUtil");
     println!("cargo:rustc-link-lib=osgDB");
     println!("cargo:rustc-link-lib=osg");
@@ -282,10 +293,14 @@ fn build_macos() {
     let vcpkg_share_dir = vcpkg_installed_dir.join("share");
     copy_gdal_data(vcpkg_share_dir.to_str().unwrap());
     copy_proj_data(vcpkg_share_dir.to_str().unwrap());
+
+    // copy OSG plugins for macOS x86_64
+    let osg_plugins_src = vcpkg_installed_lib_dir.join("osgPlugins-3.6.5");
+    copy_osg_plugins(osg_plugins_src.to_str().unwrap());
 }
 
 fn build_macos_x86_64() {
-   let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap();
+    let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap();
     // Get VCPKG_ROOT environment variable
     let dst = Config::new(".")
         .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
@@ -326,10 +341,10 @@ fn build_macos_x86_64() {
     println!("cargo:rustc-link-lib=static=_3dtile");
 
     // 2. OSG
-    // println!("cargo:rustc-link-lib=osgdb_jp2");
+    // Note: On macOS x86_64, OSG plugins are static libraries (.a) that must be linked at build time
     println!("cargo:rustc-link-lib=osgdb_jpeg");
-    println!("cargo:rustc-link-lib=osgdb_serializers_osg");
     println!("cargo:rustc-link-lib=osgdb_osg");
+    println!("cargo:rustc-link-lib=osgdb_serializers_osg");
     println!("cargo:rustc-link-lib=osgUtil");
     println!("cargo:rustc-link-lib=osgDB");
     println!("cargo:rustc-link-lib=osg");
@@ -395,6 +410,10 @@ fn build_macos_x86_64() {
     let vcpkg_share_dir = vcpkg_installed_dir.join("share");
     copy_gdal_data(vcpkg_share_dir.to_str().unwrap());
     copy_proj_data(vcpkg_share_dir.to_str().unwrap());
+
+    // copy OSG plugins for macOS x86_64
+    let osg_plugins_src = vcpkg_installed_lib_dir.join("osgPlugins-3.6.5");
+    copy_osg_plugins(osg_plugins_src.to_str().unwrap());
 }
 
 fn copy_gdal_data(share: &str) {
@@ -438,6 +457,26 @@ fn copy_proj_data(share: &str) {
     );
 
     copy_dir_recursive(&proj_data, &out_dir).unwrap();
+}
+
+fn copy_osg_plugins(plugins_dir: &str) {
+    let plugins_src = Path::new(plugins_dir);
+    let out_dir = get_target_dir().join("osgPlugins-3.6.5");
+
+    println!(
+        "osg_plugins -> {}, out_dir -> {}",
+        plugins_src.display(),
+        out_dir.display()
+    );
+
+    if plugins_src.exists() {
+        copy_dir_recursive(&plugins_src, &out_dir).unwrap();
+    } else {
+        println!(
+            "cargo:warning=OSG plugins directory not found: {}",
+            plugins_dir
+        );
+    }
 }
 
 /// 打印 ./vcpkg_installed 下的目录树，用 cargo:warning 输出，这样能在 cargo build 输出中看到

@@ -19,8 +19,59 @@ use log::{Level, LevelFilter};
 use serde::Deserialize;
 use std::io::Write;
 
+/// Setup OpenSceneGraph environment variables for plugin loading
+fn setup_osg_environment() {
+    use std::env;
+
+    // Get the executable directory
+    let exe_path = env::current_exe().ok();
+    let exe_dir = exe_path.as_ref().and_then(|p| p.parent());
+
+    // Try to set OSG_LIBRARY_PATH if not already set
+    if env::var("OSG_LIBRARY_PATH").is_err() {
+        if let Some(dir) = exe_dir {
+            // Check for osgPlugins directory next to the executable
+            let plugins_dir = dir.join("osgPlugins-3.6.5");
+            if plugins_dir.exists() {
+                env::set_var("OSG_LIBRARY_PATH", &plugins_dir);
+                info!("OSG_LIBRARY_PATH set to: {:?}", plugins_dir);
+            } else {
+                // Fallback: try to find plugins in common locations
+                let alt_plugins = dir.join("lib").join("osgPlugins-3.6.5");
+                if alt_plugins.exists() {
+                    env::set_var("OSG_LIBRARY_PATH", &alt_plugins);
+                    info!("OSG_LIBRARY_PATH set to: {:?}", alt_plugins);
+                }
+            }
+        }
+    }
+
+    // Setup GDAL_DATA and PROJ_DATA paths
+    if env::var("GDAL_DATA").is_err() {
+        if let Some(dir) = exe_dir {
+            let gdal_data = dir.join("gdal");
+            if gdal_data.exists() {
+                env::set_var("GDAL_DATA", &gdal_data);
+            }
+        }
+    }
+
+    if env::var("PROJ_DATA").is_err() {
+        if let Some(dir) = exe_dir {
+            let proj_data = dir.join("proj");
+            if proj_data.exists() {
+                env::set_var("PROJ_DATA", &proj_data);
+            }
+        }
+    }
+}
+
 fn main() {
     use std::env;
+
+    // Setup OSG plugin path for runtime plugin loading
+    setup_osg_environment();
+
     if let Err(_) = env::var("RUST_LOG") {
         env::set_var("RUST_LOG", "info");
     }

@@ -36,6 +36,46 @@ using namespace std;
 #undef min
 #endif // max
 
+// 引入osg插件和序列化
+// USE_OSGPLUGIN is needed for static plugin registration on Linux/macOS
+// On Windows with dynamic linking, plugins are loaded at runtime instead
+#if defined(__unix__) || defined(__APPLE__)
+#include <osgDB/Registry>
+USE_OSGPLUGIN(osg)
+#endif
+
+// Helper function to log OSG plugin search paths
+void log_osg_plugin_info() {
+    printf("\n=== OpenSceneGraph Plugin Loading Information ===\n");
+
+    // Get OSG Registry singleton
+    osgDB::Registry* registry = osgDB::Registry::instance();
+
+    // Log OSG_LIBRARY_PATH environment variable
+    const char* osg_lib_path = getenv("OSG_LIBRARY_PATH");
+    if (osg_lib_path) {
+        printf("OSG_LIBRARY_PATH env variable: %s\n", osg_lib_path);
+    } else {
+        printf("OSG_LIBRARY_PATH env variable: NOT SET\n");
+    }
+
+    // Log library file paths that OSG will search
+    const osgDB::FilePathList& libPaths = registry->getLibraryFilePathList();
+    printf("OSG Library Search Paths (%zu paths):\n", libPaths.size());
+    for (size_t i = 0; i < libPaths.size(); ++i) {
+        printf("  [%zu] %s\n", i, libPaths[i].c_str());
+    }
+
+    // Log data file paths
+    const osgDB::FilePathList& dataPaths = registry->getDataFilePathList();
+    printf("OSG Data File Search Paths (%zu paths):\n", dataPaths.size());
+    for (size_t i = 0; i < dataPaths.size(); ++i) {
+        printf("  [%zu] %s\n", i, dataPaths[i].c_str());
+    }
+
+    printf("=== End of OSG Plugin Information ===\n\n");
+}
+
 static bool b_pbr_texture = false;
 // Add KTX2 compression flag
 static bool b_use_ktx2_compression = true;
@@ -318,6 +358,13 @@ int get_lvl_num(std::string file_name){
 osg_tree get_all_tree(std::string& file_name) {
     osg_tree root_tile;
     vector<string> fileNames = { file_name };
+
+    // Log OSG plugin information on first call
+    static bool logged = false;
+    if (!logged) {
+        log_osg_plugin_info();
+        logged = true;
+    }
 
     InfoVisitor infoVisitor(get_parent(file_name));
     {   // add block to release Node
@@ -784,6 +831,14 @@ void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState)
 bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, int node_type) {
     vector<string> fileNames = { path };
     std::string parent_path = get_parent(path);
+
+    // Log OSG plugin information on first call
+    static bool logged = false;
+    if (!logged) {
+        log_osg_plugin_info();
+        logged = true;
+    }
+
     osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
     if (!root.valid()) {
         return false;

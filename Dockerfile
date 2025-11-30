@@ -1,5 +1,5 @@
 #==================== Build stage ====================
-FROM --platform=linux/amd64 rust:1.90.0-bookworm
+FROM --platform=linux/amd64 rust:1.90.0-bookworm as builder
 
 # Disable Rosetta and force QEMU emulation
 ENV DOCKER_DEFAULT_PLATFORM=linux/amd64
@@ -50,6 +50,13 @@ WORKDIR /3dtiles
 COPY --from=builder /app/target/release/_3dtile /3dtiles/_3dtile
 COPY --from=builder /app/target/release/gdal /3dtiles/gdal
 COPY --from=builder /app/target/release/proj /3dtiles/proj
+# Copy OSG plugins for runtime loading
+COPY --from=builder /app/target/release/osgPlugins-3.6.5 /3dtiles/osgPlugins-3.6.5
+
+# Set environment variables for runtime
+ENV OSG_LIBRARY_PATH=/3dtiles/osgPlugins-3.6.5
+ENV GDAL_DATA=/3dtiles/gdal
+ENV PROJ_DATA=/3dtiles/proj
 
 WORKDIR /data
 ENTRYPOINT ["/3dtiles/_3dtile", "--help"]

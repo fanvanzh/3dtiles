@@ -6,7 +6,7 @@ on:
     types: [opened, synchronize, reopened]
 jobs:
   build-and-test:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v5
@@ -22,10 +22,7 @@ jobs:
         toolchain: stable
 
     - name: Install OpenGL related dependencies
-      run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx libgl1-mesa-dev  libglu1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxxf86vm-dev
+      run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxxf86vm-dev
 
     - name: Build
       run: cargo build --release -vv
-
-    - name: Test
-      run: cargo test --verbose

@@ -66,13 +66,17 @@ find_package(OpenSceneGraph REQUIRED COMPONENTS
 
 if (OpenSceneGraph_FOUND)
     message(STATUS "OpenSceneGraph include dirs: ${OSG_INCLUDE_DIR}, libraries: ${OSG_LIBRARIES}")
-    # Ensure all required OSG libraries are linked, especially for arm64
     target_link_libraries(_3dtile PRIVATE
         osg
         osgDB
         osgUtil
         OpenThreads
     )
+    # On Linux/macOS, OSG plugins are static libraries that must be linked
+    # On Windows, plugins may be dynamic and loaded at runtime
+    if(UNIX)
+        target_link_libraries(_3dtile PRIVATE osgdb_osg)
+    endif()
     target_include_directories(_3dtile PUBLIC ${OSG_INCLUDE_DIR})
 endif()
 
