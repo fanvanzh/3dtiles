@@ -33,6 +33,8 @@ extern "C" {
 
     pub fn epsg_convert(insrs: i32, val: *mut f64, gdal: *const libc::c_char, proj: *const libc::c_char) -> bool;
 
+    pub fn enu_init(lon: f64, lat: f64, origin_enu: *mut f64, gdal: *const libc::c_char, proj: *const libc::c_char) -> bool;
+
     pub fn wkt_convert(gdal: *const libc::c_char, val: *mut f64, gdal: *const libc::c_char) -> bool;
 
     fn degree2rad(val: f64) -> f64;
@@ -72,6 +74,7 @@ pub fn osgb_batch_convert(
     region_offset: Option<f64>,
     pbr_texture: bool,
     enu_offset: Option<(f64, f64, f64)>,
+    origin_height: Option<f64>,
 ) -> Result<(), Box<dyn Error>> {
     use std::fs::File;
     use std::io::prelude::*;
@@ -177,11 +180,16 @@ pub fn osgb_batch_convert(
     }
 
     //let root_geometric_error = get_geometric_error(center_y, 10);
-    // do merge plz
-    let mut tras_height = 0f64;
-    if let Some(v) = region_offset {
-        tras_height = v - root_box[5];
-    }
+    // Use origin height: priority: origin_height > enu_offset.2 > region_offset calculation
+    let tras_height = if let Some(h) = origin_height {
+        h
+    } else if let Some((_, _, enu_z)) = enu_offset {
+        enu_z
+    } else if let Some(v) = region_offset {
+        v - root_box[5]
+    } else {
+        0f64
+    };
     let mut trans_vec = vec![0f64; 16];
     unsafe {
         if let Some((enu_x, enu_y, enu_z)) = enu_offset {
@@ -222,7 +230,7 @@ pub fn osgb_batch_convert(
                 },
                 "geometricError": 1000,
                 "content": {
-                    "uri" : format!("{}/tileset.json", path.replace(&out_dir,".").replace("\\","/"))
+                    "uri" : format!("{}/tileset.json", path.replace(&out_dir,"./").replace("\\","/"))
                 }
             }
         );

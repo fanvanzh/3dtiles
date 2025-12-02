@@ -281,6 +281,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     let mut trans_region = None;
     let mut pbr_texture = false;
     let mut enu_offset: Option<(f64, f64, f64)> = None;
+    let mut origin_height: Option<f64> = None;
 
     // try parse metadata.xml
     let metadata_file = dir.join("metadata.xml");
@@ -318,11 +319,48 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                                                 0.0
                                             };
 
-                                            // Store ENU offset for use in transform matrix
-                                            enu_offset = Some((offset_x, offset_y, offset_z));
+                                            // Call enu_init to set up GeoTransform for geometry correction
+                                            let gdal_data: String = {
+                                                use std::path::Path;
+                                                let exe_dir = ::std::env::current_exe().unwrap();
+                                                Path::new(&exe_dir)
+                                                    .parent()
+                                                    .unwrap()
+                                                    .join("gdal")
+                                                    .to_str()
+                                                    .unwrap()
+                                                    .into()
+                                            };
+                                            let proj_lib: String = {
+                                                use std::path::Path;
+                                                let exe_dir = ::std::env::current_exe().unwrap();
+                                                Path::new(&exe_dir)
+                                                    .parent()
+                                                    .unwrap()
+                                                    .join("proj")
+                                                    .to_str()
+                                                    .unwrap()
+                                                    .into()
+                                            };
+
+                                            unsafe {
+                                                use std::ffi::CString;
+                                                let mut origin_enu = vec![offset_x, offset_y, offset_z];
+                                                let gdal_c_str = CString::new(gdal_data).unwrap();
+                                                let gdal_ptr = gdal_c_str.as_ptr();
+                                                let proj_c_str = CString::new(proj_lib).unwrap();
+                                                let proj_ptr = proj_c_str.as_ptr();
+                                                if !osgb::enu_init(center_x, center_y, origin_enu.as_mut_ptr(), gdal_ptr, proj_ptr) {
+                                                    error!("enu_init failed!");
+                                                }
+                                            }
+
+                                            // For ENU systems, use height=0 (or terrain elevation) for root transform
+                                            // The SRSOrigin offset is already baked into the tile geometry coordinates
+                                            origin_height = Some(0.0);
 
                                             info!("ENU SRSOrigin offset detected: x={}, y={}, z={}", offset_x, offset_y, offset_z);
-                                            info!("Using original center coordinates for transform matrix: lon={}, lat={}", center_x, center_y);
+                                            info!("Using geographic origin for transform: lon={}, lat={}, h=0", center_x, center_y);
                                         } else {
                                             error!("Failed to parse SRSOrigin values");
                                         }
@@ -375,7 +413,13 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                                         if osgb::epsg_convert(srs, pt.as_mut_ptr(), gdal_ptr, proj_ptr) {
                                             center_x = pt[0];
                                             center_y = pt[1];
-                                            info!("epsg: x->{}, y->{}", pt[0], pt[1]);
+                                            // Store height from original SRSOrigin (pt[2] if available)
+                                            if pt.len() >= 3 {
+                                                origin_height = Some(pt[2]);
+                                                info!("epsg: x->{}, y->{}, h={}", pt[0], pt[1], pt[2]);
+                                            } else {
+                                                info!("epsg: x->{}, y->{}", pt[0], pt[1]);
+                                            }
                                         } else {
                                             error!("epsg convert failed!");
                                         }
@@ -463,7 +507,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     if let Err(e) = osgb::osgb_batch_convert(
         &dir, &dir_dest, max_lvl,
         center_x, center_y, trans_region, pbr_texture,
-        enu_offset)
+        enu_offset, origin_height)
     {
         error!("{}", e);
         return;
