@@ -280,7 +280,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     let mut max_lvl = None;
     let mut trans_region = None;
     let mut pbr_texture = false;
-    let mut enu_offset: Option<(f64, f64, f64)> = None;
+    let enu_offset: Option<(f64, f64, f64)> = None;
     let mut origin_height: Option<f64> = None;
 
     // try parse metadata.xml
