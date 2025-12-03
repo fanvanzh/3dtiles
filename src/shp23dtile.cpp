@@ -528,11 +528,11 @@ shp23dtile(const char* filename, int layer_id,
         std::optional<SimplificationParams> simplification_params = std::nullopt;
         if (enable_simplify) {
             simplification_params = std::make_optional<SimplificationParams>({
-                .enable_simplification = true,
                 .target_error = 0.01f,
                 .target_ratio = 0.5f,
-                .preserve_normals = true,
+                .enable_simplification = true,
                 .preserve_texture_coords = true,
+                .preserve_normals = true,
             });
         }
         std::string b3dm_buf = make_b3dm(v_meshes, true, enable_simplify, simplification_params);
