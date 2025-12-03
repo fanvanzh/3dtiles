@@ -5,6 +5,25 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Strict C++ compilation flags to match CI (Ubuntu GCC)
+# Set ENABLE_STRICT_CHECKS=ON to enable strict mode locally
+option(ENABLE_STRICT_CHECKS "Enable strict compilation checks (like CI)" OFF)
+
+if(ENABLE_STRICT_CHECKS)
+    message(STATUS "Strict compilation mode enabled (matching CI behavior)")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options(
+            -Wall                    # Enable all common warnings
+            -Wextra                  # Enable extra warnings
+            -Wpedantic               # Strict ISO C++ compliance
+            -Werror=reorder          # Error on member initialization order issues
+            -Werror=designated-init  # Error on designated initializer issues (GCC specific)
+        )
+    endif()
+else()
+    message(STATUS "Normal compilation mode (use -DENABLE_STRICT_CHECKS=ON for CI-like strictness)")
+endif()
+
 # vcpkg integration
 if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")

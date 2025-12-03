@@ -126,7 +126,7 @@ class InfoVisitor : public osg::NodeVisitor
 public:
     InfoVisitor(std::string _path, bool loadAllType = false)
     :osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
-    , path(_path), is_pagedlod(loadAllType), is_loadAllType(loadAllType)
+    , path(_path), is_loadAllType(loadAllType), is_pagedlod(loadAllType)
     {}
 
     ~InfoVisitor() {

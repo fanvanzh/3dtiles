@@ -25,4 +25,4 @@ jobs:
         toolchain: stable
 
     - name: Build
-      run: cargo build -vv --release
+      run: export ENABLE_STRICT_CHECKS=1 && cargo build -vv --release

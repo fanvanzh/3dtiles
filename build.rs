@@ -6,10 +6,21 @@ use cmake::Config;
 fn build_win_msvc() {
     // Get VCPKG_ROOT environment variable
     let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
-    let dst = Config::new(".")
+
+    // Check if strict mode is enabled via environment variable
+    let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
+
+    let mut config = Config::new(".");
+    config
         .define("CMAKE_TOOLCHAIN_FILE", format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
-        .very_verbose(true)
-        .build();
+        .very_verbose(true);
+
+    if enable_strict {
+        println!("cargo:warning=Building with STRICT CHECKS enabled (CI mode)");
+        config.define("ENABLE_STRICT_CHECKS", "ON");
+    }
+
+    let dst = config.build();
     println!("cmake dst = {}", dst.display());
     // Link Search Path for C++ Implementation
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
@@ -72,14 +83,25 @@ fn get_target_dir() -> std::path::PathBuf {
 
 fn build_linux_unknown() {
     let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
+
+    // Check if strict mode is enabled via environment variable
+    let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
+
     // Get VCPKG_ROOT environment variable
-    let dst = Config::new(".")
+    let mut config = Config::new(".");
+    config
         .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
         .define("CMAKE_C_COMPILER", "/usr/bin/gcc")
         .define("CMAKE_CXX_COMPILER", "/usr/bin/g++")
         .define("CMAKE_MAKE_PROGRAM", "/usr/bin/make")
-        .very_verbose(true)
-        .build();
+        .very_verbose(true);
+
+    if enable_strict {
+        println!("cargo:warning=Building with STRICT CHECKS enabled (CI mode)");
+        config.define("ENABLE_STRICT_CHECKS", "ON");
+    }
+
+    let dst = config.build();
     println!("cmake dst = {}", dst.display());
     // Link Search Path for C++ Implementation
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
@@ -184,15 +206,26 @@ fn build_linux_unknown() {
 
 fn build_macos() {
     let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
+
+    // Check if strict mode is enabled via environment variable
+    let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
+
     // Get VCPKG_ROOT environment variable
-    let dst = Config::new(".")
+    let mut config = Config::new(".");
+    config
         .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
         .define("VCPKG_INSTALL_OPTIONS", "--allow-unsupported")
         .define("CMAKE_C_COMPILER", "/usr/bin/clang")
         .define("CMAKE_CXX_COMPILER", "/usr/bin/clang++")
         .define("CMAKE_MAKE_PROGRAM", "/usr/bin/make")
-        .very_verbose(true)
-        .build();
+        .very_verbose(true);
+
+    if enable_strict {
+        println!("cargo:warning=Building with STRICT CHECKS enabled (CI mode)");
+        config.define("ENABLE_STRICT_CHECKS", "ON");
+    }
+
+    let dst = config.build();
     println!("cmake dst = {}", dst.display());
     // Link Search Path for C++ Implementation
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
@@ -301,14 +334,25 @@ fn build_macos() {
 
 fn build_macos_x86_64() {
     let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
+
+    // Check if strict mode is enabled via environment variable
+    let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
+
     // Get VCPKG_ROOT environment variable
-    let dst = Config::new(".")
+    let mut config = Config::new(".");
+    config
         .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
         .define("CMAKE_C_COMPILER", "/usr/bin/clang")
         .define("CMAKE_CXX_COMPILER", "/usr/bin/clang++")
         .define("CMAKE_MAKE_PROGRAM", "/usr/bin/make")
-        .very_verbose(true)
-        .build();
+        .very_verbose(true);
+
+    if enable_strict {
+        println!("cargo:warning=Building with STRICT CHECKS enabled (CI mode)");
+        config.define("ENABLE_STRICT_CHECKS", "ON");
+    }
+
+    let dst = config.build();
     println!("cmake dst = {}", dst.display());
     // Link Search Path for C++ Implementation
     println!("cargo:rustc-link-search=native={}/lib", dst.display());

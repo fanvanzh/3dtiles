@@ -25,4 +25,4 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxxf86vm-dev
 
     - name: Build
-      run: cargo build --release -vv
+      run: export ENABLE_STRICT_CHECKS=1 && cargo build -vv --release
