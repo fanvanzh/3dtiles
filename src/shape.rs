@@ -1,5 +1,10 @@
 extern "C" {
-    fn shp23dtile(name: *const u8, layer: i32, dest: *const u8, height: *const u8) -> bool;
+    fn shp23dtile(
+        name: *const u8,
+        layer: i32,
+        dest: *const u8,
+        height: *const u8,
+        enable_simplify: bool) -> bool;
 }
 
 use std::ffi::CString;
@@ -30,7 +35,7 @@ fn walk_path(dir: &Path, cb: &mut dyn FnMut(&str)) -> io::Result<()> {
     Ok(())
 }
 
-pub fn shape_batch_convert(from: &str, to: &str, height: &str) -> bool {
+pub fn shape_batch_convert(from: &str, to: &str, height: &str, enable_simplify: bool) -> bool {
     unsafe {
         let source_vec = CString::new(from).unwrap();
         let dest_vec = CString::new(to).unwrap();
@@ -40,7 +45,7 @@ pub fn shape_batch_convert(from: &str, to: &str, height: &str) -> bool {
             0,
             dest_vec.as_ptr() as *const u8,
             height_vec.as_ptr() as *const u8,
-        );
+            enable_simplify);
         if !res {
             return res;
         }

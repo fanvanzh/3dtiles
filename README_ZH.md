@@ -285,6 +285,8 @@ _3dtile.exe [FLAGS] [OPTIONS] --format <FORMAT> --input <PATH> --output <DIR>
 
 ## ② 示例命令
 
+### 基础转换
+
 ```sh
 # from osgb dataset
 _3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path
@@ -303,33 +305,109 @@ _3dtile.exe -f gltf -i E:\Data\TT\001.obj -o E:\Data\TT\001.glb
 _3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
 ```
 
+### 使用优化参数的高级选项
+
+```sh
+# OSGB：启用网格简化（减少多边形数量）
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path --enable-simplify
+
+# OSGB：启用 Draco 网格压缩（减小文件大小，处理较慢）
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path --enable-draco
+
+# OSGB：启用纹理压缩为 KTX2 格式（减小纹理大小）
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path --enable-texture-compress
+
+# OSGB：启用所有优化以实现最大压缩
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path \
+  --enable-simplify --enable-draco --enable-texture-compress
+
+# Shapefile：仅支持网格简化
+_3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
+  --height height --enable-simplify
+```
+
 ## ③ 参数说明
 
-- `-c, --config <JSON>` 在命令行传入 json 配置的字符串，json 内容为选配，可部分实现
+### 必需选项
 
-  json 示例：
+- `-f, --format <FORMAT>` 输入数据格式
+  可选格式：`osgb`, `shape`, `gltf`, `b3dm`
+  - `osgb` 为倾斜摄影格式数据
+  - `shape` 为 Shapefile 面数据
+  - `gltf` 为单一通用模型转 gltf
+  - `b3dm` 为单个 3dtile 二进制数据转 gltf
 
-  ``` json
+- `-i, --input <PATH>` 输入数据的目录或文件路径
+  osgb 数据截止到 `<DIR>/Data` 目录的上一级，其他格式具体到文件名
+
+- `-o, --output <DIR>` 输出目录
+  输出的数据文件位于 `<DIR>/Data` 目录
+
+### 可选参数
+
+- `-c, --config <JSON>` 在命令行传入 JSON 配置字符串（可选）
+  示例：`{"x": 120, "y": 30, "offset": 0, "max_lvl": 20, "pbr": true}`
+
+  JSON 配置说明：
+  ```json
   {
-    "x": 120,
-    "y": 30,
-    "offset": 0,
-    "max_lvl" : 20
+    "x": 120,        // 中心点经度
+    "y": 30,         // 中心点纬度
+    "offset": 0,     // 高度偏移
+    "max_lvl": 20,   // 最大层级
+    "pbr": true      // 启用 PBR 材质
   }
   ```
 
+- `--height <FIELD>` 高度字段名称
+  指定 shapefile 中的高度属性字段，转换 shp 时的必需参数
 
-- `-f, --format <FORMAT>` 输入数据格式。
+- `-v, --verbose` 启用详细输出用于调试
 
-  `FORMAT` 可选：osgb, shape, gltf, b3dm
+### 优化参数（新增）
 
-  `osgb` 为倾斜摄影格式数据, `shape` 为 Shapefile 面数据, `gltf` 为单一通用模型转gltf, `b3dm` 为单个3dtile二进制数据转gltf
+**这些参数默认禁用。启用它们可以优化输出，但会增加处理时间。**
 
-- `-i, --input <PATH>` 输入数据的目录，osgb数据截止到 `<DIR>/Data` 目录的上一级，其他格式具体到文件名。
+- `--enable-simplify` 启用网格简化
+  在保持视觉质量的同时减少多边形数量。使用 meshoptimizer 库进行顶点缓存优化、过度绘制减少和自适应简化。
+  - **适用于：** OSGB 和 Shapefile 格式
+  - **影响：** 文件更小，渲染更快，处理时间更长
+  - **使用场景：** 大型数据集，渲染性能要求高的场景
 
-- `-o, --output <DIR>` 输出目录。输出的数据文件位于 `<DIR>/Data` 目录。
+- `--enable-draco` 启用 Draco 网格压缩
+  对几何数据（顶点、法线、索引）应用 Google Draco 压缩。
+  - **适用于：** 仅 OSGB 格式
+  - **影响：** 几何体积减小 3-6 倍，处理和解码较慢
+  - **使用场景：** 带宽受限场景，Web 流式传输
+  - **注意：** 需要客户端支持 Draco 解码器
 
-- `--height` 高度字段。指定shapefile中的高度属性字段，此项为转换 shp 时的必须参数。
+- `--enable-texture-compress` 启用纹理压缩（KTX2）
+  将纹理转换为 KTX2 格式，使用 GPU 友好的压缩。
+  - **适用于：** 仅 OSGB 格式
+  - **影响：** GPU 上传更快，纹理体积更小
+  - **使用场景：** GPU 内存优化，纹理加载更快
+  - **注意：** 需要支持 KTX2 的渲染器
+
+### 格式支持矩阵
+
+| 优化参数 | OSGB | Shapefile | GLTF | B3DM |
+|-------------------|------|-----------|------|------|
+| `--enable-simplify` | ✅ | ✅ | ❌ | ❌ |
+| `--enable-draco` | ✅ | ❌ | ❌ | ❌ |
+| `--enable-texture-compress` | ✅ | ❌ | ❌ | ❌ |
+
+### 参数组合建议
+
+```sh
+# OSGB：最适合 Web 流式传输（最大压缩）
+--enable-simplify --enable-draco --enable-texture-compress
+
+# OSGB 或 Shapefile：最适合渲染性能（仅简化）
+--enable-simplify
+
+# OSGB：最适合带宽优化（仅压缩）
+--enable-draco --enable-texture-compress
+```
 
 
 

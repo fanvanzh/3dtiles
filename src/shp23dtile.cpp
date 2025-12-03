@@ -1,14 +1,14 @@
 #include "tiny_gltf.h"
 #include "earcut.hpp"
 #include "extern.h"
+#include "mesh_processor.h"
 
-#include "draco/compression/encode.h"
-#include "draco/mesh/triangle_soup_mesh_builder.h"
 #include "json.hpp"
 
 /* vcpkg path */
 #include <ogrsf_frmts.h>
 
+#include <optional>
 #include <osg/Material>
 #include <osg/PagedLOD>
 #include <osgDB/ReadFile>
@@ -373,12 +373,12 @@ convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double hei
     return mesh;
 }
 
-std::string make_polymesh(std::vector<Polygon_Mesh>& meshes);
-std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool);
+std::string make_polymesh(std::vector<Polygon_Mesh>& meshes, bool enable_simplify = false, std::optional<SimplificationParams> simplification_params = std::nullopt);
+std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = false, bool enable_simplify = false, std::optional<SimplificationParams> simplification_params = std::nullopt);
 //
 extern "C" bool
 shp23dtile(const char* filename, int layer_id,
-            const char* dest, const char* height)
+            const char* dest, const char* height, bool enable_simplify)
 {
     if (!filename || layer_id < 0 || layer_id > 10000 || !dest) {
         LOG_E("make shp23dtile [%s] failed", filename);
@@ -525,7 +525,17 @@ shp23dtile(const char* filename, int layer_id,
 #else
         sprintf(b3dm_file, "%s/tile/%d/%d/%d.b3dm", dest, _node->_z, _node->_x, _node->_y);
 #endif
-        std::string b3dm_buf = make_b3dm(v_meshes, true);
+        std::optional<SimplificationParams> simplification_params = std::nullopt;
+        if (enable_simplify) {
+            simplification_params = std::make_optional<SimplificationParams>({
+                .enable_simplification = true,
+                .target_error = 0.01f,
+                .target_ratio = 0.5f,
+                .preserve_normals = true,
+                .preserve_texture_coords = true,
+            });
+        }
+        std::string b3dm_buf = make_b3dm(v_meshes, true, enable_simplify, simplification_params);
         write_file(b3dm_file, b3dm_buf.data(), b3dm_buf.size());
         // test
         //sprintf(b3dm_file, "%s\\tile\\%d\\%d\\%d.glb", dest, _node->_z, _node->_x, _node->_y);
@@ -599,11 +609,12 @@ tinygltf::BufferView create_buffer_view(int target, int byteOffset, int byteLeng
 
 
 // convert poly-mesh to glb buffer
-std::string make_polymesh(std::vector<Polygon_Mesh> &meshes) {
+std::string make_polymesh(std::vector<Polygon_Mesh> &meshes, bool enable_simplify, std::optional<SimplificationParams> simplification_params) {
   vector<osg::ref_ptr<osg::Geometry>> osg_Geoms;
     for (auto& mesh : meshes) {
         osg_Geoms.push_back(make_triangle_mesh(mesh));
     }
+
     tinygltf::TinyGLTF gltf;
     tinygltf::Model model;
     // model.name = model_name;
@@ -613,6 +624,12 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes) {
     bool use_multi_material = false;
     tinygltf::Scene sence;
     for (int i = 0; i < meshes.size(); i++) {
+      // Apply mesh optimization for current geometry if enabled
+      if (enable_simplify && simplification_params.has_value() &&
+          osg_Geoms[i].valid() && osg_Geoms[i]->getNumPrimitiveSets() > 0) {
+        simplify_mesh_geometry(osg_Geoms[i].get(), simplification_params.value());
+      }
+
       if (osg_Geoms[i]->getNumPrimitiveSets() == 0)
         continue;
       int index_accessor_index = -1;
@@ -798,7 +815,7 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes) {
     return buf;
 }
 
-std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = false) {
+std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height, bool enable_simplify, std::optional<SimplificationParams> simplification_params) {
     using nlohmann::json;
 
     std::string feature_json_string;
@@ -834,7 +851,7 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = fals
         batch_json_string.push_back(' ');
     }
 
-    std::string glb_buf = make_polymesh(meshes);
+    std::string glb_buf = make_polymesh(meshes, enable_simplify, simplification_params);
     // how length total ?
 
     //test

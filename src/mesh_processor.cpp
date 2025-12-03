@@ -91,9 +91,9 @@ static void write_buf(void* context, void* data, int len) {
 }
 
 // Function to process textures (KTX2 compression)
-bool process_texture(osg::Texture* tex, std::vector<unsigned char>& image_data, std::string& mime_type) {
+bool process_texture(osg::Texture* tex, std::vector<unsigned char>& image_data, std::string& mime_type, bool enable_texture_compress) {
     // Check if KTX2 compression is enabled
-    if (b_use_ktx2_compression) {
+    if (enable_texture_compress) {
         // Handle KTX2 compression using Basis Universal
         std::vector<unsigned char> ktx2_buf;
         int width, height;
@@ -267,6 +267,152 @@ bool process_texture(osg::Texture* tex, std::vector<unsigned char>& image_data, 
     return false;
 }
 
+// Function to optimize and simplify mesh data using meshoptimizer
+bool optimize_and_simplify_mesh(
+    std::vector<VertexData>& vertices,
+    size_t& vertex_count,
+    std::vector<unsigned int>& indices,
+    size_t original_index_count,
+    std::vector<unsigned int>& simplified_indices,
+    size_t& simplified_index_count,
+    const SimplificationParams& params) {
+
+    // Calculate target index count based on ratio
+    size_t target_index_count = static_cast<size_t>(original_index_count * params.target_ratio);
+
+    // Auto-detect if normals are present by checking if any vertex has non-zero normals
+    bool hasNormals = false;
+    if (params.preserve_normals && vertex_count > 0) {
+        for (size_t i = 0; i < vertex_count; ++i) {
+            if (vertices[i].nx != 0.0f || vertices[i].ny != 0.0f || vertices[i].nz != 0.0f) {
+                hasNormals = true;
+                break;
+            }
+        }
+    }
+
+    // ============================================================================
+    // Step 1: Generate vertex remap to remove duplicate vertices
+    // ============================================================================
+    std::vector<unsigned int> remap(vertex_count);
+    size_t unique_vertex_count = meshopt_generateVertexRemap(
+        remap.data(),
+        indices.data(),
+        original_index_count,
+        vertices.data(),
+        vertex_count,
+        sizeof(VertexData)
+    );
+
+    // Remap index buffer
+    meshopt_remapIndexBuffer(
+        indices.data(),
+        indices.data(),
+        original_index_count,
+        remap.data()
+    );
+
+    // Remap vertex buffer (positions, normals, UVs all together)
+    std::vector<VertexData> remapped_vertices(unique_vertex_count);
+    meshopt_remapVertexBuffer(
+        remapped_vertices.data(),
+        vertices.data(),
+        vertex_count,
+        sizeof(VertexData),
+        remap.data()
+    );
+
+    // Update vertices to use remapped version
+    vertices = std::move(remapped_vertices);
+    vertex_count = unique_vertex_count;
+
+    // ============================================================================
+    // Step 2: Optimize vertex cache
+    // ============================================================================
+    meshopt_optimizeVertexCache(
+        indices.data(),
+        indices.data(),
+        original_index_count,
+        vertex_count
+    );
+
+    // ============================================================================
+    // Step 3: Optimize overdraw
+    // ============================================================================
+    meshopt_optimizeOverdraw(
+        indices.data(),
+        indices.data(),
+        original_index_count,
+        &vertices[0].x,
+        vertex_count,
+        sizeof(VertexData),
+        1.05f  // Threshold
+    );
+
+    // ============================================================================
+    // Step 4: Optimize vertex fetch
+    // ============================================================================
+    meshopt_optimizeVertexFetch(
+        vertices.data(),
+        indices.data(),
+        original_index_count,
+        vertices.data(),
+        vertex_count,
+        sizeof(VertexData)
+    );
+
+    // ============================================================================
+    // Step 5: Mesh simplification
+    // ============================================================================
+    // Allocate memory for simplified indices (worst case scenario)
+    simplified_indices.resize(original_index_count);
+
+    // Use meshopt_simplifyWithAttributes to preserve normals during simplification
+    float result_error = 0;
+
+    if (hasNormals) {
+        // Normal weights for each component (nx, ny, nz)
+        float attribute_weights[3] = {0.5f, 0.5f, 0.5f};
+
+        simplified_index_count = meshopt_simplifyWithAttributes(
+            simplified_indices.data(),
+            indices.data(),
+            original_index_count,
+            &vertices[0].x,          // Position data
+            vertex_count,
+            sizeof(VertexData),       // Stride between positions
+            &vertices[0].nx,          // Normal data
+            sizeof(VertexData),       // Stride between normals
+            attribute_weights,
+            3,                        // 3 normal components
+            nullptr,
+            target_index_count,
+            params.target_error,
+            0,
+            &result_error
+        );
+    } else {
+        // No normals - use standard simplification
+        simplified_index_count = meshopt_simplify(
+            simplified_indices.data(),
+            indices.data(),
+            original_index_count,
+            &vertices[0].x,
+            vertex_count,
+            sizeof(VertexData),
+            target_index_count,
+            params.target_error,
+            0,
+            &result_error
+        );
+    }
+
+    // Resize to actual simplified size
+    simplified_indices.resize(simplified_index_count);
+
+    return true;
+}
+
 // Function to simplify mesh geometry using meshoptimizer
 bool simplify_mesh_geometry(osg::Geometry* geometry, const SimplificationParams& params) {
     if (!params.enable_simplification || !geometry) {
@@ -386,129 +532,48 @@ bool simplify_mesh_geometry(osg::Geometry* geometry, const SimplificationParams&
     // Calculate target index count based on ratio
     size_t target_index_count = static_cast<size_t>(original_index_count * params.target_ratio);
 
-    // ============================================================================
-    // Step 1: Generate vertex remap to remove duplicate vertices
-    // ============================================================================
-    std::vector<unsigned int> remap(vertex_count);
-    size_t unique_vertex_count = meshopt_generateVertexRemap(
-        remap.data(),
-        indices.data(),
-        original_index_count,
-        vertices.data(),
-        vertex_count,
-        sizeof(VertexData)
-    );
+    // Use the extracted optimization and simplification function
+    std::vector<unsigned int> simplified_indices;
+    size_t simplified_index_count = 0;
 
-    // Remap index buffer
-    meshopt_remapIndexBuffer(
-        indices.data(),
-        indices.data(),
-        original_index_count,
-        remap.data()
-    );
-
-    // Remap vertex buffer (positions, normals, UVs all together)
-    std::vector<VertexData> remapped_vertices(unique_vertex_count);
-    meshopt_remapVertexBuffer(
-        remapped_vertices.data(),
-        vertices.data(),
-        vertex_count,
-        sizeof(VertexData),
-        remap.data()
-    );
-
-    // Update vertices to use remapped version
-    vertices = std::move(remapped_vertices);
-    vertex_count = unique_vertex_count;
-
-    // ============================================================================
-    // Step 2: Optimize vertex cache
-    // ============================================================================
-    meshopt_optimizeVertexCache(
-        indices.data(),
-        indices.data(),
-        original_index_count,
-        vertex_count
-    );
-
-    // ============================================================================
-    // Step 3: Optimize overdraw
-    // ============================================================================
-    meshopt_optimizeOverdraw(
-        indices.data(),
-        indices.data(),
-        original_index_count,
-        &vertices[0].x,
-        vertex_count,
-        sizeof(VertexData),
-        1.05f  // Threshold
-    );
-
-    // ============================================================================
-    // Step 4: Optimize vertex fetch
-    // ============================================================================
-    meshopt_optimizeVertexFetch(
-        vertices.data(),
-        indices.data(),
-        original_index_count,
-        vertices.data(),
-        vertex_count,
-        sizeof(VertexData)
-    );
-
-    // ============================================================================
-    // Step 5: Mesh simplification
-    // ============================================================================
-    // Allocate memory for simplified indices (worst case scenario)
-    std::vector<unsigned int> simplified_indices(original_index_count);
-
-    // Use meshopt_simplifyWithAttributes to preserve normals during simplification
-    float result_error = 0;
-    size_t simplified_index_count;
-
-    if (hasNormals) {
-        // Normal weights for each component (nx, ny, nz)
-        float attribute_weights[3] = {0.5f, 0.5f, 0.5f};
-
-        simplified_index_count = meshopt_simplifyWithAttributes(
-            simplified_indices.data(),
-            indices.data(),
-            original_index_count,
-            &vertices[0].x,          // Position data
-            vertex_count,
-            sizeof(VertexData),       // Stride between positions
-            &vertices[0].nx,          // Normal data
-            sizeof(VertexData),       // Stride between normals
-            attribute_weights,
-            3,                        // 3 normal components
-            nullptr,
-            target_index_count,
-            params.target_error,
-            0,
-            &result_error
-        );
-    } else {
-        // No normals - use standard simplification
-        simplified_index_count = meshopt_simplify(
-            simplified_indices.data(),
-            indices.data(),
-            original_index_count,
-            &vertices[0].x,
-            vertex_count,
-            sizeof(VertexData),
-            target_index_count,
-            params.target_error,
-            0,
-            &result_error
-        );
+    if (!optimize_and_simplify_mesh(
+            vertices, vertex_count,
+            indices, original_index_count,
+            simplified_indices, simplified_index_count,
+            params)) {
+        return false;
     }
 
-    // Resize to actual simplified size
-    simplified_indices.resize(simplified_index_count);
+    osg::ref_ptr<osg::Vec3Array> newVertexArray = new osg::Vec3Array();
+    newVertexArray->reserve(vertex_count);
 
-    // CRITICAL: Do NOT modify the original vertex/normal/texcoord arrays!
-    // Only update the primitive set with simplified indices
-    // The original geometry data remains intact
+    for (size_t i = 0; i < vertex_count; ++i) {
+        newVertexArray->push_back(osg::Vec3(vertices[i].x, vertices[i].y, vertices[i].z));
+    }
+    geometry->setVertexArray(newVertexArray);
+
+    // Update normals if they exist
+    if (hasNormals) {
+        osg::ref_ptr<osg::Vec3Array> newNormalArray = new osg::Vec3Array();
+        newNormalArray->reserve(vertex_count);
+
+        for (size_t i = 0; i < vertex_count; ++i) {
+            newNormalArray->push_back(osg::Vec3(vertices[i].nx, vertices[i].ny, vertices[i].nz));
+        }
+        geometry->setNormalArray(newNormalArray);
+        geometry->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
+    }
+
+    // Update texture coordinates if they exist
+    if (hasTexCoords) {
+        osg::ref_ptr<osg::Vec2Array> newTexCoordArray = new osg::Vec2Array();
+        newTexCoordArray->reserve(vertex_count);
+
+        for (size_t i = 0; i < vertex_count; ++i) {
+            newTexCoordArray->push_back(osg::Vec2(vertices[i].u, vertices[i].v));
+        }
+        geometry->setTexCoordArray(0, newTexCoordArray);
+    }
 
     // Create new primitive set with simplified indices
     switch (primitiveSet->getType()) {

@@ -204,6 +204,8 @@ _3dtile.exe [FLAGS] [OPTIONS] --format <FORMAT> --input <PATH> --output <DIR>
 
 ## ② Examples
 
+### Basic Conversion
+
 ```sh
 # from osgb dataset
 _3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path
@@ -222,6 +224,92 @@ _3dtile.exe -f gltf -i E:\Data\TT\001.obj -o E:\Data\TT\001.glb
 
 # convert single b3dm file to glb file
 _3dtile.exe -f b3dm -i E:\Data\aa.b3dm -o E:\Data\aa.glb
+```
+
+### Advanced Options with Optimization Flags
+
+```sh
+# OSGB: Enable mesh simplification (reduces polygon count)
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path --enable-simplify
+
+# OSGB: Enable Draco mesh compression (reduces file size, slower processing)
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path --enable-draco
+
+# OSGB: Enable texture compression to KTX2 format (reduces texture size)
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path --enable-texture-compress
+
+# OSGB: Enable all optimizations for maximum compression
+_3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path \
+  --enable-simplify --enable-draco --enable-texture-compress
+
+# Shapefile: Only supports mesh simplification
+_3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
+  --height height --enable-simplify
+```
+
+## ③ Command-Line Flags
+
+### Required Options
+
+- `-f, --format <FORMAT>` - Input data format
+  Available formats: `osgb`, `shape`, `gltf`, `b3dm`
+
+- `-i, --input <PATH>` - Input file or directory path
+
+- `-o, --output <DIR>` - Output directory path
+
+### Optional Flags
+
+- `-c, --config <JSON>` - JSON configuration string (optional)
+  Example: `{"x": 120, "y": 30, "offset": 0, "max_lvl": 20, "pbr": true}`
+
+- `--height <FIELD>` - Height attribute field name (required for shapefile conversion)
+
+- `-v, --verbose` - Enable verbose output for debugging
+
+### Optimization Flags (New)
+
+**These flags are disabled by default. Enable them to optimize output at the cost of processing time.**
+
+- `--enable-simplify` - Enable mesh simplification
+  Reduces polygon count while preserving visual quality. Uses meshoptimizer library for vertex cache optimization, overdraw reduction, and adaptive simplification.
+  - **Applies to:** OSGB and Shapefile formats
+  - **Impact:** Smaller file size, faster rendering, longer processing time
+  - **Use case:** Large datasets where render performance is critical
+
+- `--enable-draco` - Enable Draco mesh compression
+  Applies Google Draco compression to geometry data (vertices, normals, indices).
+  - **Applies to:** OSGB format only
+  - **Impact:** 3-6x smaller geometry size, slower processing and decoding
+  - **Use case:** Bandwidth-constrained scenarios, web streaming
+  - **Note:** Requires client-side Draco decoder support
+
+- `--enable-texture-compress` - Enable texture compression (KTX2)
+  Converts textures to KTX2 format with GPU-friendly compression.
+  - **Applies to:** OSGB format only
+  - **Impact:** Faster GPU upload, smaller texture size
+  - **Use case:** GPU memory optimization, faster texture loading
+  - **Note:** Requires KTX2-compatible renderer
+
+### Format Support Matrix
+
+| Optimization Flag | OSGB | Shapefile | GLTF | B3DM |
+|-------------------|------|-----------|------|------|
+| `--enable-simplify` | ✅ | ✅ | ❌ | ❌ |
+| `--enable-draco` | ✅ | ❌ | ❌ | ❌ |
+| `--enable-texture-compress` | ✅ | ❌ | ❌ | ❌ |
+
+### Flag Combinations
+
+```sh
+# OSGB: Best for web streaming (maximum compression)
+--enable-simplify --enable-draco --enable-texture-compress
+
+# OSGB or Shapefile: Best for render performance (simplification only)
+--enable-simplify
+
+# OSGB: Best for bandwidth optimization (compression only)
+--enable-draco --enable-texture-compress
 ```
 
 ## Development

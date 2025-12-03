@@ -30,7 +30,7 @@
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/target/debug/_3dtile",
-      "args": ["-f", "osgb", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir"],
+      "args": ["-f", "osgb", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir", "--enable-draco", "--enable-texture-compress", "--enable-simplify"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "cargo build",
       "sourceLanguages": ["rust", "cpp"]
@@ -40,7 +40,7 @@
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/target/debug/_3dtile",
-      "args": ["-f", "shape", "-i", "/Users/wallance/Desktop/1758464001_building/1758464001_building.shp", "-o", "/Users/wallance/Desktop/test-output-shapefile", "--height", "HEIGHT"],
+      "args": ["-f", "shape", "-i", "/path/to/shp", "-o", "/path/to/output/dir", "--height", "HEIGHT", "--enable-simplify"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "cargo build",
       "sourceLanguages": ["rust", "cpp"]

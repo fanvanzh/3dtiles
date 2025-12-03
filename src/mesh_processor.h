@@ -44,6 +44,18 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
 // Function to set KTX2 compression flag
 void set_ktx2_compression_flag(bool enable);
 
+// Function to optimize and simplify mesh data using meshoptimizer
+// Input: vertices, indices, and optimization parameters
+// Output: optimized vertices and simplified indices
+bool optimize_and_simplify_mesh(
+    std::vector<VertexData>& vertices,
+    size_t& vertex_count,
+    std::vector<unsigned int>& indices,
+    size_t original_index_count,
+    std::vector<unsigned int>& simplified_indices,
+    size_t& simplified_index_count,
+    const SimplificationParams& params);
+
 // Function to simplify mesh geometry using meshoptimizer
 bool simplify_mesh_geometry(osg::Geometry* geometry, const SimplificationParams& params);
 
@@ -52,6 +64,6 @@ bool compress_mesh_geometry(osg::Geometry* geometry, const DracoCompressionParam
                            std::vector<unsigned char>& compressed_data, size_t& compressed_size);
 
 // Function to process textures (KTX2 compression)
-bool process_texture(osg::Texture* tex, std::vector<unsigned char>& image_data, std::string& mime_type);
+bool process_texture(osg::Texture* tex, std::vector<unsigned char>& image_data, std::string& mime_type, bool enable_texture_compress = false);
 
 #endif // MESH_PROCESSOR_H

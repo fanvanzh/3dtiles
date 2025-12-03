@@ -76,15 +76,6 @@ void log_osg_plugin_info() {
     printf("=== End of OSG Plugin Information ===\n\n");
 }
 
-static bool b_pbr_texture = false;
-// Add KTX2 compression flag
-static bool b_use_ktx2_compression = true;
-// Add Draco compression flag
-static bool b_use_draco_compression = true;
-// Add Draco compression parameters
-static DracoCompressionParams draco_params;
-static SimplificationParams simplification_params;
-
 template<class T>
 void put_val(std::vector<unsigned char>& buf, T val) {
     buf.insert(buf.end(), (unsigned char*)&val, (unsigned char*)&val + sizeof(T));
@@ -818,23 +809,20 @@ write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgBuildS
     osgState->model->meshes.back().primitives.push_back(primits);
 }
 
-void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState)
+void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState, bool enable_simplify, bool enable_draco)
 {
+    if (enable_simplify) {
+        const SimplificationParams simplication_params = { .enable_simplification = true };
+        ::simplify_mesh_geometry(g, simplication_params);
+    }
     // Apply Draco compression if enabled
-    if (b_use_draco_compression) {
+    if (enable_draco) {
         std::vector<unsigned char> compressed_data;
         size_t compressed_size = 0;
-        draco_params.enable_compression = true;
-        if (::simplify_mesh_geometry(g, simplification_params)) {
-          // Successfully simplified
-        }
+        const DracoCompressionParams draco_params = { .enable_compression=true };
 
         // Try to compress the geometry with Draco
-        if (::compress_mesh_geometry(g, draco_params, compressed_data, compressed_size)) {
-            // Successfully compressed - we could use the compressed data here
-            // For now, we'll continue with normal processing but in a full implementation
-            // we would use the compressed data in the glTF output
-        }
+        ::compress_mesh_geometry(g, draco_params, compressed_data, compressed_size);
     }
 
     osg::PrimitiveSet::Type t = g->getPrimitiveSet(0)->getType();
@@ -851,7 +839,7 @@ void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState)
     }
 }
 
-bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, int node_type) {
+bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, int node_type, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false) {
     vector<string> fileNames = { path };
     std::string parent_path = get_parent(path);
 
@@ -894,7 +882,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         if (!g->getVertexArray() || g->getVertexArray()->getDataSize() == 0)
             continue;
 
-        write_osgGeometry(g, &osgState);
+        write_osgGeometry(g, &osgState, enable_meshopt, enable_draco);
         // update primitive material index
         if (infoVisitor.texture_array.size())
         {
@@ -938,7 +926,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
             // Process texture using our mesh processor
             std::vector<unsigned char> image_data;
             std::string mime_type;
-            if (::process_texture(tex, image_data, mime_type)) {
+            if (::process_texture(tex, image_data, mime_type, enable_texture_compress)) {
                 // Add image data to buffer
                 buffer.data.insert(buffer.data.end(), image_data.begin(), image_data.end());
 
@@ -981,7 +969,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
     }
     // use KHR_materials_unlit
     // Update extensions declaration to include KHR_texture_basisu when using KTX2
-    if (b_use_ktx2_compression) {
+    if (enable_texture_compress) {
         model.extensionsRequired = { "KHR_materials_unlit", "KHR_texture_basisu" };
         model.extensionsUsed = { "KHR_materials_unlit", "KHR_texture_basisu" };
     } else {
@@ -990,7 +978,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
     }
 
     // Add Draco extension if compression is enabled
-    if (b_use_draco_compression) {
+    if (enable_draco) {
         model.extensionsRequired.push_back("KHR_draco_mesh_compression");
         model.extensionsUsed.push_back("KHR_draco_mesh_compression");
     }
@@ -1013,7 +1001,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
             texture.sampler = 0;
 
             // When using KTX2, we need to use the KHR_texture_basisu extension
-            if (b_use_ktx2_compression) {
+            if (enable_texture_compress) {
                 // For KTX2/Basis Universal, use the extension field instead of source
                 tinygltf::Value::Object basisu_ext;
                 basisu_ext["source"] = tinygltf::Value(texture_index);
@@ -1039,13 +1027,13 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
     return true;
 }
 
-bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box, int node_type)
+bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box, int node_type, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false)
 {
     using nlohmann::json;
 
     std::string glb_buf;
     MeshInfo minfo;
-    bool ret = osgb2glb_buf(path, glb_buf, minfo, node_type);
+    bool ret = osgb2glb_buf(path, glb_buf, minfo, node_type, enable_texture_compress, enable_meshopt, enable_draco);
     if (!ret)
         return false;
 
@@ -1125,14 +1113,14 @@ std::vector<double> convert_bbox(TileBox tile) {
     return v;
 }
 
-void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl) {
+void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false) {
     std::string json_str;
     if (tree.file_name.empty()) return;
     int lvl = get_lvl_num(tree.file_name);
     if (lvl > max_lvl) return;
     if (tree.type > 0) {
         std::string b3dm_buf;
-        osgb2b3dm_buf(tree.file_name, b3dm_buf, tree.bbox, tree.type);
+        osgb2b3dm_buf(tree.file_name, b3dm_buf, tree.bbox, tree.type, enable_texture_compress, enable_meshopt, enable_draco);
         std::string out_file = out_path;
         out_file += "/";
         out_file += replace(get_file_name(tree.file_name), ".osgb", tree.type != 2 ? ".b3dm" : "o.b3dm");
@@ -1148,7 +1136,7 @@ void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl) {
         // end test
     }
     for (auto& i : tree.sub_nodes) {
-        do_tile_job(i,out_path,max_lvl);
+        do_tile_job(i,out_path,max_lvl, enable_texture_compress, enable_meshopt, enable_draco);
     }
 }
 
@@ -1291,7 +1279,8 @@ encode_tile_json(osg_tree& tree, double x, double y)
 extern "C" void*
 osgb23dtile_path(const char* in_path, const char* out_path,
                     double *box, int* len, double x, double y,
-                    int max_lvl, bool pbr_texture)
+                    int max_lvl,
+                    bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false)
 {
     std::string path = osg_string(in_path);
     osg_tree root = get_all_tree(path);
@@ -1300,8 +1289,7 @@ osgb23dtile_path(const char* in_path, const char* out_path,
         LOG_E( "open file [%s] fail!", in_path);
         return NULL;
     }
-    b_pbr_texture = pbr_texture;
-    do_tile_job(root, out_path, max_lvl);
+    do_tile_job(root, out_path, max_lvl, enable_texture_compress, enable_meshopt, enable_draco);
     extend_tile_box(root);
     if (root.bbox.max.empty() || root.bbox.min.empty())
     {
@@ -1324,7 +1312,6 @@ osgb23dtile_path(const char* in_path, const char* out_path,
 extern "C" bool
 osgb2glb(const char* in, const char* out)
 {
-    b_pbr_texture = true;
     MeshInfo minfo;
     std::string glb_buf;
     std::string path = osg_string(in);
@@ -1342,39 +1329,4 @@ osgb2glb(const char* in, const char* out)
         return false;
     }
     return true;
-}
-
-// Function to enable/disable KTX2 compression
-void set_ktx2_compression_internal(bool enable) {
-    b_use_ktx2_compression = enable;
-}
-
-// Function to enable/disable Draco compression
-void set_draco_compression_internal(bool enable) {
-    b_use_draco_compression = enable;
-}
-
-// Function to set Draco compression parameters
-void set_draco_compression_params_internal(const DracoCompressionParams& params) {
-    draco_params = params;
-}
-
-// Add function to enable KTX2 compression
-extern "C" void set_ktx2_compression(bool enable) {
-    ::set_ktx2_compression_flag(enable);
-}
-
-extern "C" void set_draco_compression(bool enable) {
-    b_use_draco_compression = enable;
-}
-
-extern "C" void set_draco_compression_params(int position_quantization_bits,
-                                            int normal_quantization_bits,
-                                            int tex_coord_quantization_bits,
-                                            int generic_quantization_bits) {
-    draco_params.position_quantization_bits = position_quantization_bits;
-    draco_params.normal_quantization_bits = normal_quantization_bits;
-    draco_params.tex_coord_quantization_bits = tex_coord_quantization_bits;
-    draco_params.generic_quantization_bits = generic_quantization_bits;
-    draco_params.enable_compression = true;
 }

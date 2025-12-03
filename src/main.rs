@@ -33,13 +33,13 @@ fn setup_osg_environment() {
             // Check for osgPlugins directory next to the executable
             let plugins_dir = dir.join("osgPlugins-3.6.5");
             if plugins_dir.exists() {
-                env::set_var("OSG_LIBRARY_PATH", &plugins_dir);
+                unsafe { env::set_var("OSG_LIBRARY_PATH", &plugins_dir) };
                 info!("OSG_LIBRARY_PATH set to: {:?}", plugins_dir);
             } else {
                 // Fallback: try to find plugins in common locations
                 let alt_plugins = dir.join("lib").join("osgPlugins-3.6.5");
                 if alt_plugins.exists() {
-                    env::set_var("OSG_LIBRARY_PATH", &alt_plugins);
+                    unsafe { env::set_var("OSG_LIBRARY_PATH", &alt_plugins) };
                     info!("OSG_LIBRARY_PATH set to: {:?}", alt_plugins);
                 }
             }
@@ -51,7 +51,7 @@ fn setup_osg_environment() {
         if let Some(dir) = exe_dir {
             let gdal_data = dir.join("gdal");
             if gdal_data.exists() {
-                env::set_var("GDAL_DATA", &gdal_data);
+                unsafe { env::set_var("GDAL_DATA", &gdal_data) };
             }
         }
     }
@@ -60,7 +60,7 @@ fn setup_osg_environment() {
         if let Some(dir) = exe_dir {
             let proj_data = dir.join("proj");
             if proj_data.exists() {
-                env::set_var("PROJ_DATA", &proj_data);
+                unsafe { env::set_var("PROJ_DATA", &proj_data) };
             }
         }
     }
@@ -73,9 +73,9 @@ fn main() {
     setup_osg_environment();
 
     if let Err(_) = env::var("RUST_LOG") {
-        env::set_var("RUST_LOG", "info");
+        unsafe { env::set_var("RUST_LOG", "info") };
     }
-    env::set_var("RUST_BACKTRACE", "1");
+    unsafe { env::set_var("RUST_BACKTRACE", "1") };
     let mut builder = env_logger::Builder::from_default_env();
     builder
         .format(|buf, record| {
@@ -139,7 +139,7 @@ fn main() {
     \"y\": y,
     \"offset\": 0,
     \"max_lvl\" : 20,
-    \"pbr\" : false
+    \"pbr\" : false,
 }",
                 )
                 .takes_value(true),
@@ -157,6 +157,24 @@ fn main() {
                 .help("Set output verbose ")
                 .takes_value(false),
         )
+        .arg(
+            Arg::with_name("enable-draco")
+                .long("enable-draco")
+                .help("Enable Draco mesh compression")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("enable-simplify")
+                .long("enable-simplify")
+                .help("Enable mesh simplification")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("enable-texture-compress")
+                .long("enable-texture-compress")
+                .help("Enable texture compression (KTX2)")
+                .takes_value(false),
+        )
         .get_matches();
 
     let input = matches.value_of("input").unwrap();
@@ -165,8 +183,22 @@ fn main() {
     let tile_config = matches.value_of("config").unwrap_or("");
     let height_field = matches.value_of("height").unwrap_or("");
 
+    // Parse feature flags
+    let enable_draco = matches.is_present("enable-draco");
+    let enable_simplify = matches.is_present("enable-simplify");
+    let enable_texture_compress = matches.is_present("enable-texture-compress");
+
     if matches.is_present("verbose") {
         info!("set program versose on");
+    }
+    if enable_draco {
+        info!("Draco compression enabled");
+    }
+    if enable_simplify {
+        info!("Mesh simplification enabled");
+    }
+    if enable_texture_compress {
+        info!("Texture compression (KTX2) enabled");
     }
     let in_path = std::path::Path::new(input);
     if !in_path.exists() {
@@ -175,10 +207,10 @@ fn main() {
     }
     match format {
         "osgb" => {
-            convert_osgb(input, output, tile_config);
+            convert_osgb(input, output, tile_config, enable_simplify, enable_texture_compress, enable_draco);
         }
         "shape" => {
-            convert_shapefile(input, output, height_field);
+            convert_shapefile(input, output, height_field, enable_simplify);
         }
         "gltf" => {
             convert_gltf(input, output);
@@ -266,7 +298,7 @@ struct ModelMetadata {
     pub SRSOrigin: String,
 }
 
-fn convert_osgb(src: &str, dest: &str, config: &str) {
+fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enable_texture_compress: bool, enable_draco: bool) {
     use serde_json::Value;
     use std::fs::File;
     use std::io::prelude::*;
@@ -279,7 +311,6 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     let mut center_y = 0f64;
     let mut max_lvl = None;
     let mut trans_region = None;
-    let mut pbr_texture = false;
     let enu_offset: Option<(f64, f64, f64)> = None;
     let mut origin_height: Option<f64> = None;
 
@@ -497,17 +528,14 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
         if let Some(lvl) = v["max_lvl"].as_i64() {
             max_lvl = Some(lvl as i32);
         }
-        if let Some(pbr) = v["pbr"].as_bool() {
-            pbr_texture = pbr;
-        }
     } else if config.len() > 0 {
         error!("config error --> {}", config);
     }
     let tick = time::SystemTime::now();
     if let Err(e) = osgb::osgb_batch_convert(
         &dir, &dir_dest, max_lvl,
-        center_x, center_y, trans_region, pbr_texture,
-        enu_offset, origin_height)
+        center_x, center_y, trans_region,
+        enu_offset, origin_height, enable_texture_compress, enable_simplify, enable_draco)
     {
         error!("{}", e);
         return;
@@ -517,14 +545,14 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     info!("task over, cost {:.2} s.", tick_num);
 }
 
-fn convert_shapefile(src: &str, dest: &str, height: &str) {
+fn convert_shapefile(src: &str, dest: &str, height: &str, enable_simplify: bool) {
     if height.is_empty() {
         error!("you must set the height field by --height xxx");
         return;
     }
     let tick = std::time::SystemTime::now();
 
-    let ret = shape::shape_batch_convert(src, dest, height);
+    let ret = shape::shape_batch_convert(src, dest, height, enable_simplify);
     if !ret {
         error!("convert shapefile failed");
     } else {

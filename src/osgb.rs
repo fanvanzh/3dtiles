@@ -13,14 +13,16 @@ use std::path::Path;
 extern "C" {
 
     fn osgb23dtile_path(
-        name_in: *const u8,
-        name_out: *const u8,
+        in_path: *const u8,
+        out_path: *const u8,
         box_ptr: *mut f64,
         len: *mut i32,
         x: f64,
         y: f64,
         max_lvl: i32,
-        pbr_texture: bool
+        enable_texture_compress: bool,
+        enable_meshopt: bool,
+        enable_draco: bool,
     ) -> *mut libc::c_void;
 
     pub fn osgb2glb(name_in: *const u8, name_out: *const u8) -> bool;
@@ -72,9 +74,11 @@ pub fn osgb_batch_convert(
     center_x: f64,
     center_y: f64,
     region_offset: Option<f64>,
-    pbr_texture: bool,
     enu_offset: Option<(f64, f64, f64)>,
     origin_height: Option<f64>,
+    enable_texture_compress: bool,
+    enable_meshopt: bool,
+    enable_draco_compress: bool,
 ) -> Result<(), Box<dyn Error>> {
     use std::fs::File;
     use std::io::prelude::*;
@@ -134,7 +138,9 @@ pub fn osgb_batch_convert(
                 rad_x,
                 rad_y,
                 max_lvl,
-                pbr_texture,
+                enable_texture_compress,
+                enable_meshopt,
+                enable_draco_compress,
             );
             if out_ptr.is_null() {
                 error!("failed: {}", info.in_dir);
