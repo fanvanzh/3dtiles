@@ -5,7 +5,7 @@ use cmake::Config;
 
 fn build_win_msvc() {
     // Get VCPKG_ROOT environment variable
-    let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap();
+    let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
     let dst = Config::new(".")
         .define("CMAKE_TOOLCHAIN_FILE", format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
         .very_verbose(true)
@@ -17,7 +17,7 @@ fn build_win_msvc() {
     println!("cargo:rustc-link-lib=static=_3dtile");
 
     // Link Search Path for Draco library
-    let source_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let source_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR environment variable is not set");
     // Link Search Path for Draco library
     println!("cargo:rustc-link-search=native={}/thirdparty/draco", Path::new(&source_dir).display());
     println!("cargo:rustc-link-lib=static=draco");
@@ -71,7 +71,7 @@ fn get_target_dir() -> std::path::PathBuf {
 }
 
 fn build_linux_unknown() {
-    let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap();
+    let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
     // Get VCPKG_ROOT environment variable
     let dst = Config::new(".")
         .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
@@ -183,7 +183,7 @@ fn build_linux_unknown() {
 }
 
 fn build_macos() {
-    let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap();
+    let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
     // Get VCPKG_ROOT environment variable
     let dst = Config::new(".")
         .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
@@ -300,7 +300,7 @@ fn build_macos() {
 }
 
 fn build_macos_x86_64() {
-    let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap();
+    let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
     // Get VCPKG_ROOT environment variable
     let dst = Config::new(".")
         .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
