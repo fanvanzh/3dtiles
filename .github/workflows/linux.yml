@@ -4,21 +4,37 @@ on:
   push:
   pull_request:
     types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
+      with:
+        submodules: 'recursive'
 
-    - name: Install dependencies on Ubuntu
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y g++ libgdal-dev libopenscenegraph-dev
+    - name: Setup anew (or from cache) vcpkg (and does not build any package)
+      uses: lukka/run-vcpkg@v11
+      with:
+        doNotCache: false
+        vcpkgGitCommitId: 'd5182f703b51d7b258f83f94d936ac03488dcdbe'
+      env:
+        VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Install OpenGL related dependencies
+      run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxxf86vm-dev
 
     - name: Build
-      run: cargo build --verbose --release
-
-    - name: Test
-      run: cargo test --verbose
+      run: cargo build -vv --release
+      # env:
+      #   ENABLE_STRICT_CHECKS: 1

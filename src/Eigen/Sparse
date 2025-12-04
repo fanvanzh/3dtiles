@@ -30,5 +30,4 @@
 #include "SparseQR"
 #include "IterativeLinearSolvers"
 
-#endif // EIGEN_SPARSE_MODULE_H
-
+#endif  // EIGEN_SPARSE_MODULE_H

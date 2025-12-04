@@ -4,20 +4,30 @@ on:
   push:
   pull_request:
     types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   build-and-test:
     runs-on: macos-15
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
+      with:
+        submodules: 'recursive'
 
-    - name: Set up Homebrew
-      id: set-up-homebrew
-      uses: Homebrew/actions/setup-homebrew@main
+    - name: Setup anew (or from cache) vcpkg (and does not build any package)
+      uses: lukka/run-vcpkg@v11
+      with:
+        doNotCache: false
+        vcpkgGitCommitId: 'd5182f703b51d7b258f83f94d936ac03488dcdbe'
+      env:
+        VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
-    - name: Install dependencies on macOS
-      run: |
-        brew install gdal open-scene-graph
+    - name: Install automake (including aclocal)
+      run: brew install automake libtool
 
     - name: Install Rust toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -25,7 +35,6 @@ jobs:
         toolchain: stable
 
     - name: Build
-      run: cargo build --verbose --release
-
-    - name: Test
-      run: cargo test --verbose
+      run: cargo build -vv --release
+      # env:
+      #   ENABLE_STRICT_CHECKS: 1

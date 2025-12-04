@@ -1,13 +1,40 @@
 {
-    "name": "Rust Environment",
+    "name": "3D Tiles Development Environment",
     "context": "..",
     "build": {
-        "dockerfile": "Dockerfile"
+        "dockerfile": "Dockerfile",
+        "options": [
+            "--platform=linux/amd64"
+        ]
     },
-    "settings": { 
-        "terminal.integrated.shell.linux": "/bin/bash"
+    "runArgs": [
+        "--platform=linux/amd64",
+        "--cap-add=SYS_PTRACE",
+        "--security-opt",
+        "seccomp=unconfined"
+    ],
+    "mounts": [
+        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+    ],
+    "workspaceFolder": "/workspace",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "terminal.integrated.shell.linux": "/bin/bash",
+                "rust-analyzer.server.path": "rust-analyzer"
+            },
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "ms-vscode.cpptools-extension-pack",
+                "vadimcn.vscode-lldb",
+                "fill-labs.dependi",
+                "llvm-vs-code-extensions.vscode-clangd"
+            ]
+        }
     },
-    "extensions": [
-        "rust-lang.rust-analyzer"
-    ]
+    "features": {
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    },
+    "remoteUser": "root"
 }

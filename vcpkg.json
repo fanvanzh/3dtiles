@@ -1,12 +1,48 @@
 {
+  "name": "3dtiles",
+  "version-string": "1.0.0",
+  "description": "A 3D Tiles generation library",
+  "builtin-baseline": "d5182f703b51d7b258f83f94d936ac03488dcdbe",
   "dependencies": [
+    "basisu",
+    "draco",
     {
-        "name": "osg",
-        "platform": "windows"
+      "name": "gdal",
+      "default-features": false,
+      "features": [
+        "geos",
+        "gif",
+        "iconv",
+        "jpeg",
+        "libkml",
+        "libspatialite",
+        "openjpeg",
+        "png",
+        "recommended-features",
+        "sqlite3",
+        "webp",
+        "zstd"
+      ]
+    },
+    "meshoptimizer",
+    {
+      "name": "osg",
+      "default-features": false,
+      "features": [
+        "plugins"
+      ],
+      "platform": "osx"
     },
     {
-        "name": "gdal",
-        "platform": "windows"
+      "name": "osg",
+      "platform": "!osx"
+    },
+    "sqlite3"
+  ],
+  "overrides": [
+    {
+      "name": "gdal",
+      "version": "3.8.4"
     }
   ]
 }

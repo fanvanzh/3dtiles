@@ -1,17 +1,15 @@
 #include "tiny_gltf.h"
 #include "earcut.hpp"
-#include "json.hpp"
 #include "extern.h"
+#include "mesh_processor.h"
+#include "attribute_storage.h"
+
+#include "json.hpp"
 
 /* vcpkg path */
-#ifdef _WIN32
-    #include <ogrsf_frmts.h>
-#elif __APPLE__
-    #include <ogrsf_frmts.h>
-#else
-    #include <gdal/ogrsf_frmts.h>
-#endif
+#include <ogrsf_frmts.h>
 
+#include <optional>
 #include <osg/Material>
 #include <osg/PagedLOD>
 #include <osgDB/ReadFile>
@@ -27,7 +25,6 @@
 #include <osgUtil/SmoothingVisitor>
 
 #include <vector>
-#include <cmath>
 #include <array>
 
 using namespace std;
@@ -187,7 +184,7 @@ struct Polygon_Mesh
     Vextex vertex;
     Index  index;
     Normal normal;
-    // add some addition 
+    // add some addition
     float height;
 };
 
@@ -362,27 +359,27 @@ convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double hei
         }
         std::vector<int> indices = mapbox::earcut<int>(polygon);
         for (int idx = 0; idx < indices.size(); idx += 3) {
-            mesh.index.push_back({ 
-                pt_count + 2 * indices[idx], 
-                pt_count + 2 * indices[idx + 2], 
+            mesh.index.push_back({
+                pt_count + 2 * indices[idx],
+                pt_count + 2 * indices[idx + 2],
                 pt_count + 2 * indices[idx + 1] });
         }
         for (int idx = 0; idx < indices.size(); idx += 3) {
-            mesh.index.push_back({ 
-                pt_count + 2 * indices[idx] + 1, 
-                pt_count + 2 * indices[idx + 1] + 1, 
+            mesh.index.push_back({
+                pt_count + 2 * indices[idx] + 1,
+                pt_count + 2 * indices[idx + 1] + 1,
                 pt_count + 2 * indices[idx + 2] + 1});
         }
     }
     return mesh;
 }
 
-std::string make_polymesh(std::vector<Polygon_Mesh>& meshes);
-std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool);
+std::string make_polymesh(std::vector<Polygon_Mesh>& meshes, bool enable_simplify = false, std::optional<SimplificationParams> simplification_params = std::nullopt);
+std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = false, bool enable_simplify = false, std::optional<SimplificationParams> simplification_params = std::nullopt);
 //
 extern "C" bool
 shp23dtile(const char* filename, int layer_id,
-            const char* dest, const char* height)
+            const char* dest, const char* height, bool enable_simplify)
 {
     if (!filename || layer_id < 0 || layer_id > 10000 || !dest) {
         LOG_E("make shp23dtile [%s] failed", filename);
@@ -393,8 +390,7 @@ shp23dtile(const char* filename, int layer_id,
         height_field = height;
     }
     GDALAllRegister();
-    GDALDataset       *poDS;
-    poDS = (GDALDataset*)GDALOpenEx(
+    GDALDataset* poDS = (GDALDataset*)GDALOpenEx(
         filename, GDAL_OF_VECTOR,
         NULL, NULL, NULL);
     if (poDS == NULL)
@@ -408,6 +404,33 @@ shp23dtile(const char* filename, int layer_id,
         GDALClose(poDS);
         LOG_E("open layer [%s]:[%d] failed", filename, layer_id);
         return false;
+    }
+
+    // Store feature attributes to SQLite database using RAII wrapper
+    char sqlite_path[512];
+#ifdef _WIN32
+    sprintf(sqlite_path, "%s\\attributes.db", dest);
+#else
+    sprintf(sqlite_path, "%s/attributes.db", dest);
+#endif
+
+    {
+        // RAII: AttributeStorage will auto-commit and close on scope exit
+        AttributeStorage attr_storage(sqlite_path);
+
+        if (!attr_storage.isOpen()) {
+            LOG_E("Failed to open attribute database: %s", attr_storage.getLastError().c_str());
+        } else {
+            // Create table schema
+            if (!attr_storage.createTable(poLayer->GetLayerDefn())) {
+                LOG_E("Failed to create table: %s", attr_storage.getLastError().c_str());
+            } else {
+                // Insert all features in batches (1000 features per transaction)
+                // This prevents data loss in case of errors during bulk insert
+                attr_storage.insertFeaturesInBatches(poLayer, 1000);
+            }
+        }
+        // Database automatically closed and committed here (RAII)
     }
     OGRwkbGeometryType _t = poLayer->GetGeomType();
     if (_t != wkbPolygon && _t != wkbMultiPolygon &&
@@ -448,12 +471,12 @@ shp23dtile(const char* filename, int layer_id,
         root.add(id, bound);
         OGRFeature::DestroyFeature(poFeature);
     }
-    // iter all node and convert to obj 
+    // iter all node and convert to obj
     std::vector<void*> items_array;
     root.get_all(items_array);
     //
     int field_index = -1;
-    
+
     if (!height_field.empty()) {
         field_index = poLayer->GetLayerDefn()->GetFieldIndex(height_field.c_str());
         if (field_index == -1) {
@@ -469,7 +492,7 @@ shp23dtile(const char* filename, int layer_id,
         sprintf(b3dm_file, "%s/tile/%d/%d", dest, _node->_z, _node->_x);
 #endif
         mkdirs(b3dm_file);
-        // fix the box 
+        // fix the box
         {
             OGREnvelope node_box;
             for (auto id : _node->get_ids()) {
@@ -530,7 +553,17 @@ shp23dtile(const char* filename, int layer_id,
 #else
         sprintf(b3dm_file, "%s/tile/%d/%d/%d.b3dm", dest, _node->_z, _node->_x, _node->_y);
 #endif
-        std::string b3dm_buf = make_b3dm(v_meshes, true);
+        std::optional<SimplificationParams> simplification_params = std::nullopt;
+        if (enable_simplify) {
+            simplification_params = std::make_optional<SimplificationParams>(SimplificationParams{
+                .target_error = 0.01f,
+                .target_ratio = 0.5f,
+                .enable_simplification = true,
+                .preserve_texture_coords = true,
+                .preserve_normals = true,
+            });
+        }
+        std::string b3dm_buf = make_b3dm(v_meshes, true, enable_simplify, simplification_params);
         write_file(b3dm_file, b3dm_buf.data(), b3dm_buf.size());
         // test
         //sprintf(b3dm_file, "%s\\tile\\%d\\%d\\%d.glb", dest, _node->_z, _node->_x, _node->_y);
@@ -551,7 +584,7 @@ shp23dtile(const char* filename, int layer_id,
         const double pi = std::acos(-1);
         double radian_x = degree2rad(center_x);
         double radian_y = degree2rad(center_y);
-        write_tileset(radian_x, radian_y, 
+        write_tileset(radian_x, radian_y,
             longti_to_meter(degree2rad(box_width) * 1.05, radian_y),
             lati_to_meter(degree2rad(box_height)  * 1.05),
             0 , max_height, 100,
@@ -562,12 +595,12 @@ shp23dtile(const char* filename, int layer_id,
     return true;
 }
 
-template<class T> 
+template<class T>
 void put_val(std::vector<unsigned char>& buf, T val) {
     buf.insert(buf.end(), (unsigned char*)&val, (unsigned char*)&val + sizeof(T));
 }
 
-template<class T> 
+template<class T>
 void put_val(std::string& buf, T val) {
     buf.append((unsigned char*)&val, (unsigned char*)&val + sizeof(T));
 }
@@ -587,193 +620,209 @@ tinygltf::Material make_color_material(double r, double g, double b) {
     char buf[512];
     sprintf(buf,"default_%.1f_%.1f_%.1f",r,g,b);
     material.name = buf;
-    tinygltf::Parameter baseColorFactor;
-    baseColorFactor.number_array = { r,g,b,1 };
-    material.values["baseColorFactor"] = baseColorFactor;
-    tinygltf::Parameter metallicFactor;
-    metallicFactor.number_value = new double(0.3);
-    material.values["metallicFactor"] = metallicFactor;
-    tinygltf::Parameter roughnessFactor;
-    roughnessFactor.number_value = new double(0.7);
-    material.values["roughnessFactor"] = roughnessFactor;
+    material.pbrMetallicRoughness.baseColorFactor = { r,g,b,1 };
+    material.pbrMetallicRoughness.roughnessFactor = 0.7;
+    material.pbrMetallicRoughness.metallicFactor = 0.3;
     return material;
 }
 
+tinygltf::BufferView create_buffer_view(int target, int byteOffset, int byteLength) {
+  tinygltf::BufferView bfv;
+  bfv.buffer = 0;
+  bfv.target = target;
+  bfv.byteOffset = byteOffset;
+  bfv.byteLength = byteLength;
+  return bfv;
+}
+
+
 // convert poly-mesh to glb buffer
-std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
-    vector<osg::ref_ptr<osg::Geometry>> osg_Geoms;
+std::string make_polymesh(std::vector<Polygon_Mesh> &meshes, bool enable_simplify, std::optional<SimplificationParams> simplification_params) {
+  vector<osg::ref_ptr<osg::Geometry>> osg_Geoms;
     for (auto& mesh : meshes) {
         osg_Geoms.push_back(make_triangle_mesh(mesh));
     }
+
     tinygltf::TinyGLTF gltf;
     tinygltf::Model model;
     // model.name = model_name;
     // only one buffer
     tinygltf::Buffer buffer;
     // buffer_view {index,vertex,normal(texcoord,image)}
-    uint32_t buf_offset = 0;
-    auto calc_offset = [&]() -> int{
-        return buffer.data.size() - buf_offset;
-    };
-    uint32_t acc_offset[4] = {0,0,0,0};
-    int buf_times = 4;
-    for (int j = 0; j < buf_times; j++)
-    {
-        for (int i = 0; i < meshes.size(); i++) {
-            if (osg_Geoms[i]->getNumPrimitiveSets() == 0) continue;
-            if (j == 0) {
-                // indc
-                osg::PrimitiveSet* ps = osg_Geoms[i]->getPrimitiveSet(0);
-                int idx_size = ps->getNumIndices();
-                int max_idx = 0;
-
-                const osg::DrawElementsUShort* drawElements = static_cast<const osg::DrawElementsUShort*>(ps);
-                int IndNum = drawElements->getNumIndices();
-                for (int m = 0; m < IndNum; m++)
-                {
-                    unsigned short idx = drawElements->at(m);
-                    put_val(buffer.data, idx);
-                    SET_MAX(max_idx, idx);
-                }
-                    
-                tinygltf::Accessor acc;
-                acc.bufferView = 0;
-                acc.byteOffset = acc_offset[j];
-                alignment_buffer(buffer.data);
-                acc_offset[j] = calc_offset();
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
-                acc.count = idx_size;
-                acc.type = TINYGLTF_TYPE_SCALAR;
-                acc.maxValues = { (double)max_idx };
-                acc.minValues = { 0.0 };
-                model.accessors.push_back(acc);
-            }else if ( j == 1) {
-                osg::Array* va = osg_Geoms[i]->getVertexArray();
-                osg::Vec3Array* v3f = (osg::Vec3Array*)va;
-                int vec_size = v3f->size();
-                std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
-                std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
-                for (int vidx = 0; vidx < vec_size; vidx++) {
-                    osg::Vec3f point = v3f->at(vidx);
-                    vector<float> vertex = { point.x(), point.y(), point.z()};
-                    for (int i = 0; i < 3; i++)
-                    {
-                        put_val(buffer.data, vertex[i]);
-                        SET_MAX(box_max[i], vertex[i]);
-                        SET_MIN(box_min[i], vertex[i]);
-                    }
-                }
-                tinygltf::Accessor acc;
-                acc.bufferView = 1;
-                acc.byteOffset = acc_offset[j];
-                alignment_buffer(buffer.data);
-                acc_offset[j] = calc_offset();
-                acc.count = vec_size;
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-                acc.type = TINYGLTF_TYPE_VEC3;
-                acc.maxValues = box_max;
-                acc.minValues = box_min;
-                model.accessors.push_back(acc);
-            }else if ( j == 2) {
-                // normal
-                osg::Array* na = osg_Geoms[i]->getNormalArray();
-                if (!na) continue;
-                osg::Vec3Array* v3f = (osg::Vec3Array*)na;
-                std::vector<double> box_max = { -1e38, -1e38 ,-1e38 };
-                std::vector<double> box_min = { 1e38, 1e38 ,1e38 };
-                int normal_size = v3f->size();
-                for (int vidx = 0; vidx < normal_size; vidx++)
-                {
-                    osg::Vec3f point = v3f->at(vidx);
-                    vector<float> normal = { point.x(), point.y(), point.z() };
-                    
-                    for (int i = 0; i < 3; i++)
-                    {
-                        put_val(buffer.data, normal[i]);
-                        SET_MAX(box_max[i], normal[i]);
-                        SET_MIN(box_min[i], normal[i]);
-                    }
-                }
-                tinygltf::Accessor acc;
-                acc.bufferView = 2;
-                acc.byteOffset = acc_offset[j];
-                alignment_buffer(buffer.data);
-                acc_offset[j] = calc_offset();
-                acc.count = normal_size;
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-                acc.type = TINYGLTF_TYPE_VEC3;
-                acc.minValues = box_min;
-                acc.maxValues = box_max;
-                model.accessors.push_back(acc);
-            }else if ( j == 3) {
-                // batch id
-                unsigned short batch_id = i;
-                for (auto& vertex : meshes[i].vertex) {
-                    put_val(buffer.data, batch_id);
-                }
-                tinygltf::Accessor acc;
-                acc.bufferView = 3;
-                acc.byteOffset = acc_offset[j];
-                alignment_buffer(buffer.data);
-                acc_offset[j] = calc_offset();
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
-                acc.count = meshes[i].vertex.size();
-                acc.type = TINYGLTF_TYPE_SCALAR;
-                acc.maxValues = { (double)i };
-                acc.minValues = { (double)batch_id };
-                model.accessors.push_back(acc);
-            }
-        }
-        tinygltf::BufferView bfv;
-        bfv.buffer = 0;
-        if (j == 0 || j == 3) {
-            bfv.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
-        }
-        else {
-            bfv.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-            bfv.byteStride = 4 * 3;
-        }
-        bfv.byteOffset = buf_offset;
-        alignment_buffer(buffer.data);
-        bfv.byteLength = calc_offset();
-        buf_offset = buffer.data.size();
-        model.bufferViews.push_back(bfv);
-    }
-
     bool use_multi_material = false;
-    for (int i = 0; i < meshes.size(); i++) {
-        tinygltf::Mesh mesh;
-        mesh.name = meshes[i].mesh_name;
-        tinygltf::Primitive primits;
-        primits.attributes = { 
-            std::pair<std::string,int>("POSITION", 1 * meshes.size() + i),
-            std::pair<std::string,int>("NORMAL",   2 * meshes.size() + i),
-            std::pair<std::string,int>("_BATCHID", 3 * meshes.size() + i),
-        };
-        primits.indices = i;
-        if(use_multi_material) {
-            //TODO: turn height to rgb(r,g,b)
-            tinygltf::Material material =  make_color_material(1.0, 0.0, 0.0);
-            model.materials.push_back(material);
-            primits.material = i;
-        } else {
-            primits.material = 0;
-        }
-        primits.mode = TINYGLTF_MODE_TRIANGLES;
-        mesh.primitives = {
-            primits
-        };
-        model.meshes.push_back(mesh);
-    }
-
-    for (int i = 0; i < meshes.size(); i++) {
-        tinygltf::Node node;
-        node.mesh = i;
-        model.nodes.push_back(node);
-    }
     tinygltf::Scene sence;
     for (int i = 0; i < meshes.size(); i++) {
-        sence.nodes.push_back(i);
+      // Apply mesh optimization for current geometry if enabled
+      if (enable_simplify && simplification_params.has_value() &&
+          osg_Geoms[i].valid() && osg_Geoms[i]->getNumPrimitiveSets() > 0) {
+        simplify_mesh_geometry(osg_Geoms[i].get(), simplification_params.value());
+      }
+
+      if (osg_Geoms[i]->getNumPrimitiveSets() == 0)
+        continue;
+      int index_accessor_index = -1;
+      int vertex_accessor_index = -1;
+      int normal_accessor_index = -1;
+      int batchid_accessor_index = -1;
+      {
+        // indc
+        osg::PrimitiveSet *ps = osg_Geoms[i]->getPrimitiveSet(0);
+        int idx_size = ps->getNumIndices();
+        int max_idx = 0;
+
+        const osg::DrawElementsUShort *drawElements =
+            static_cast<const osg::DrawElementsUShort *>(ps);
+        int IndNum = drawElements->getNumIndices();
+        int byteOffset = buffer.data.size();
+        for (int m = 0; m < IndNum; m++) {
+          unsigned short idx = drawElements->at(m);
+          put_val(buffer.data, idx);
+          SET_MAX(max_idx, idx);
+        }
+
+        index_accessor_index = model.accessors.size();
+
+        tinygltf::Accessor acc;
+        acc.bufferView = model.bufferViews.size();
+        acc.byteOffset = 0;
+        alignment_buffer(buffer.data);
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+        acc.count = idx_size;
+        acc.type = TINYGLTF_TYPE_SCALAR;
+        acc.maxValues = {(double)max_idx};
+        acc.minValues = {0.0};
+        model.accessors.push_back(acc);
+
+        tinygltf::BufferView bfv =
+            create_buffer_view(TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER, byteOffset,
+                               buffer.data.size() - byteOffset);
+        model.bufferViews.push_back(bfv);
+      }
+      {
+        osg::Array *va = osg_Geoms[i]->getVertexArray();
+        osg::Vec3Array *v3f = (osg::Vec3Array *)va;
+        int vec_size = v3f->size();
+        std::vector<double> box_max = {-1e38, -1e38, -1e38};
+        std::vector<double> box_min = {1e38, 1e38, 1e38};
+        int byteOffset = buffer.data.size();
+        for (int vidx = 0; vidx < vec_size; vidx++) {
+          osg::Vec3f point = v3f->at(vidx);
+          vector<float> vertex = {point.x(), point.y(), point.z()};
+          for (int i = 0; i < 3; i++) {
+            put_val(buffer.data, vertex[i]);
+            SET_MAX(box_max[i], vertex[i]);
+            SET_MIN(box_min[i], vertex[i]);
+          }
+        }
+
+        vertex_accessor_index = model.accessors.size();
+        tinygltf::Accessor acc;
+        acc.bufferView = model.bufferViews.size();
+        acc.byteOffset = 0;
+        alignment_buffer(buffer.data);
+        acc.count = vec_size;
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+        acc.type = TINYGLTF_TYPE_VEC3;
+        acc.maxValues = box_max;
+        acc.minValues = box_min;
+        model.accessors.push_back(acc);
+
+        tinygltf::BufferView bfv =
+            create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
+                               buffer.data.size() - byteOffset);
+        model.bufferViews.push_back(bfv);
+      }
+      {
+        // normal
+        osg::Array *na = osg_Geoms[i]->getNormalArray();
+        if (!na)
+          continue;
+        osg::Vec3Array *v3f = (osg::Vec3Array *)na;
+        std::vector<double> box_max = {-1e38, -1e38, -1e38};
+        std::vector<double> box_min = {1e38, 1e38, 1e38};
+        int normal_size = v3f->size();
+        int byteOffset = buffer.data.size();
+        for (int vidx = 0; vidx < normal_size; vidx++) {
+          osg::Vec3f point = v3f->at(vidx);
+          vector<float> normal = {point.x(), point.y(), point.z()};
+
+          for (int i = 0; i < 3; i++) {
+            put_val(buffer.data, normal[i]);
+            SET_MAX(box_max[i], normal[i]);
+            SET_MIN(box_min[i], normal[i]);
+          }
+        }
+        normal_accessor_index = model.accessors.size();
+        tinygltf::Accessor acc;
+        acc.bufferView = model.bufferViews.size();
+        acc.byteOffset = 0;
+        alignment_buffer(buffer.data);
+        acc.count = normal_size;
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+        acc.type = TINYGLTF_TYPE_VEC3;
+        acc.minValues = box_min;
+        acc.maxValues = box_max;
+        model.accessors.push_back(acc);
+
+        tinygltf::BufferView bfv =
+            create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
+                               buffer.data.size() - byteOffset);
+        model.bufferViews.push_back(bfv);
+      }
+      {
+        // batch id
+        unsigned short batch_id = i;
+        int byteOffset = buffer.data.size();
+        for (auto &vertex : meshes[i].vertex) {
+          put_val(buffer.data, batch_id);
+        }
+        batchid_accessor_index = model.accessors.size();
+        tinygltf::Accessor acc;
+        acc.bufferView = model.bufferViews.size();
+        acc.byteOffset = 0;
+        alignment_buffer(buffer.data);
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+        acc.count = meshes[i].vertex.size();
+        acc.type = TINYGLTF_TYPE_SCALAR;
+        acc.maxValues = {(double)i};
+        acc.minValues = {(double)batch_id};
+        model.accessors.push_back(acc);
+
+        tinygltf::BufferView bfv =
+            create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
+                               buffer.data.size() - byteOffset);
+        model.bufferViews.push_back(bfv);
+      }
+
+      // 生成mesh
+      tinygltf::Mesh mesh;
+      mesh.name = meshes[i].mesh_name;
+      tinygltf::Primitive primits;
+      primits.attributes = {
+          std::pair<std::string, int>("POSITION", vertex_accessor_index),
+          std::pair<std::string, int>("NORMAL", normal_accessor_index),
+          std::pair<std::string, int>("_BATCHID", batchid_accessor_index),
+      };
+      primits.indices = index_accessor_index;
+      if (use_multi_material) {
+        // TODO: turn height to rgb(r,g,b)
+        tinygltf::Material material = make_color_material(1.0, 0.0, 0.0);
+        model.materials.push_back(material);
+        primits.material = i;
+      } else {
+        primits.material = 0;
+      }
+      primits.mode = TINYGLTF_MODE_TRIANGLES;
+      mesh.primitives = {primits};
+      model.meshes.push_back(mesh);
+
+      // 生成node
+      tinygltf::Node node;
+      node.mesh = model.meshes.size() - 1;
+      model.nodes.push_back(node);
+
+      // 写入scene
+      sence.nodes.push_back(model.nodes.size() - 1);
     }
     model.scenes = { sence };
     model.defaultScene = 0;
@@ -781,41 +830,22 @@ std::string make_polymesh(std::vector<Polygon_Mesh>& meshes) {
     if (use_multi_material) {
         // code has realized about
     } else {
-        tinygltf::Material material;
-        material.name = "default";
-//      tinygltf::Parameter baseColorFactor;
-//      baseColorFactor.number_array = { 1,1,1,1 };
-//      material.values["baseColorFactor"] = baseColorFactor;
-        tinygltf::Parameter metallicFactor;
-        metallicFactor.number_value = new double(0.3);
-        material.values["metallicFactor"] = metallicFactor;
-        tinygltf::Parameter roughnessFactor;
-        roughnessFactor.number_value = new double(0.7);
-        material.values["roughnessFactor"] = roughnessFactor;
-        /// ---------
-//      tinygltf::Parameter emissiveFactor;
-//      emissiveFactor.number_array = { 0,0,0 };
-//      material.additionalValues["emissiveFactor"] = emissiveFactor;
-//      tinygltf::Parameter alphaMode;
-//      alphaMode.string_value = "OPAQUE";
-//      material.additionalValues["alphaMode"] = alphaMode;
-//      tinygltf::Parameter doubleSided;
-//      doubleSided.bool_value = false;
-//      material.additionalValues["doubleSided"] = doubleSided;
-        model.materials = { material };
+        model.materials = { make_color_material(1.0, 1.0, 1.0) };
     }
 
     model.buffers.push_back(std::move(buffer));
     model.asset.version = "2.0";
     model.asset.generator = "fanfan";
-    
-    std::string buf = gltf.Serialize(&model);
+
+    std::ostringstream ss;
+    bool res = gltf.WriteGltfSceneToStream(&model, ss, false, true);
+    std::string buf = ss.str();
     return buf;
 }
 
-std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = false) {
+std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height, bool enable_simplify, std::optional<SimplificationParams> simplification_params) {
     using nlohmann::json;
-    
+
     std::string feature_json_string;
     feature_json_string += "{\"BATCH_LENGTH\":";
     feature_json_string += std::to_string(meshes.size());
@@ -823,7 +853,7 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = fals
     while (feature_json_string.size() % 4 != 0 ) {
         feature_json_string.push_back(' ');
     }
-    
+
     json batch_json;
     std::vector<int> ids;
     for (int i = 0; i < meshes.size(); ++i) {
@@ -849,7 +879,7 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = fals
         batch_json_string.push_back(' ');
     }
 
-    std::string glb_buf = make_polymesh(meshes);
+    std::string glb_buf = make_polymesh(meshes, enable_simplify, simplification_params);
     // how length total ?
 
     //test
@@ -862,7 +892,7 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height = fals
     int batch_json_len = batch_json_string.size();
     int batch_bin_len = 0;
     int total_len = 28 /*header size*/ + feature_json_len + batch_json_len + glb_buf.size();
-    
+
     std::string b3dm_buf;
     b3dm_buf += "b3dm";
     int version = 1;

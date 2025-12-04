@@ -1,15 +1,7 @@
 #pragma once
 /* vcpkg path */
-#ifdef _WIN32
-    #include <ogr_spatialref.h>
-    #include <ogrsf_frmts.h>
-#elif __APPLE__ 
-    #include <ogr_spatialref.h>
-    #include <ogrsf_frmts.h>
-#else
-    #include <gdal/ogr_spatialref.h>
-    #include <gdal/ogrsf_frmts.h>
-#endif
+#include <ogr_spatialref.h>
+#include <ogrsf_frmts.h>
 
 #include "glm/glm.hpp"
 
@@ -24,6 +16,14 @@ public:
 
     static double OriginZ;
 
+    // For ENU systems: store the geographic origin separately
+    static double GeoOriginLon;
+    static double GeoOriginLat;
+    static double GeoOriginHeight;
+
+    // Flag to indicate if this is an ENU system
+    static bool IsENU;
+
     static glm::dmat4 EcefToEnuMatrix;
 
     static glm::dmat4 CalcEnuToEcefMatrix(double lnt, double lat, double height_min);
@@ -31,4 +31,6 @@ public:
     static glm::dvec3 CartographicToEcef(double lnt, double lat, double height);
 
     static void Init(OGRCoordinateTransformation *pOgrCT, double *Origin);
+
+    static void SetGeographicOrigin(double lon, double lat, double height);
 };

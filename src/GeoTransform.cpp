@@ -1,100 +1,67 @@
 #include "GeoTransform.h"
+#include <cstdio>
 
 OGRCoordinateTransformation *GeoTransform::pOgrCT = nullptr;
 double GeoTransform::OriginX = 0.0;
 double GeoTransform::OriginY = 0.0;
 double GeoTransform::OriginZ = 0.0;
+double GeoTransform::GeoOriginLon = 0.0;
+double GeoTransform::GeoOriginLat = 0.0;
+double GeoTransform::GeoOriginHeight = 0.0;
+bool GeoTransform::IsENU = false;
 glm::dmat4 GeoTransform::EcefToEnuMatrix = glm::dmat4(1);
 
 glm::dmat4 GeoTransform::CalcEnuToEcefMatrix(double lnt, double lat, double height_min)
 {
-    const double pi = std::acos(-1);
-    double ellipsod_a = 40680631590769;
-    double ellipsod_b = 40680631590769;
-    double ellipsod_c = 40408299984661.4;
+    const double pi = std::acos(-1.0);
+    const double a = 6378137.0;                  // WGS84 semi-major axis
+    const double f = 1.0 / 298.257223563;        // WGS84 flattening
+    const double e2 = f * (2.0 - f);             // eccentricity squared
 
-    double radian_x = lnt * pi / 180.0;
-    double radian_y = lat * pi / 180.0;
-    double xn = std::cos(radian_x) * std::cos(radian_y);
-    double yn = std::sin(radian_x) * std::cos(radian_y);
-    double zn = std::sin(radian_y);
+    double lon = lnt * pi / 180.0;
+    double phi = lat * pi / 180.0;
 
-    double x0 = ellipsod_a * xn;
-    double y0 = ellipsod_b * yn;
-    double z0 = ellipsod_c * zn;
-    double gamma = std::sqrt(xn * x0 + yn * y0 + zn * z0);
-    double px = x0 / gamma;
-    double py = y0 / gamma;
-    double pz = z0 / gamma;
+    double sinPhi = std::sin(phi), cosPhi = std::cos(phi);
+    double sinLon = std::sin(lon), cosLon = std::cos(lon);
 
-    double dx = xn * height_min;
-    double dy = yn * height_min;
-    double dz = zn * height_min;
+    double N = a / std::sqrt(1.0 - e2 * sinPhi * sinPhi);
+    double x0 = (N + height_min) * cosPhi * cosLon;
+    double y0 = (N + height_min) * cosPhi * sinLon;
+    double z0 = (N * (1.0 - e2) + height_min) * sinPhi;
 
-    double east_mat[3] = { -y0,x0,0 };
-    double north_mat[3] = {
-        (y0 * east_mat[2] - east_mat[1] * z0),
-        (z0 * east_mat[0] - east_mat[2] * x0),
-        (x0 * east_mat[1] - east_mat[0] * y0)
-    };
-    double east_normal = std::sqrt(
-        east_mat[0] * east_mat[0] +
-        east_mat[1] * east_mat[1] +
-        east_mat[2] * east_mat[2]
-    );
-    double north_normal = std::sqrt(
-        north_mat[0] * north_mat[0] +
-        north_mat[1] * north_mat[1] +
-        north_mat[2] * north_mat[2]
-    );
+    // ENU basis vectors expressed in ECEF
+    glm::dvec3 east(-sinLon,           cosLon,            0.0);
+    glm::dvec3 north(-sinPhi * cosLon, -sinPhi * sinLon,  cosPhi);
+    glm::dvec3 up(   cosPhi * cosLon,   cosPhi * sinLon,  sinPhi);
 
-    glm::dmat4 matrix = {
-        east_mat[0] / east_normal,
-        east_mat[1] / east_normal,
-        east_mat[2] / east_normal,
-        0,
-        north_mat[0] / north_normal,
-        north_mat[1] / north_normal,
-        north_mat[2] / north_normal,
-        0,
-        xn,
-        yn,
-        zn,
-        0,
-        px + dx,
-        py + dy,
-        pz + dz,
-        1
-    };
-    return matrix;
+    // Build ENU->ECEF (rotation + translation), column-major
+    glm::dmat4 T(1.0);
+    T[0] = glm::dvec4(east,  0.0);
+    T[1] = glm::dvec4(north, 0.0);
+    T[2] = glm::dvec4(up,    0.0);
+    T[3] = glm::dvec4(x0, y0, z0, 1.0);
+    return T;
 }
 
 glm::dvec3 GeoTransform::CartographicToEcef(double lnt, double lat, double height)
 {
-    static const double pi = std::acos(-1);
-    double ellipsod_a = 40680631590769;
-    double ellipsod_b = 40680631590769;
-    double ellipsod_c = 40408299984661.4;
-    lnt = lnt * pi / 180.0;
-    lat = lat * pi / 180.0;
+    const double pi = std::acos(-1.0);
+    const double a = 6378137.0;                  // WGS84 semi-major axis
+    const double f = 1.0 / 298.257223563;        // WGS84 flattening
+    const double e2 = f * (2.0 - f);             // eccentricity squared
 
-    double xn = std::cos(lnt) * std::cos(lat);
-    double yn = std::sin(lnt) * std::cos(lat);
-    double zn = std::sin(lat);
+    double lon = lnt * pi / 180.0;
+    double phi = lat * pi / 180.0;
 
-    double x0 = ellipsod_a * xn;
-    double y0 = ellipsod_b * yn;
-    double z0 = ellipsod_c * zn;
-    double gamma = std::sqrt(xn * x0 + yn * y0 + zn * z0);
-    double px = x0 / gamma;
-    double py = y0 / gamma;
-    double pz = z0 / gamma;
+    double sinPhi = std::sin(phi), cosPhi = std::cos(phi);
+    double sinLon = std::sin(lon), cosLon = std::cos(lon);
 
-    double dx = xn * height;
-    double dy = yn * height;
-    double dz = zn * height;
+    double N = a / std::sqrt(1.0 - e2 * sinPhi * sinPhi);
+    double x = (N + height) * cosPhi * cosLon;
+    double y = (N + height) * cosPhi * sinLon;
+    double z = (N * (1.0 - e2) + height) * sinPhi;
 
-    return { px + dx, py + dy, pz + dz };
+    return { x, y, z };
 }
 
 void GeoTransform::Init(OGRCoordinateTransformation *pOgrCT, double *Origin)
@@ -103,9 +70,36 @@ void GeoTransform::Init(OGRCoordinateTransformation *pOgrCT, double *Origin)
     GeoTransform::OriginX = Origin[0];
     GeoTransform::OriginY = Origin[1];
     GeoTransform::OriginZ = Origin[2];
+    GeoTransform::IsENU = false;  // Default to non-ENU, will be set by SetGeographicOrigin if ENU
+
     glm::dvec3 origin = { GeoTransform::OriginX, GeoTransform::OriginY, GeoTransform::OriginZ };
     glm::dvec3 origin_cartographic = origin;
+    // Log ENU origin before transform
+    fprintf(stderr, "[GeoTransform] ENU origin: x=%.8f y=%.8f z=%.3f\n", origin.x, origin.y, origin.z);
     pOgrCT->Transform(1, &origin_cartographic.x, &origin_cartographic.y, &origin_cartographic.z);
+    // Log cartographic origin after transform (degrees)
+    fprintf(stderr, "[GeoTransform] Cartographic origin: lon=%.10f lat=%.10f h=%.3f\n", origin_cartographic.x, origin_cartographic.y, origin_cartographic.z);
+
+    // For EPSG systems, use the transformed cartographic origin
+    // For ENU systems, this will be overridden by SetGeographicOrigin()
+    GeoTransform::GeoOriginLon = origin_cartographic.x;
+    GeoTransform::GeoOriginLat = origin_cartographic.y;
+    GeoTransform::GeoOriginHeight = origin_cartographic.z;
+
     glm::dmat4 EnuToEcefMatrix = GeoTransform::CalcEnuToEcefMatrix(origin_cartographic.x, origin_cartographic.y, origin_cartographic.z);
     GeoTransform::EcefToEnuMatrix = glm::inverse(EnuToEcefMatrix);
+}
+
+void GeoTransform::SetGeographicOrigin(double lon, double lat, double height)
+{
+    GeoTransform::GeoOriginLon = lon;
+    GeoTransform::GeoOriginLat = lat;
+    GeoTransform::GeoOriginHeight = height;
+    GeoTransform::IsENU = true;
+
+    // Recalculate ENU<->ECEF matrices using the geographic origin
+    glm::dmat4 EnuToEcefMatrix = GeoTransform::CalcEnuToEcefMatrix(lon, lat, height);
+    GeoTransform::EcefToEnuMatrix = glm::inverse(EnuToEcefMatrix);
+
+    fprintf(stderr, "[GeoTransform] Geographic origin set: lon=%.10f lat=%.10f h=%.3f\n", lon, lat, height);
 }

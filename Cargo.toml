@@ -2,6 +2,7 @@
 name = "_3dtile"
 version = "0.1.0"
 authors = ["fanzhenhua <fanzhenhua@superengine.com.cn>"]
+edition = "2021"
 
 [dependencies]
 libc = "0.2"

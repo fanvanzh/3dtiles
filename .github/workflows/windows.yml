@@ -5,61 +5,33 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   build-and-test:
     runs-on: windows-latest
-    env:
-      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
-      VCPKG_TRIPLET: x64-windows
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
+      with:
+        submodules: 'recursive'
 
-    - name: Debug paths
-      run: |
-        echo GITHUB_WORKSPACE=${{ github.workspace }}
-        echo VCPKG_ROOT=%VCPKG_ROOT%
-        echo WORKDIR=%CD%
-        if exist "%VCPKG_ROOT%" (
-          echo "VCPKG_ROOT exists, listing:"
-          dir "%VCPKG_ROOT%" /b
-        ) else (
-          echo "VCPKG_ROOT not found (expected on first run)"
-        )
-      shell: cmd
+    - name: Setup anew (or from cache) vcpkg (and does not build any package)
+      uses: lukka/run-vcpkg@v11
+      with:
+        doNotCache: false
+        vcpkgGitCommitId: 'd5182f703b51d7b258f83f94d936ac03488dcdbe'
+      env:
+        VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
-    - name: Setup vcpkg
-      run: |
-        echo "vcpkg.exe not found, setting up vcpkg..."
-          if not exist "%VCPKG_ROOT%" (
-            echo "Cloning vcpkg..."
-            git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
-          ) else (
-            echo "VCPKG_ROOT exists but incomplete, checking for .git..."
-            if not exist "%VCPKG_ROOT%\.git" (
-              echo "No .git found, removing incomplete directory..."
-              rmdir /s /q "%VCPKG_ROOT%"
-              echo "Cloning vcpkg..."
-              git clone https://github.com/microsoft/vcpkg.git "%VCPKG_ROOT%"
-            ) else (
-              echo "Git repository exists, updating..."
-              cd /d "%VCPKG_ROOT%"
-              git pull origin master
-            )
-          )
-          echo "Bootstrapping vcpkg..."
-          "%VCPKG_ROOT%\bootstrap-vcpkg.bat"
-      shell: cmd
-
-    - name: Verify vcpkg installation
-      run: |
-        if not exist "%VCPKG_ROOT%\vcpkg.exe" (
-          echo "ERROR: vcpkg.exe not found at %VCPKG_ROOT%\vcpkg.exe"
-          exit /b 1
-        )
-        echo "vcpkg.exe found, verifying installation..."
-        "%VCPKG_ROOT%\vcpkg.exe" version
-      shell: cmd
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
 
     - name: Build
       run: cargo build -vv --release
+      # env:
+      #   ENABLE_STRICT_CHECKS: 1

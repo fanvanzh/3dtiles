@@ -13,12 +13,17 @@
 #include <cstring>
 #include <algorithm>
 
+// Add Basis Universal includes for KTX2 compression
+#include <basisu/encoder/basisu_comp.h>
+#include <basisu/transcoder/basisu_transcoder.h>
+
+// Add Draco compression includes
+#include "mesh_processor.h"
+
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define TINYGLTF_IMPLEMENTATION
 #include "tiny_gltf.h"
-#include "stb_image_write.h"
-#include "dxt_img.h"
 #include "extern.h"
 #include "GeoTransform.h"
 
@@ -31,7 +36,45 @@ using namespace std;
 #undef min
 #endif // max
 
-static bool b_pbr_texture = false;
+// 引入osg插件和序列化
+// USE_OSGPLUGIN is needed for static plugin registration on Linux/macOS
+// On Windows with dynamic linking, plugins are loaded at runtime instead
+#if defined(__unix__) || defined(__APPLE__)
+#include <osgDB/Registry>
+USE_OSGPLUGIN(osg)
+#endif
+
+// Helper function to log OSG plugin search paths
+void log_osg_plugin_info() {
+    printf("\n=== OpenSceneGraph Plugin Loading Information ===\n");
+
+    // Get OSG Registry singleton
+    osgDB::Registry* registry = osgDB::Registry::instance();
+
+    // Log OSG_LIBRARY_PATH environment variable
+    const char* osg_lib_path = getenv("OSG_LIBRARY_PATH");
+    if (osg_lib_path) {
+        printf("OSG_LIBRARY_PATH env variable: %s\n", osg_lib_path);
+    } else {
+        printf("OSG_LIBRARY_PATH env variable: NOT SET\n");
+    }
+
+    // Log library file paths that OSG will search
+    const osgDB::FilePathList& libPaths = registry->getLibraryFilePathList();
+    printf("OSG Library Search Paths (%zu paths):\n", libPaths.size());
+    for (size_t i = 0; i < libPaths.size(); ++i) {
+        printf("  [%zu] %s\n", i, libPaths[i].c_str());
+    }
+
+    // Log data file paths
+    const osgDB::FilePathList& dataPaths = registry->getDataFilePathList();
+    printf("OSG Data File Search Paths (%zu paths):\n", dataPaths.size());
+    for (size_t i = 0; i < dataPaths.size(); ++i) {
+        printf("  [%zu] %s\n", i, dataPaths[i].c_str());
+    }
+
+    printf("=== End of OSG Plugin Information ===\n\n");
+}
 
 template<class T>
 void put_val(std::vector<unsigned char>& buf, T val) {
@@ -83,7 +126,7 @@ class InfoVisitor : public osg::NodeVisitor
 public:
     InfoVisitor(std::string _path, bool loadAllType = false)
     :osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
-    , path(_path), is_pagedlod(loadAllType), is_loadAllType(loadAllType)
+    , path(_path), is_loadAllType(loadAllType), is_pagedlod(loadAllType)
     {}
 
     ~InfoVisitor() {
@@ -126,11 +169,34 @@ public:
              * can occur when the tile is located far from the origin.
              */
             auto Correction = [&](glm::dvec3 Point) {
-                glm::dvec3 cartographic = Point + glm::dvec3(GeoTransform::OriginX, GeoTransform::OriginY, GeoTransform::OriginZ);
-                poCT->Transform(1, &cartographic.x, &cartographic.y, &cartographic.z);
-                glm::dvec3 ecef = GeoTransform::CartographicToEcef(cartographic.x, cartographic.y, cartographic.z);
-                glm::dvec3 enu = GeoTransform::EcefToEnuMatrix * glm::dvec4(ecef, 1);
-                return enu;
+                // Use the explicit IsENU flag set by SetGeographicOrigin()
+                if (GeoTransform::IsENU) {
+                    // For ENU: Point is already in ENU meters relative to the geographic origin
+                    // Add the SRSOrigin offset to get the absolute ENU position
+                    glm::dvec3 absoluteENU = Point + glm::dvec3(GeoTransform::OriginX, GeoTransform::OriginY, GeoTransform::OriginZ);
+                    // Convert ENU meters to ECEF, then back to ENU for the correction matrix
+                    glm::dvec3 ecef = GeoTransform::CartographicToEcef(GeoTransform::GeoOriginLon, GeoTransform::GeoOriginLat, GeoTransform::GeoOriginHeight);
+                    // Apply ENU->ECEF rotation at origin
+                    const double pi = std::acos(-1.0);
+                    double lat = GeoTransform::GeoOriginLat * pi / 180.0;
+                    double lon = GeoTransform::GeoOriginLon * pi / 180.0;
+                    double sinLat = std::sin(lat), cosLat = std::cos(lat);
+                    double sinLon = std::sin(lon), cosLon = std::cos(lon);
+                    // ENU to ECEF rotation
+                    double ecef_x = -sinLon * absoluteENU.x - sinLat * cosLon * absoluteENU.y + cosLat * cosLon * absoluteENU.z;
+                    double ecef_y =  cosLon * absoluteENU.x - sinLat * sinLon * absoluteENU.y + cosLat * sinLon * absoluteENU.z;
+                    double ecef_z =  cosLat * absoluteENU.y + sinLat * absoluteENU.z;
+                    ecef = glm::dvec3(ecef.x + ecef_x, ecef.y + ecef_y, ecef.z + ecef_z);
+                    glm::dvec3 enu = GeoTransform::EcefToEnuMatrix * glm::dvec4(ecef, 1);
+                    return enu;
+                } else {
+                    // For EPSG: Original logic - add projected origin and transform
+                    glm::dvec3 cartographic = Point + glm::dvec3(GeoTransform::OriginX, GeoTransform::OriginY, GeoTransform::OriginZ);
+                    poCT->Transform(1, &cartographic.x, &cartographic.y, &cartographic.z);
+                    glm::dvec3 ecef = GeoTransform::CartographicToEcef(cartographic.x, cartographic.y, cartographic.z);
+                    glm::dvec3 enu = GeoTransform::EcefToEnuMatrix * glm::dvec4(ecef, 1);
+                    return enu;
+                }
             };
             vector<glm::dvec4> OriginalPoints(8);
             vector<glm::dvec4> CorrectedPoints(8);
@@ -307,6 +373,13 @@ osg_tree get_all_tree(std::string& file_name) {
     osg_tree root_tile;
     vector<string> fileNames = { file_name };
 
+    // Log OSG plugin information on first call
+    static bool logged = false;
+    if (!logged) {
+        log_osg_plugin_info();
+        logged = true;
+    }
+
     InfoVisitor infoVisitor(get_parent(file_name));
     {   // add block to release Node
         osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
@@ -451,97 +524,12 @@ R"(
 })";
 }
 
-void make_gltf2_shader(tinygltf::Model& model, int mat_size, tinygltf::Buffer& buffer) {
-    model.extensionsRequired = { "KHR_techniques_webgl" };
-    model.extensionsUsed = { "KHR_techniques_webgl" };
-    // add vs shader
-    {
-        tinygltf::BufferView bfv_vs;
-        bfv_vs.buffer = 0;
-        bfv_vs.byteOffset = buffer.data.size();
-        bfv_vs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-
-        std::string vs_shader = vs_str();
-
-        buffer.data.insert(buffer.data.end(), vs_shader.begin(), vs_shader.end());
-        bfv_vs.byteLength = vs_shader.size();
-        alignment_buffer(buffer.data);
-        model.bufferViews.push_back(bfv_vs);
-
-        tinygltf::Shader shader;
-        shader.bufferView = model.bufferViews.size() - 1;
-        shader.type = TINYGLTF_SHADER_TYPE_VERTEX_SHADER;
-        model.extensions.KHR_techniques_webgl.shaders.push_back(shader);
-    }
-    // add fs shader
-    {
-        tinygltf::BufferView bfv_fs;
-        bfv_fs.buffer = 0;
-        bfv_fs.byteOffset = buffer.data.size();
-        bfv_fs.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-        std::string fs_shader = fs_str();
-        buffer.data.insert(buffer.data.end(), fs_shader.begin(), fs_shader.end());
-        bfv_fs.byteLength = fs_shader.size();
-        alignment_buffer(buffer.data);
-        model.bufferViews.push_back(bfv_fs);
-
-        tinygltf::Shader shader;
-        shader.bufferView = model.bufferViews.size() - 1;
-        shader.type = TINYGLTF_SHADER_TYPE_FRAGMENT_SHADER;
-        model.extensions.KHR_techniques_webgl.shaders.push_back(shader);
-    }
-    // tech
-    {
-        tinygltf::Technique tech;
-        tech.tech_string = tech_string();
-        model.extensions.KHR_techniques_webgl.techniques = { tech };
-    }
-    // program
-    {
-        tinygltf::Program prog;
-        prog.prog_string = program(0, 1);
-        model.extensions.KHR_techniques_webgl.programs = { prog };
-    }
-
-    for (int i = 0; i < mat_size; i++)
-    {
-        tinygltf::Material material;
-        material.name = "osgb";
-        char shaderBuffer[512];
-        sprintf(shaderBuffer, R"(
-{
-"extensions": {
-"KHR_techniques_webgl": {
-"technique": 0,
-"values": {
-"u_diffuse": {
-"index": %d,
-"texCoord": 0
-}
-}
-}
-}
-}
-)", i);
-        material.shaderMaterial = shaderBuffer;
-        model.materials.push_back(material);
-    }
-}
-
 tinygltf::Material make_color_material_osgb(double r, double g, double b) {
     tinygltf::Material material;
     material.name = "default";
-    tinygltf::Parameter baseColorFactor;
-    baseColorFactor.number_array = { r, g, b, 1.0 };
-    material.values["baseColorFactor"] = baseColorFactor;
-
-    tinygltf::Parameter metallicFactor;
-    metallicFactor.number_value = new double(0);
-    material.values["metallicFactor"] = metallicFactor;
-    tinygltf::Parameter roughnessFactor;
-    roughnessFactor.number_value = new double(1);
-    material.values["roughnessFactor"] = roughnessFactor;
-    //
+    material.pbrMetallicRoughness.baseColorFactor = {r, g, b, 1.0};
+    material.pbrMetallicRoughness.metallicFactor = 0.0;
+    material.pbrMetallicRoughness.roughnessFactor = 1.0;
     return material;
 }
 
@@ -821,8 +809,22 @@ write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgBuildS
     osgState->model->meshes.back().primitives.push_back(primits);
 }
 
-void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState)
+void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState, bool enable_simplify, bool enable_draco)
 {
+    if (enable_simplify) {
+        const SimplificationParams simplication_params = { .enable_simplification = true };
+        ::simplify_mesh_geometry(g, simplication_params);
+    }
+    // Apply Draco compression if enabled
+    if (enable_draco) {
+        std::vector<unsigned char> compressed_data;
+        size_t compressed_size = 0;
+        const DracoCompressionParams draco_params = { .enable_compression = true };
+
+        // Try to compress the geometry with Draco
+        ::compress_mesh_geometry(g, draco_params, compressed_data, compressed_size);
+    }
+
     osg::PrimitiveSet::Type t = g->getPrimitiveSet(0)->getType();
     PrimitiveState pmtState = {-1, -1, -1};
     for (unsigned int k = 0; k < g->getNumPrimitiveSets(); k++)
@@ -837,9 +839,17 @@ void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState)
     }
 }
 
-bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, int node_type) {
+bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, int node_type, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false) {
     vector<string> fileNames = { path };
     std::string parent_path = get_parent(path);
+
+    // Log OSG plugin information on first call
+    static bool logged = false;
+    if (!logged) {
+        log_osg_plugin_info();
+        logged = true;
+    }
+
     osg::ref_ptr<osg::Node> root = osgDB::readNodeFiles(fileNames);
     if (!root.valid()) {
         return false;
@@ -872,7 +882,7 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         if (!g->getVertexArray() || g->getVertexArray()->getDataSize() == 0)
             continue;
 
-        write_osgGeometry(g, &osgState);
+        write_osgGeometry(g, &osgState, enable_meshopt, enable_draco);
         // update primitive material index
         if (infoVisitor.texture_array.size())
         {
@@ -912,80 +922,27 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         for (auto tex : infoVisitor.texture_array)
         {
             unsigned buffer_start = buffer.data.size();
-            std::vector<unsigned char> jpeg_buf;
-            int width, height;
-            if (tex) {
-                if (tex->getNumImages() > 0) {
-                    osg::Image* img = tex->getImage(0);
-                    if (img) {
-                        width = img->s();
-                        height = img->t();
 
-                        const GLenum format = img->getPixelFormat();
-                        const char* rgb = (const char*)(img->data());
-                        uint32_t rowStep = img->getRowStepInBytes();
-                        uint32_t rowSize = img->getRowSizeInBytes();
-                        switch (format)
-                        {
-                        case GL_RGBA:
-                            jpeg_buf.resize(width * height * 3);
-                            for (int i = 0; i < height; i++)
-                            {
-                                for (int j = 0; j < width; j++)
-                                {
-                                    jpeg_buf[i * width * 3 + j * 3] = rgb[i * width * 4 + j * 4];
-                                    jpeg_buf[i * width * 3 + j * 3 + 1] = rgb[i * width * 4 + j * 4 + 1];
-                                    jpeg_buf[i * width * 3 + j * 3 + 2] = rgb[i * width * 4 + j * 4 + 2];
-                                }
-                            }
-                            break;
-                        case GL_BGRA:
-                            jpeg_buf.resize(width * height * 3);
-                            for (int i = 0; i < height; i++)
-                            {
-                                for (int j = 0; j < width; j++)
-                                {
-                                    jpeg_buf[i * width * 3 + j * 3] = rgb[i * width * 4 + j * 4 + 2];
-                                    jpeg_buf[i * width * 3 + j * 3 + 1] = rgb[i * width * 4 + j * 4 + 1];
-                                    jpeg_buf[i * width * 3 + j * 3 + 2] = rgb[i * width * 4 + j * 4];
-                                }
-                            }
-                            break;
-                        case GL_RGB:
-                            for (int i = 0; i < height; i++)
-                            {
-                                for (int j = 0; j < rowSize; j++)
-                                {
-                                    jpeg_buf.push_back(rgb[rowStep * i + j]);
-                                }
-                            }
-                            break;
-                        default:
-                            break;
-                        }
-                    }
-                }
+            // Process texture using our mesh processor
+            std::vector<unsigned char> image_data;
+            std::string mime_type;
+            if (::process_texture(tex, image_data, mime_type, enable_texture_compress)) {
+                // Add image data to buffer
+                buffer.data.insert(buffer.data.end(), image_data.begin(), image_data.end());
+
+                // Create image with appropriate MIME type
+                tinygltf::Image image;
+                image.mimeType = mime_type;
+                image.bufferView = model.bufferViews.size();
+                model.images.push_back(image);
+
+                tinygltf::BufferView bfv;
+                bfv.buffer = 0;
+                bfv.byteOffset = buffer_start;
+                alignment_buffer(buffer.data);
+                bfv.byteLength = buffer.data.size() - buffer_start;
+                model.bufferViews.push_back(bfv);
             }
-            if (!jpeg_buf.empty()) {
-                int buf_size = buffer.data.size();
-                buffer.data.reserve(buffer.data.size() + width * height * 3);
-                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, jpeg_buf.data(), 80);
-            }
-            else {
-                std::vector<char> v_data(256 * 256 * 3, 255);
-                width = height = 256;
-                stbi_write_jpg_to_func(write_buf, &buffer.data, width, height, 3, v_data.data(), 80);
-            }
-            tinygltf::Image image;
-            image.mimeType = "image/jpeg";
-            image.bufferView = model.bufferViews.size();
-            model.images.push_back(image);
-            tinygltf::BufferView bfv;
-            bfv.buffer = 0;
-            bfv.byteOffset = buffer_start;
-            alignment_buffer(buffer.data);
-            bfv.byteLength = buffer.data.size() - buffer_start;
-            model.bufferViews.push_back(bfv);
         }
     }
     // node
@@ -1011,15 +968,25 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         model.samplers = { sample };
     }
     // use KHR_materials_unlit
-    model.extensionsRequired = { "KHR_materials_unlit" };
-    model.extensionsUsed = { "KHR_materials_unlit" };
+    // Update extensions declaration to include KHR_texture_basisu when using KTX2
+    if (enable_texture_compress) {
+        model.extensionsRequired = { "KHR_materials_unlit", "KHR_texture_basisu" };
+        model.extensionsUsed = { "KHR_materials_unlit", "KHR_texture_basisu" };
+    } else {
+        model.extensionsRequired = { "KHR_materials_unlit" };
+        model.extensionsUsed = { "KHR_materials_unlit" };
+    }
+
+    // Add Draco extension if compression is enabled
+    if (enable_draco) {
+        model.extensionsRequired.push_back("KHR_draco_mesh_compression");
+        model.extensionsUsed.push_back("KHR_draco_mesh_compression");
+    }
+
     for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
     {
         tinygltf::Material mat = make_color_material_osgb(1.0, 1.0, 1.0);
-        mat.b_unlit = true; // use KHR_materials_unlit
-        tinygltf::Parameter baseColorTexture;
-        baseColorTexture.json_int_value = { std::pair<string,int>("index",i) };
-        mat.values["baseColorTexture"] = baseColorTexture;
+        mat.pbrMetallicRoughness.baseColorTexture.index = i;
         model.materials.push_back(mat);
     }
 
@@ -1031,25 +998,42 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         for (auto tex : infoVisitor.texture_array)
         {
             tinygltf::Texture texture;
-            texture.source = texture_index++;
             texture.sampler = 0;
+
+            // When using KTX2, we need to use the KHR_texture_basisu extension
+            if (enable_texture_compress) {
+                // For KTX2/Basis Universal, use the extension field instead of source
+                tinygltf::Value::Object basisu_ext;
+                basisu_ext["source"] = tinygltf::Value(texture_index);
+                texture.extensions["KHR_texture_basisu"] = tinygltf::Value(basisu_ext);
+                // Note: Do NOT set texture.source when using the extension
+            } else {
+                // For regular images (JPEG/PNG), use the source field
+                texture.source = texture_index;
+            }
+
+            texture_index++;
             model.textures.push_back(texture);
         }
     }
     model.asset.version = "2.0";
     model.asset.generator = "fanvanzh";
 
-    glb_buff = gltf.Serialize(&model);
+    std::ostringstream ss;
+    bool res = gltf.WriteGltfSceneToStream(&model, ss, false, true);
+    if (res) {
+        glb_buff = ss.str();
+    }
     return true;
 }
 
-bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box, int node_type)
+bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box, int node_type, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false)
 {
     using nlohmann::json;
 
     std::string glb_buf;
     MeshInfo minfo;
-    bool ret = osgb2glb_buf(path, glb_buf, minfo, node_type);
+    bool ret = osgb2glb_buf(path, glb_buf, minfo, node_type, enable_texture_compress, enable_meshopt, enable_draco);
     if (!ret)
         return false;
 
@@ -1129,14 +1113,14 @@ std::vector<double> convert_bbox(TileBox tile) {
     return v;
 }
 
-void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl) {
+void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false) {
     std::string json_str;
     if (tree.file_name.empty()) return;
     int lvl = get_lvl_num(tree.file_name);
     if (lvl > max_lvl) return;
     if (tree.type > 0) {
         std::string b3dm_buf;
-        osgb2b3dm_buf(tree.file_name, b3dm_buf, tree.bbox, tree.type);
+        osgb2b3dm_buf(tree.file_name, b3dm_buf, tree.bbox, tree.type, enable_texture_compress, enable_meshopt, enable_draco);
         std::string out_file = out_path;
         out_file += "/";
         out_file += replace(get_file_name(tree.file_name), ".osgb", tree.type != 2 ? ".b3dm" : "o.b3dm");
@@ -1152,7 +1136,7 @@ void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl) {
         // end test
     }
     for (auto& i : tree.sub_nodes) {
-        do_tile_job(i,out_path,max_lvl);
+        do_tile_job(i,out_path,max_lvl, enable_texture_compress, enable_meshopt, enable_draco);
     }
 }
 
@@ -1295,7 +1279,8 @@ encode_tile_json(osg_tree& tree, double x, double y)
 extern "C" void*
 osgb23dtile_path(const char* in_path, const char* out_path,
                     double *box, int* len, double x, double y,
-                    int max_lvl, bool pbr_texture)
+                    int max_lvl,
+                    bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false)
 {
     std::string path = osg_string(in_path);
     osg_tree root = get_all_tree(path);
@@ -1304,8 +1289,7 @@ osgb23dtile_path(const char* in_path, const char* out_path,
         LOG_E( "open file [%s] fail!", in_path);
         return NULL;
     }
-    b_pbr_texture = pbr_texture;
-    do_tile_job(root, out_path, max_lvl);
+    do_tile_job(root, out_path, max_lvl, enable_texture_compress, enable_meshopt, enable_draco);
     extend_tile_box(root);
     if (root.bbox.max.empty() || root.bbox.min.empty())
     {
@@ -1328,7 +1312,6 @@ osgb23dtile_path(const char* in_path, const char* out_path,
 extern "C" bool
 osgb2glb(const char* in, const char* out)
 {
-    b_pbr_texture = true;
     MeshInfo minfo;
     std::string glb_buf;
     std::string path = osg_string(in);

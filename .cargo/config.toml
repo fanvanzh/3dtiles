@@ -1,0 +1,10 @@
+# Cargo configuration for local development
+# This ensures local builds match CI behavior
+
+[build]
+# Uncomment the line below to treat warnings as errors locally (matching CI)
+# This will make your local builds fail on warnings, just like Linux/macOS CI does
+rustflags = ["-D", "warnings"]
+
+# Alternative: Only deny specific warning groups
+# rustflags = ["-D", "unused-mut", "-D", "unused-variables"]

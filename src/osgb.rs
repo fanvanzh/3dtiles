@@ -5,7 +5,7 @@ extern crate serde_json;
 
 use std::fs;
 
-use osgb::rayon::prelude::*;
+use rayon::prelude::*;
 
 use std::error::Error;
 use std::path::Path;
@@ -13,14 +13,16 @@ use std::path::Path;
 extern "C" {
 
     fn osgb23dtile_path(
-        name_in: *const u8,
-        name_out: *const u8,
+        in_path: *const u8,
+        out_path: *const u8,
         box_ptr: *mut f64,
         len: *mut i32,
         x: f64,
         y: f64,
         max_lvl: i32,
-        pbr_texture: bool
+        enable_texture_compress: bool,
+        enable_meshopt: bool,
+        enable_draco: bool,
     ) -> *mut libc::c_void;
 
     pub fn osgb2glb(name_in: *const u8, name_out: *const u8) -> bool;
@@ -31,9 +33,11 @@ extern "C" {
 	                               enu_offset_x: f64, enu_offset_y: f64, enu_offset_z: f64,
 	                               ptr: *mut f64);
 
-    pub fn epsg_convert(insrs: i32, val: *mut f64, gdal: *const i8, proj: *const i8) -> bool;
+    pub fn epsg_convert(insrs: i32, val: *mut f64, gdal: *const libc::c_char, proj: *const libc::c_char) -> bool;
 
-    pub fn wkt_convert(gdal: *const u8, val: *mut f64, gdal: *const i8) -> bool;
+    pub fn enu_init(lon: f64, lat: f64, origin_enu: *mut f64, gdal: *const libc::c_char, proj: *const libc::c_char) -> bool;
+
+    pub fn wkt_convert(gdal: *const libc::c_char, val: *mut f64, gdal: *const libc::c_char) -> bool;
 
     fn degree2rad(val: f64) -> f64;
 
@@ -70,8 +74,11 @@ pub fn osgb_batch_convert(
     center_x: f64,
     center_y: f64,
     region_offset: Option<f64>,
-    pbr_texture: bool,
     enu_offset: Option<(f64, f64, f64)>,
+    origin_height: Option<f64>,
+    enable_texture_compress: bool,
+    enable_meshopt: bool,
+    enable_draco_compress: bool,
 ) -> Result<(), Box<dyn Error>> {
     use std::fs::File;
     use std::io::prelude::*;
@@ -131,7 +138,9 @@ pub fn osgb_batch_convert(
                 rad_x,
                 rad_y,
                 max_lvl,
-                pbr_texture,
+                enable_texture_compress,
+                enable_meshopt,
+                enable_draco_compress,
             );
             if out_ptr.is_null() {
                 error!("failed: {}", info.in_dir);
@@ -177,11 +186,16 @@ pub fn osgb_batch_convert(
     }
 
     //let root_geometric_error = get_geometric_error(center_y, 10);
-    // do merge plz
-    let mut tras_height = 0f64;
-    if let Some(v) = region_offset {
-        tras_height = v - root_box[5];
-    }
+    // Use origin height: priority: origin_height > enu_offset.2 > region_offset calculation
+    let tras_height = if let Some(h) = origin_height {
+        h
+    } else if let Some((_, _, enu_z)) = enu_offset {
+        enu_z
+    } else if let Some(v) = region_offset {
+        v - root_box[5]
+    } else {
+        0f64
+    };
     let mut trans_vec = vec![0f64; 16];
     unsafe {
         if let Some((enu_x, enu_y, enu_z)) = enu_offset {
@@ -222,7 +236,7 @@ pub fn osgb_batch_convert(
                 },
                 "geometricError": 1000,
                 "content": {
-                    "uri" : format!("{}/tileset.json", path.replace(&out_dir,".").replace("\\","/"))
+                    "uri" : format!("{}/tileset.json", path.replace(&out_dir,"./").replace("\\","/"))
                 }
             }
         );

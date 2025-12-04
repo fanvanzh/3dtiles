@@ -19,12 +19,63 @@ use log::{Level, LevelFilter};
 use serde::Deserialize;
 use std::io::Write;
 
+/// Setup OpenSceneGraph environment variables for plugin loading
+fn setup_osg_environment() {
+    use std::env;
+
+    // Get the executable directory
+    let exe_path = env::current_exe().ok();
+    let exe_dir = exe_path.as_ref().and_then(|p| p.parent());
+
+    // Try to set OSG_LIBRARY_PATH if not already set
+    if env::var("OSG_LIBRARY_PATH").is_err() {
+        if let Some(dir) = exe_dir {
+            // Check for osgPlugins directory next to the executable
+            let plugins_dir = dir.join("osgPlugins-3.6.5");
+            if plugins_dir.exists() {
+                unsafe { env::set_var("OSG_LIBRARY_PATH", &plugins_dir) };
+                info!("OSG_LIBRARY_PATH set to: {:?}", plugins_dir);
+            } else {
+                // Fallback: try to find plugins in common locations
+                let alt_plugins = dir.join("lib").join("osgPlugins-3.6.5");
+                if alt_plugins.exists() {
+                    unsafe { env::set_var("OSG_LIBRARY_PATH", &alt_plugins) };
+                    info!("OSG_LIBRARY_PATH set to: {:?}", alt_plugins);
+                }
+            }
+        }
+    }
+
+    // Setup GDAL_DATA and PROJ_DATA paths
+    if env::var("GDAL_DATA").is_err() {
+        if let Some(dir) = exe_dir {
+            let gdal_data = dir.join("gdal");
+            if gdal_data.exists() {
+                unsafe { env::set_var("GDAL_DATA", &gdal_data) };
+            }
+        }
+    }
+
+    if env::var("PROJ_DATA").is_err() {
+        if let Some(dir) = exe_dir {
+            let proj_data = dir.join("proj");
+            if proj_data.exists() {
+                unsafe { env::set_var("PROJ_DATA", &proj_data) };
+            }
+        }
+    }
+}
+
 fn main() {
     use std::env;
+
+    // Setup OSG plugin path for runtime plugin loading
+    setup_osg_environment();
+
     if let Err(_) = env::var("RUST_LOG") {
-        env::set_var("RUST_LOG", "info");
+        unsafe { env::set_var("RUST_LOG", "info") };
     }
-    env::set_var("RUST_BACKTRACE", "1");
+    unsafe { env::set_var("RUST_BACKTRACE", "1") };
     let mut builder = env_logger::Builder::from_default_env();
     builder
         .format(|buf, record| {
@@ -88,7 +139,7 @@ fn main() {
     \"y\": y,
     \"offset\": 0,
     \"max_lvl\" : 20,
-    \"pbr\" : false
+    \"pbr\" : false,
 }",
                 )
                 .takes_value(true),
@@ -106,6 +157,24 @@ fn main() {
                 .help("Set output verbose ")
                 .takes_value(false),
         )
+        .arg(
+            Arg::with_name("enable-draco")
+                .long("enable-draco")
+                .help("Enable Draco mesh compression")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("enable-simplify")
+                .long("enable-simplify")
+                .help("Enable mesh simplification")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("enable-texture-compress")
+                .long("enable-texture-compress")
+                .help("Enable texture compression (KTX2)")
+                .takes_value(false),
+        )
         .get_matches();
 
     let input = matches.value_of("input").unwrap();
@@ -114,8 +183,22 @@ fn main() {
     let tile_config = matches.value_of("config").unwrap_or("");
     let height_field = matches.value_of("height").unwrap_or("");
 
+    // Parse feature flags
+    let enable_draco = matches.is_present("enable-draco");
+    let enable_simplify = matches.is_present("enable-simplify");
+    let enable_texture_compress = matches.is_present("enable-texture-compress");
+
     if matches.is_present("verbose") {
         info!("set program versose on");
+    }
+    if enable_draco {
+        info!("Draco compression enabled");
+    }
+    if enable_simplify {
+        info!("Mesh simplification enabled");
+    }
+    if enable_texture_compress {
+        info!("Texture compression (KTX2) enabled");
     }
     let in_path = std::path::Path::new(input);
     if !in_path.exists() {
@@ -124,10 +207,10 @@ fn main() {
     }
     match format {
         "osgb" => {
-            convert_osgb(input, output, tile_config);
+            convert_osgb(input, output, tile_config, enable_simplify, enable_texture_compress, enable_draco);
         }
         "shape" => {
-            convert_shapefile(input, output, height_field);
+            convert_shapefile(input, output, height_field, enable_simplify);
         }
         "gltf" => {
             convert_gltf(input, output);
@@ -215,7 +298,7 @@ struct ModelMetadata {
     pub SRSOrigin: String,
 }
 
-fn convert_osgb(src: &str, dest: &str, config: &str) {
+fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enable_texture_compress: bool, enable_draco: bool) {
     use serde_json::Value;
     use std::fs::File;
     use std::io::prelude::*;
@@ -228,8 +311,8 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     let mut center_y = 0f64;
     let mut max_lvl = None;
     let mut trans_region = None;
-    let mut pbr_texture = false;
-    let mut enu_offset: Option<(f64, f64, f64)> = None;
+    let enu_offset: Option<(f64, f64, f64)> = None;
+    let mut origin_height: Option<f64> = None;
 
     // try parse metadata.xml
     let metadata_file = dir.join("metadata.xml");
@@ -267,11 +350,48 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                                                 0.0
                                             };
 
-                                            // Store ENU offset for use in transform matrix
-                                            enu_offset = Some((offset_x, offset_y, offset_z));
+                                            // Call enu_init to set up GeoTransform for geometry correction
+                                            let gdal_data: String = {
+                                                use std::path::Path;
+                                                let exe_dir = ::std::env::current_exe().unwrap();
+                                                Path::new(&exe_dir)
+                                                    .parent()
+                                                    .unwrap()
+                                                    .join("gdal")
+                                                    .to_str()
+                                                    .unwrap()
+                                                    .into()
+                                            };
+                                            let proj_lib: String = {
+                                                use std::path::Path;
+                                                let exe_dir = ::std::env::current_exe().unwrap();
+                                                Path::new(&exe_dir)
+                                                    .parent()
+                                                    .unwrap()
+                                                    .join("proj")
+                                                    .to_str()
+                                                    .unwrap()
+                                                    .into()
+                                            };
+
+                                            unsafe {
+                                                use std::ffi::CString;
+                                                let mut origin_enu = vec![offset_x, offset_y, offset_z];
+                                                let gdal_c_str = CString::new(gdal_data).unwrap();
+                                                let gdal_ptr = gdal_c_str.as_ptr();
+                                                let proj_c_str = CString::new(proj_lib).unwrap();
+                                                let proj_ptr = proj_c_str.as_ptr();
+                                                if !osgb::enu_init(center_x, center_y, origin_enu.as_mut_ptr(), gdal_ptr, proj_ptr) {
+                                                    error!("enu_init failed!");
+                                                }
+                                            }
+
+                                            // For ENU systems, use height=0 (or terrain elevation) for root transform
+                                            // The SRSOrigin offset is already baked into the tile geometry coordinates
+                                            origin_height = Some(0.0);
 
                                             info!("ENU SRSOrigin offset detected: x={}, y={}, z={}", offset_x, offset_y, offset_z);
-                                            info!("Using original center coordinates for transform matrix: lon={}, lat={}", center_x, center_y);
+                                            info!("Using geographic origin for transform: lon={}, lat={}, h=0", center_x, center_y);
                                         } else {
                                             error!("Failed to parse SRSOrigin values");
                                         }
@@ -324,7 +444,13 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                                         if osgb::epsg_convert(srs, pt.as_mut_ptr(), gdal_ptr, proj_ptr) {
                                             center_x = pt[0];
                                             center_y = pt[1];
-                                            info!("epsg: x->{}, y->{}", pt[0], pt[1]);
+                                            // Store height from original SRSOrigin (pt[2] if available)
+                                            if pt.len() >= 3 {
+                                                origin_height = Some(pt[2]);
+                                                info!("epsg: x->{}, y->{}, h={}", pt[0], pt[1], pt[2]);
+                                            } else {
+                                                info!("epsg: x->{}, y->{}", pt[0], pt[1]);
+                                            }
                                         } else {
                                             error!("epsg convert failed!");
                                         }
@@ -365,7 +491,8 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
                                 // println!("{:?}", wkt);
                                 let c_str = CString::new(gdal_data).unwrap();
                                 let ptr = c_str.as_ptr();
-                                let wkt_ptr = wkt.as_ptr();
+                                let wkt_cstr = CString::new(wkt).unwrap();
+                                let wkt_ptr = wkt_cstr.as_ptr();
                                 if osgb::wkt_convert(wkt_ptr, pt.as_mut_ptr(), ptr) {
                                     center_x = pt[0];
                                     center_y = pt[1];
@@ -401,17 +528,14 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
         if let Some(lvl) = v["max_lvl"].as_i64() {
             max_lvl = Some(lvl as i32);
         }
-        if let Some(pbr) = v["pbr"].as_bool() {
-            pbr_texture = pbr;
-        }
     } else if config.len() > 0 {
         error!("config error --> {}", config);
     }
     let tick = time::SystemTime::now();
     if let Err(e) = osgb::osgb_batch_convert(
         &dir, &dir_dest, max_lvl,
-        center_x, center_y, trans_region, pbr_texture,
-        enu_offset)
+        center_x, center_y, trans_region,
+        enu_offset, origin_height, enable_texture_compress, enable_simplify, enable_draco)
     {
         error!("{}", e);
         return;
@@ -421,14 +545,14 @@ fn convert_osgb(src: &str, dest: &str, config: &str) {
     info!("task over, cost {:.2} s.", tick_num);
 }
 
-fn convert_shapefile(src: &str, dest: &str, height: &str) {
+fn convert_shapefile(src: &str, dest: &str, height: &str, enable_simplify: bool) {
     if height.is_empty() {
         error!("you must set the height field by --height xxx");
         return;
     }
     let tick = std::time::SystemTime::now();
 
-    let ret = shape::shape_batch_convert(src, dest, height);
+    let ret = shape::shape_batch_convert(src, dest, height, enable_simplify);
     if !ret {
         error!("convert shapefile failed");
     } else {
