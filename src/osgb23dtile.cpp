@@ -819,7 +819,7 @@ void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState, bool enable_si
     if (enable_draco) {
         std::vector<unsigned char> compressed_data;
         size_t compressed_size = 0;
-        const DracoCompressionParams draco_params = { .enable_compression=true };
+        const DracoCompressionParams draco_params = { .enable_compression = true };
 
         // Try to compress the geometry with Draco
         ::compress_mesh_geometry(g, draco_params, compressed_data, compressed_size);

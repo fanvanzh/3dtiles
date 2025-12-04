@@ -5,7 +5,7 @@ extern crate serde_json;
 
 use std::fs;
 
-use osgb::rayon::prelude::*;
+use rayon::prelude::*;
 
 use std::error::Error;
 use std::path::Path;
