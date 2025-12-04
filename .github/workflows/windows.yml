@@ -22,6 +22,7 @@ jobs:
       uses: lukka/run-vcpkg@v11
       with:
         doNotCache: false
+        vcpkgGitCommitId: 'd5182f703b51d7b258f83f94d936ac03488dcdbe'
       env:
         VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
