@@ -2,6 +2,7 @@
 #include "earcut.hpp"
 #include "extern.h"
 #include "mesh_processor.h"
+#include "attribute_storage.h"
 
 #include "json.hpp"
 
@@ -404,6 +405,33 @@ shp23dtile(const char* filename, int layer_id,
         LOG_E("open layer [%s]:[%d] failed", filename, layer_id);
         return false;
     }
+
+    // Store feature attributes to SQLite database using RAII wrapper
+    char sqlite_path[512];
+#ifdef _WIN32
+    sprintf(sqlite_path, "%s\\attributes.db", dest);
+#else
+    sprintf(sqlite_path, "%s/attributes.db", dest);
+#endif
+
+    {
+        // RAII: AttributeStorage will auto-commit and close on scope exit
+        AttributeStorage attr_storage(sqlite_path);
+
+        if (!attr_storage.isOpen()) {
+            LOG_E("Failed to open attribute database: %s", attr_storage.getLastError().c_str());
+        } else {
+            // Create table schema
+            if (!attr_storage.createTable(poLayer->GetLayerDefn())) {
+                LOG_E("Failed to create table: %s", attr_storage.getLastError().c_str());
+            } else {
+                // Insert all features in batches (1000 features per transaction)
+                // This prevents data loss in case of errors during bulk insert
+                attr_storage.insertFeaturesInBatches(poLayer, 1000);
+            }
+        }
+        // Database automatically closed and committed here (RAII)
+    }
     OGRwkbGeometryType _t = poLayer->GetGeomType();
     if (_t != wkbPolygon && _t != wkbMultiPolygon &&
         _t != wkbPolygon25D && _t != wkbMultiPolygon25D)
@@ -527,7 +555,7 @@ shp23dtile(const char* filename, int layer_id,
 #endif
         std::optional<SimplificationParams> simplification_params = std::nullopt;
         if (enable_simplify) {
-            simplification_params = std::make_optional<SimplificationParams>({
+            simplification_params = std::make_optional<SimplificationParams>(SimplificationParams{
                 .target_error = 0.01f,
                 .target_ratio = 0.5f,
                 .enable_simplification = true,
