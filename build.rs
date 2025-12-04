@@ -64,6 +64,9 @@ fn build_win_msvc() {
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
 
+    // 5. sqlite
+    println!("cargo:rustc-link-lib=sqlite3");
+
     // copy gdal and proj data
     let vcpkg_share_dir = vcpkg_installed_dir.join("share");
     copy_gdal_data(vcpkg_share_dir.to_str().unwrap());
