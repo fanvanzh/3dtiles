@@ -20,6 +20,8 @@ jobs:
 
     - name: Setup anew (or from cache) vcpkg (and does not build any package)
       uses: lukka/run-vcpkg@v11
+      with:
+        doNotCache: false
       env:
         VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
