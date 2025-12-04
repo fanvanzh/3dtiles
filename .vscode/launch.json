@@ -18,7 +18,7 @@
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/target/debug/_3dtile",
-      "args": ["-f", "shape", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir", "--height", "height"],
+      "args": ["-f", "shape", "-i", "/path/to/shp", "-o", "/path/to/output/dir", "--height", "height"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "cargo build",
       "MIMode": "gdb",
