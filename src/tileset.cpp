@@ -229,8 +229,8 @@ write_tileset_box(Transform* trans, Box& box, double geometricError,
         matrix = transfrom_xyz(lon_deg, lat_deg, trans->min_height);
     }
     std::string json_txt = "{\"asset\": {\
-        \"version\": \"0.0\",\
-        \"gltfUpAxis\": \"Y\"\
+           \"version\": \"1.0\",\
+           \"gltfUpAxis\": \"Z\"\
     },\
     \"geometricError\":";
     json_txt += std::to_string(geometricError);
@@ -282,8 +282,8 @@ bool write_tileset_region(
         matrix = transfrom_xyz(lon_deg, lat_deg, trans->min_height);
     }
     std::string json_txt = "{\"asset\": {\
-        \"version\": \"0.0\",\
-        \"gltfUpAxis\": \"Y\"\
+           \"version\": \"1.0\",\
+           \"gltfUpAxis\": \"Z\"\
     },\
     \"geometricError\":";
     json_txt += std::to_string(geometricError);
@@ -331,6 +331,10 @@ write_tileset(double radian_x, double radian_y,
     double ellipsod_c = 40408299984661.4;
 
     const double pi = std::acos(-1);
+    // Inputs are radians (historic API). Convert to degrees for transfrom_xyz
+    double lon_deg = radian_x * 180.0 / pi;
+    double lat_deg = radian_y * 180.0 / pi;
+
     double xn = std::cos(radian_x) * std::cos(radian_y);
     double yn = std::sin(radian_x) * std::cos(radian_y);
     double zn = std::sin(radian_y);
@@ -363,33 +367,14 @@ write_tileset(double radian_x, double radian_y,
         north_mat[2]*north_mat[2]
         );
 
-    std::vector<double> matrix = {
-        east_mat[0] / east_normal,
-        east_mat[1] / east_normal,
-        east_mat[2] / east_normal,
-        0,
-        north_mat[0] / north_normal,
-        north_mat[1] / north_normal,
-        north_mat[2] / north_normal,
-        0,
-        xn,
-        yn,
-        zn,
-        0,
-        px + dx,
-        py + dy,
-        pz + dz,
-        1
-    };
+    // Use the existing ENU->ECEF transform builder (expects degrees)
+    std::vector<double> matrix = transfrom_xyz(lon_deg, lat_deg, height_min);
 
-    std::vector<double> region = {
-        radian_x - meter_to_longti(tile_w / 2, radian_y),
-        radian_y - meter_to_lati(tile_h / 2),
-        radian_x + meter_to_longti(tile_w / 2, radian_y),
-        radian_y + meter_to_lati(tile_h / 2),
-        0,
-        height_max
-    };
+    // Build a local ENU-aligned box: center at mid-height, half-axes along ENU
+    double half_w = tile_w * 0.5;
+    double half_h = tile_h * 0.5;
+    double half_z = (height_max - height_min) * 0.5;
+    double center_z = half_z; // origin is at height_min, so center is at half span
 
     std::string json_txt = "{\"asset\": {\
         \"version\": \"0.0\",\
@@ -405,12 +390,19 @@ write_tileset(double radian_x, double radian_y,
     }
     json_txt += "1],\
     \"boundingVolume\": {\
-    \"region\": [";
-    for (int i = 0; i < 5 ; i++) {
-        json_txt += std::to_string(region[i]);
+    \"box\": [";
+    // box: center (local ENU), then three half-axes
+    double box_vals[12] = {
+        0.0, 0.0, center_z,
+        half_w, 0.0, 0.0,
+        0.0, half_h, 0.0,
+        0.0, 0.0, half_z
+    };
+    for (int i = 0; i < 11 ; i++) {
+        json_txt += std::to_string(box_vals[i]);
         json_txt += ",";
     }
-    json_txt += std::to_string(region[5]);
+    json_txt += std::to_string(box_vals[11]);
 
     char last_buf[512];
     sprintf(last_buf,"]},\"geometricError\": %f,\

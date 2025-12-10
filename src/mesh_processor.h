@@ -60,8 +60,10 @@ bool optimize_and_simplify_mesh(
 bool simplify_mesh_geometry(osg::Geometry* geometry, const SimplificationParams& params);
 
 // Function to compress mesh geometry using Draco
+// Optional out parameters allow callers to retrieve Draco attribute ids for glTF extension mapping
 bool compress_mesh_geometry(osg::Geometry* geometry, const DracoCompressionParams& params,
-                           std::vector<unsigned char>& compressed_data, size_t& compressed_size);
+                           std::vector<unsigned char>& compressed_data, size_t& compressed_size,
+                           int* out_position_att_id = nullptr, int* out_normal_att_id = nullptr);
 
 // Function to process textures (KTX2 compression)
 bool process_texture(osg::Texture* tex, std::vector<unsigned char>& image_data, std::string& mime_type, bool enable_texture_compress = false);
