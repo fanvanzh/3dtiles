@@ -40,6 +40,13 @@ file(GLOB_RECURSE HEADERS src/*.h src/json.hpp)
 add_library(_3dtile STATIC ${SOURCES})
 target_include_directories(_3dtile PUBLIC src)
 
+find_package(spdlog CONFIG REQUIRED)
+target_link_libraries(_3dtile PUBLIC spdlog::spdlog_header_only)
+
+# fmt (needed by spdlog and project sources)
+find_package(fmt CONFIG REQUIRED)
+target_link_libraries(_3dtile PUBLIC fmt::fmt-header-only)
+
 if(APPLE)
     # 在 macOS 或其他 Apple 系统下
     add_compile_options(-Wno-error=unguarded-availability-new)
