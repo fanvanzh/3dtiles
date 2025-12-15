@@ -5,6 +5,7 @@
 #include "attribute_storage.h"
 #include "GeoTransform.h"
 #include "lod_pipeline.h"
+#include "shape.h"
 
 #include "json.hpp"
 
@@ -806,17 +807,45 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes,
     std::optional<DracoCompressionParams> draco_params = std::nullopt);
 //
 extern "C" bool
-shp23dtile(const char* filename, int layer_id,
-            const char* dest, const char* height, bool enable_simplify)
+shp23dtile(const ShapeConversionParams* params)
 {
-    if (!filename || layer_id < 0 || layer_id > 10000 || !dest) {
-        LOG_E("make shp23dtile [%s] failed", filename);
+    if (!params || !params->input_path || !params->output_path) {
+        LOG_E("make shp23dtile failed: invalid parameters");
         return false;
     }
+
+    const char* filename = params->input_path;
+    const char* dest = params->output_path;
     std::string height_field = "";
-    if( height ) {
-        height_field = height;
+    if (params->height_field) {
+        height_field = params->height_field;
     }
+
+    // Build LOD configuration from params
+    LODPipelineSettings lod_cfg;
+    if (params->enable_lod) {
+        // Use default LOD configuration: [1.0, 0.5, 0.25]
+        std::vector<float> default_ratios = {1.0f, 0.5f, 0.25f};
+        float default_base_error = 0.01f;
+        bool default_draco_for_lod0 = false;  // Don't apply Draco to highest detail LOD
+
+        lod_cfg.enable_lod = true;
+        lod_cfg.levels = build_lod_levels(
+            default_ratios,
+            default_base_error,
+            params->simplify_params,
+            params->draco_compression_params,
+            default_draco_for_lod0
+        );
+    } else {
+        lod_cfg.enable_lod = false;
+    }
+
+    // Use configuration from params
+    const SimplificationParams& simplify_params = params->simplify_params;
+    const DracoCompressionParams& draco_params = params->draco_compression_params;
+
+    int layer_id = params->layer_id;
     GDALAllRegister();
 
     // Ensure destination directory exists before creating any auxiliary files (e.g., attributes.db)
@@ -1060,7 +1089,7 @@ shp23dtile(const char* filename, int layer_id,
         // Geometric error per commit fc40399...: max span divided by 20
         double ge = compute_geometric_error_from_spans(tile_w_m, tile_h_m, tile_z_m);
 
-        const auto& lod_cfg = get_global_lod_config();
+        // Use LOD configuration from params (already extracted at function start)
         const bool lod_enabled = lod_cfg.enable_lod && !lod_cfg.levels.empty();
 
         std::vector<double> identity_transform = {
@@ -1125,17 +1154,15 @@ shp23dtile(const char* filename, int layer_id,
                     push_lod_output(i, lvl.enable_simplification, level_simplify, lvl.enable_draco, level_draco, lvl.target_ratio);
                 }
             } else {
-                std::optional<SimplificationParams> simplification_params = std::nullopt;
-                if (enable_simplify) {
-                    simplification_params = std::make_optional<SimplificationParams>(SimplificationParams{
-                        .target_error = 0.01f,
-                        .target_ratio = 0.5f,
-                        .enable_simplification = true,
-                        .preserve_texture_coords = true,
-                        .preserve_normals = true,
-                    });
+                // Use simplification params from function params
+                std::optional<SimplificationParams> simplification_params_opt = std::nullopt;
+                if (simplify_params.enable_simplification) {
+                    simplification_params_opt = simplify_params;
                 }
-                push_lod_output(0, enable_simplify, simplification_params, false, std::nullopt, 1.0);
+                push_lod_output(0, simplify_params.enable_simplification, simplification_params_opt,
+                               draco_params.enable_compression,
+                               draco_params.enable_compression ? std::make_optional(draco_params) : std::nullopt,
+                               1.0);
             }
 
             double span_z = std::max(tile_z_m, 0.001);

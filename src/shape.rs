@@ -1,10 +1,40 @@
+use libc::c_char;
+
+#[repr(C)]
+struct DracoCompressionParams {
+    position_quantization_bits: i32,
+    normal_quantization_bits: i32,
+    tex_coord_quantization_bits: i32,
+    generic_quantization_bits: i32,
+    enable_compression: bool,
+}
+
+#[repr(C)]
+struct SimplificationParams {
+    target_error: f32,
+    target_ratio: f32,
+    enable_simplification: bool,
+    preserve_texture_coords: bool,
+    preserve_normals: bool,
+}
+
+#[repr(C)]
+struct ShapeConversionParams {
+    input_path: *const c_char,
+    output_path: *const c_char,
+    height_field: *const c_char,
+    layer_id: i32,
+
+    // Feature flags
+    enable_lod: bool,
+
+    // Draco and Simplification settings
+    draco_compression_params: DracoCompressionParams,
+    simplify_params: SimplificationParams,
+}
+
 extern "C" {
-    fn shp23dtile(
-        name: *const u8,
-        layer: i32,
-        dest: *const u8,
-        height: *const u8,
-        enable_simplify: bool) -> bool;
+    fn shp23dtile(params: *const ShapeConversionParams) -> bool;
 }
 
 use std::ffi::CString;
@@ -94,17 +124,47 @@ fn walk_path(dir: &Path, cb: &mut dyn FnMut(&str)) -> io::Result<()> {
     Ok(())
 }
 
-pub fn shape_batch_convert(from: &str, to: &str, height: &str, enable_simplify: bool) -> bool {
+pub fn shape_batch_convert(
+    from: &str,
+    to: &str,
+    height: &str,
+    enable_lod: bool,
+    enable_simplify: bool,
+    enable_draco: bool,
+) -> bool {
     unsafe {
         let source_vec = CString::new(from).unwrap();
         let dest_vec = CString::new(to).unwrap();
         let height_vec = CString::new(height).unwrap();
-        let res = shp23dtile(
-            source_vec.as_ptr() as *const u8,
-            0,
-            dest_vec.as_ptr() as *const u8,
-            height_vec.as_ptr() as *const u8,
-            enable_simplify);
+
+        // Create params structure
+        let params = ShapeConversionParams {
+            input_path: source_vec.as_ptr(),
+            output_path: dest_vec.as_ptr(),
+            height_field: height_vec.as_ptr(),
+            layer_id: 0,  // Default to first layer
+
+            // Feature flags
+            enable_lod,
+
+            // Draco and Simplification settings
+            draco_compression_params: DracoCompressionParams {
+                position_quantization_bits: 11,
+                normal_quantization_bits: 10,
+                tex_coord_quantization_bits: 12,
+                generic_quantization_bits: 8,
+                enable_compression: enable_draco,
+            },
+            simplify_params: SimplificationParams {
+                target_error: 0.01,
+                target_ratio: 0.5,
+                enable_simplification: enable_simplify,
+                preserve_texture_coords: true,
+                preserve_normals: true,
+            },
+        };
+
+        let res = shp23dtile(&params);
         if !res {
             return res;
         }

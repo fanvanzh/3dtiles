@@ -271,17 +271,35 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 
 **These flags are disabled by default. Enable them to optimize output at the cost of processing time.**
 
+- `--enable-lod` - Enable LOD (Level of Detail)
+  Generates multiple detail levels for adaptive distance-based rendering.
+  - **Applies to:** Shapefile format
+  - **Default configuration:** Generates 3 levels `[1.0, 0.5, 0.25]`
+    - LOD0: 100% detail (highest quality)
+    - LOD1: 50% detail
+    - LOD2: 25% detail (coarsest)
+  - **Interaction with other flags:**
+    - With `--enable-simplify`: Each LOD level will be simplified
+    - With `--enable-draco`: LOD0 stays uncompressed, LOD1/LOD2 will be compressed
+    - Without `--enable-simplify`: Generates multiple LOD levels without simplification
+  - **Recommended combination:** `--enable-lod --enable-simplify --enable-draco`
+  - **Use case:** Large-scale scenes requiring distance-based dynamic loading
+
 - `--enable-simplify` - Enable mesh simplification
   Reduces polygon count while preserving visual quality. Uses meshoptimizer library for vertex cache optimization, overdraw reduction, and adaptive simplification.
   - **Applies to:** OSGB and Shapefile formats
   - **Impact:** Smaller file size, faster rendering, longer processing time
   - **Use case:** Large datasets where render performance is critical
+  - **With LOD:** Controls whether simplification is applied to each LOD level
 
 - `--enable-draco` - Enable Draco mesh compression
   Applies Google Draco compression to geometry data (vertices, normals, indices).
-  - **Applies to:** OSGB format only
+  - **Applies to:** OSGB and Shapefile formats
   - **Impact:** 3-6x smaller geometry size, slower processing and decoding
   - **Use case:** Bandwidth-constrained scenarios, web streaming
+  - **With LOD:**
+    - Non-LOD mode: Compresses all output
+    - LOD mode: LOD0 stays uncompressed, LOD1/LOD2 are compressed
   - **Note:** Requires client-side Draco decoder support
 
 - `--enable-texture-compress` - Enable texture compression (KTX2)
@@ -295,8 +313,9 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 
 | Optimization Flag | OSGB | Shapefile | GLTF | B3DM |
 |-------------------|------|-----------|------|------|
+| `--enable-lod` | ❌ | ✅ | ❌ | ❌ |
 | `--enable-simplify` | ✅ | ✅ | ❌ | ❌ |
-| `--enable-draco` | ✅ | ❌ | ❌ | ❌ |
+| `--enable-draco` | ✅ | ✅ | ❌ | ❌ |
 | `--enable-texture-compress` | ✅ | ❌ | ❌ | ❌ |
 
 ### Flag Combinations
@@ -310,6 +329,21 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 
 # OSGB: Best for bandwidth optimization (compression only)
 --enable-draco --enable-texture-compress
+
+# Shapefile: LOD mode (recommended configuration)
+--enable-lod --enable-simplify --enable-draco
+
+# Shapefile: LOD only without simplification
+--enable-lod
+
+# Shapefile: LOD + simplification without compression
+--enable-lod --enable-simplify
+
+# Shapefile: Draco compression only (without LOD)
+--enable-draco
+
+# Shapefile: Simplification + Draco compression (without LOD)
+--enable-simplify --enable-draco
 ```
 
 ## Development

@@ -20,21 +20,6 @@ use log::{Level, LevelFilter};
 use serde::Deserialize;
 use std::io::Write;
 
-extern "C" {
-    // Pass LOD/Draco config down to C++ pipeline (ratios pointer may be null to disable LOD)
-    fn set_lod_config(
-        ratios: *const f32,
-        len: libc::size_t,
-        base_error: f32,
-        draco_for_lod0: bool,
-        enable_draco: bool,
-        position_q: i32,
-        normal_q: i32,
-        tex_q: i32,
-        generic_q: i32,
-    );
-}
-
 /// Setup OpenSceneGraph environment variables for plugin loading
 fn setup_osg_environment() {
     use std::env;
@@ -192,23 +177,9 @@ fn main() {
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("lod-levels")
-                .long("lod-levels")
-                .value_name("r1,r2,r3")
-                .help("Comma-separated LOD ratios (empty to disable LOD)")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("lod-base-error")
-                .long("lod-base-error")
-                .value_name("float")
-                .help("Base simplification error for all LOD levels")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("lod-draco-for-lod0")
-                .long("lod-draco-for-lod0")
-                .help("Apply Draco to the highest LOD as well")
+            Arg::with_name("enable-lod")
+                .long("enable-lod")
+                .help("Enable LOD (Level of Detail) with default configuration")
                 .takes_value(false),
         )
         .get_matches();
@@ -223,15 +194,7 @@ fn main() {
     let enable_draco = matches.is_present("enable-draco");
     let enable_simplify = matches.is_present("enable-simplify");
     let enable_texture_compress = matches.is_present("enable-texture-compress");
-
-    // LOD/Draco configs
-    let lod_levels_str = matches.value_of("lod-levels").unwrap_or("");
-    let lod_base_error: f32 = matches
-        .value_of("lod-base-error")
-        .unwrap_or("0.01")
-        .parse()
-        .unwrap_or(0.01);
-    let lod_draco_for_lod0 = matches.is_present("lod-draco-for-lod0");
+    let enable_lod = matches.is_present("enable-lod");
 
     if matches.is_present("verbose") {
         info!("set program versose on");
@@ -245,30 +208,10 @@ fn main() {
     if enable_texture_compress {
         info!("Texture compression (KTX2) enabled");
     }
-
-    // Push LOD/Draco config into the C++ side (shared for shape/osgb)
-    let ratios: Vec<f32> = lod_levels_str
-        .split(',')
-        .filter_map(|s| s.trim().parse::<f32>().ok())
-        .filter(|v| *v > 0.0)
-        .collect();
-    unsafe {
-        if ratios.is_empty() {
-            set_lod_config(std::ptr::null(), 0, lod_base_error, lod_draco_for_lod0, enable_draco, 11, 10, 12, 8);
-        } else {
-            set_lod_config(
-                ratios.as_ptr(),
-                ratios.len() as libc::size_t,
-                lod_base_error,
-                lod_draco_for_lod0,
-                enable_draco,
-                11,
-                10,
-                12,
-                8,
-            );
-        }
+    if enable_lod {
+        info!("LOD (Level of Detail) enabled with default configuration [1.0, 0.5, 0.25]");
     }
+
     let in_path = std::path::Path::new(input);
     if !in_path.exists() {
         error!("{} does not exists.", input);
@@ -279,7 +222,14 @@ fn main() {
             convert_osgb(input, output, tile_config, enable_simplify, enable_texture_compress, enable_draco);
         }
         "shape" => {
-            convert_shapefile(input, output, height_field, enable_simplify);
+            convert_shapefile(
+                input,
+                output,
+                height_field,
+                enable_lod,
+                enable_simplify,
+                enable_draco,
+            );
         }
         "gltf" => {
             convert_gltf(input, output);
@@ -614,14 +564,28 @@ fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enab
     info!("task over, cost {:.2} s.", tick_num);
 }
 
-fn convert_shapefile(src: &str, dest: &str, height: &str, enable_simplify: bool) {
+fn convert_shapefile(
+    src: &str,
+    dest: &str,
+    height: &str,
+    enable_lod: bool,
+    enable_simplify: bool,
+    enable_draco: bool,
+) {
     if height.is_empty() {
         error!("you must set the height field by --height xxx");
         return;
     }
     let tick = std::time::SystemTime::now();
 
-    let ret = shape::shape_batch_convert(src, dest, height, enable_simplify);
+    let ret = shape::shape_batch_convert(
+        src,
+        dest,
+        height,
+        enable_lod,
+        enable_simplify,
+        enable_draco,
+    );
     if !ret {
         error!("convert shapefile failed");
     } else {

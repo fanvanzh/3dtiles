@@ -22,9 +22,6 @@ struct LODPipelineSettings {
     std::vector<LODLevelSettings> levels;   // Ordered coarse->fine or fine->coarse depending on usage
 };
 
-// Build a default three-level pipeline: [1.0, 0.5, 0.25], simplification on, Draco off for LOD0/on for others
-LODPipelineSettings make_default_lod_pipeline();
-
 // Build levels from ratios and templates; ratios are applied in order to simplify.target_ratio and set enable_simplification=true
 // base_error is used as simplify.target_error for all levels
 // If draco_for_lod0 is false, LOD0 will have enable_draco=false even if draco_template.enable_compression is true
@@ -34,25 +31,5 @@ std::vector<LODLevelSettings> build_lod_levels(
     const SimplificationParams& simplify_template,
     const DracoCompressionParams& draco_template,
     bool draco_for_lod0 = false);
-
-// Global configuration helpers exposed for FFI users (Rust -> C++)
-// Note: ratios are coarse->fine. When empty, LOD is disabled.
-void set_global_lod_config(const std::vector<float>& ratios,
-                           float base_error,
-                           const SimplificationParams& simplify_template,
-                           const DracoCompressionParams& draco_template,
-                           bool draco_for_lod0);
-
-const LODPipelineSettings& get_global_lod_config();
-
-extern "C" void set_lod_config(const float* ratios,
-                                 std::size_t len,
-                                 float base_error,
-                                 bool draco_for_lod0,
-                                 bool enable_draco,
-                                 int position_q,
-                                 int normal_q,
-                                 int tex_q,
-                                 int generic_q);
 
 #endif // LOD_PIPELINE_H
