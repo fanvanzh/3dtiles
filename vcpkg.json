@@ -31,7 +31,6 @@
     "meshoptimizer",
     "nlohmann-json",
     "osg",
-    "spdlog",
     "sqlite3",
     "stb",
     "tinygltf"
