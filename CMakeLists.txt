@@ -111,6 +111,10 @@ endif()
 find_package(basisu CONFIG REQUIRED)
 target_link_libraries(_3dtile PRIVATE basisu::basisu_encoder)
 
+# zstd
+find_package(zstd CONFIG REQUIRED)
+target_link_libraries(_3dtile PRIVATE zstd::libzstd)
+
 # draco
 find_package(draco CONFIG REQUIRED)
 target_link_libraries(_3dtile PRIVATE draco::draco)

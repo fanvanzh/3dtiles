@@ -91,6 +91,8 @@ fn build_win_msvc() {
     println!("cargo:rustc-link-lib=gdal");
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
+    // zstd is required by gdal/basisu when building KTX2 (supercompression) and some GDAL drivers
+    println!("cargo:rustc-link-lib=zstd");
 
     // 5. sqlite
     println!("cargo:rustc-link-lib=sqlite3");
@@ -227,6 +229,8 @@ fn build_linux_unknown() {
     println!("cargo:rustc-link-lib=freexl");
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
+    // zstd is required by gdal/basisu when building KTX2 (supercompression) and some GDAL drivers
+    println!("cargo:rustc-link-lib=zstd");
 
     let vcpkg_share_dir = vcpkg_installed_dir.join("share");
     copy_gdal_data(vcpkg_share_dir.to_str().unwrap());
@@ -343,6 +347,8 @@ fn build_macos() {
     println!("cargo:rustc-link-lib=freexl");
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
+    // zstd is required by gdal/basisu when building KTX2 (supercompression) and some GDAL drivers
+    println!("cargo:rustc-link-lib=zstd");
 
     // 7. System libraries / frameworks
     println!("cargo:rustc-link-lib=c++");
@@ -475,6 +481,8 @@ fn build_macos_x86_64() {
     println!("cargo:rustc-link-lib=freexl");
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
+    // zstd is required by gdal/basisu when building KTX2 (supercompression) and some GDAL drivers
+    println!("cargo:rustc-link-lib=zstd");
 
     // 7. System libraries / frameworks
     println!("cargo:rustc-link-lib=c++");
