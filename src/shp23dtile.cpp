@@ -361,16 +361,13 @@ static bool write_node_tileset(const TileMeta& node,
         double child_half_z = (child.bbox.maxHeight - child.bbox.minHeight) * 0.5 * BV_SCALE;
         double child_min_h = child.bbox.minHeight;
 
-        // offsets in parent's local ENU frame
-        double east_offset = longti_to_meter(degree2rad(child_center_lon - center_lon), degree2rad(center_lat));
-        double north_offset = lati_to_meter(degree2rad(child_center_lat - center_lat));
-        double up_offset = child_min_h - min_h;
-        double child_center_z = up_offset + child_half_z;
-
+        // Child boundingVolume is defined in the child's local coordinate system.
+        // The child tile's transform positions it in the parent coordinate system.
+        // (Avoid double-applying translation, which can cause Cesium frustum culling to drop whole tiles.)
         child_node["boundingVolume"]["box"] = box_to_json(
-            east_offset,
-            north_offset,
-            child_center_z,
+            0.0,
+            0.0,
+            child_half_z,
             child_half_w,
             child_half_h,
             child_half_z);
