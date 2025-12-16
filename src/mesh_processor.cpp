@@ -50,11 +50,12 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
         // - Quality 128 (0-255): compression quality
         // - cFlagKTX2: output KTX2 format
         // - cFlagGenMipsWrap: generate mipmaps with wrapping
-        unsigned int compression_flags = 128 | basisu::cFlagKTX2 | basisu::cFlagGenMipsWrap;
+        unsigned int compression_flags = 64 | basisu::cFlagKTX2 | basisu::cFlagGenMipsWrap;
 
         void* compressed_data = basisu::basis_compress(
+            basist::basis_tex_format::cUASTC4x4,
             source_images,
-            compression_flags,
+            static_cast<uint32_t>(compression_flags),
             1.0f,
             &compressed_size
         );
@@ -69,7 +70,7 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
         memcpy(ktx2_data.data(), compressed_data, compressed_size);
 
         // Free the compressed data
-        free(compressed_data);
+        basisu::basis_free_data(compressed_data);
 
         return true;
     } catch (const std::exception& e) {
