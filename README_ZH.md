@@ -369,7 +369,7 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 **这些参数默认禁用。启用它们可以优化输出，但会增加处理时间。**
 
 - `--enable-lod` 启用 LOD（多级细节）
-  生成多个不同细节级别的模型，适应不同的视距离。
+  生成多个不同细节级别的模型，适应不同的视距。
   - **适用于：** Shapefile 格式
   - **默认配置：** 生成 3 个级别 `[1.0, 0.5, 0.25]`
     - LOD0: 100% 细节（最高质量）
@@ -380,7 +380,7 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
     - 可与 `--enable-draco` 组合：LOD0 不压缩，LOD1/LOD2 会压缩
     - 不使用 `--enable-simplify` 时，仅生成多个 LOD 级别但不简化
   - **推荐组合：** `--enable-lod --enable-simplify --enable-draco`
-  - **使用场景：** 大范围场景浏览，需要根据视距离动态加载不同细节
+  - **使用场景：** 大范围场景浏览，需要根据视距动态加载不同细节
 
 - `--enable-simplify` 启用网格简化
   在保持视觉质量的同时减少多边形数量。使用 meshoptimizer 库进行顶点缓存优化、过度绘制减少和自适应简化。

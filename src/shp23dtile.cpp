@@ -28,6 +28,7 @@
 #include <osgUtil/Optimizer>
 #include <osgUtil/SmoothingVisitor>
 
+#include <string>
 #include <vector>
 #include <array>
 #include <filesystem>
@@ -324,10 +325,10 @@ static bool write_node_tileset(const TileMeta& node,
     double lon_rad_span = degree2rad(width_deg);
     double lat_rad_span = degree2rad(height_deg);
     // Pad bounding volumes to reduce near-plane/frustum culling when zoomed in
-    const double BV_SCALE = 2.0;
-    double half_w = longti_to_meter(lon_rad_span * 0.5, degree2rad(center_lat)) * 1.05 * BV_SCALE;
-    double half_h = lati_to_meter(lat_rad_span * 0.5) * 1.05 * BV_SCALE;
-    double half_z = (node.bbox.maxHeight - node.bbox.minHeight) * 0.5 * BV_SCALE;
+    const double BOUNDING_VOLUME_SCALE_FACTOR = 2.0;
+    double half_w = longti_to_meter(lon_rad_span * 0.5, degree2rad(center_lat)) * 1.05 * BOUNDING_VOLUME_SCALE_FACTOR;
+    double half_h = lati_to_meter(lat_rad_span * 0.5) * 1.05 * BOUNDING_VOLUME_SCALE_FACTOR;
+    double half_z = (node.bbox.maxHeight - node.bbox.minHeight) * 0.5 * BOUNDING_VOLUME_SCALE_FACTOR;
     double min_h = node.bbox.minHeight;
 
     glm::dmat4 parent_global = make_transform(center_lon, center_lat, min_h);
@@ -356,9 +357,9 @@ static bool write_node_tileset(const TileMeta& node,
         double child_center_lat = (child.bbox.miny + child.bbox.maxy) * 0.5;
         double child_lon_span = degree2rad(child.bbox.maxx - child.bbox.minx);
         double child_lat_span = degree2rad(child.bbox.maxy - child.bbox.miny);
-        double child_half_w = longti_to_meter(child_lon_span * 0.5, degree2rad(child_center_lat)) * 1.05 * BV_SCALE;
-        double child_half_h = lati_to_meter(child_lat_span * 0.5) * 1.05 * BV_SCALE;
-        double child_half_z = (child.bbox.maxHeight - child.bbox.minHeight) * 0.5 * BV_SCALE;
+        double child_half_w = longti_to_meter(child_lon_span * 0.5, degree2rad(child_center_lat)) * 1.05 * BOUNDING_VOLUME_SCALE_FACTOR;
+        double child_half_h = lati_to_meter(child_lat_span * 0.5) * 1.05 * BOUNDING_VOLUME_SCALE_FACTOR;
+        double child_half_z = (child.bbox.maxHeight - child.bbox.minHeight) * 0.5 * BOUNDING_VOLUME_SCALE_FACTOR;
         double child_min_h = child.bbox.minHeight;
 
         // Child boundingVolume is defined in the child's local coordinate system.
@@ -1358,9 +1359,15 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes,
         int draco_norm_att = -1;
         bool wrote_draco_ext = false;
         if (draco_requested) {
-                DracoCompressionParams params = draco_params.value();
-                params.enable_compression = true;
-                compress_mesh_geometry(merged_geom.get(), params, draco_data, draco_size, &draco_pos_att, &draco_norm_att);
+          DracoCompressionParams params = draco_params.value();
+          params.enable_compression = true;
+          bool compress_mesh_sucess = compress_mesh_geometry(
+              merged_geom.get(), params, draco_data, draco_size, &draco_pos_att,
+              &draco_norm_att);
+          if (!compress_mesh_sucess) {
+            LOG_E("compress mesh failure, please check your mesh");
+            return std::string();
+          }
         }
 
         // Build GLB buffers from the merged geometry
@@ -1620,12 +1627,10 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height, bool 
     }
 
     std::string glb_buf = make_polymesh(meshes, enable_simplify, simplification_params, enable_draco, draco_params);
-    // how length total ?
-
-    //test
-    //feature_json_string.clear();
-    //batch_json_string.clear();
-    //end-test
+    if (glb_buf.size() == 0) {
+        LOG_E("make glb buffer failure");
+        return std::string();
+    }
 
     int feature_json_len = feature_json_string.size();
     int feature_bin_len = 0;

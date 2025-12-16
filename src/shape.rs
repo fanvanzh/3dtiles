@@ -178,7 +178,7 @@ pub fn shape_batch_convert(
         // minx,miny,maxx,maxy
         let mut tileset_json = json!({
             "asset":{
-                "version":"0.0",
+                "version":"1.0",
                 "gltfUpAxis":"Z"
             },
             "geometricError":0,
