@@ -17,7 +17,7 @@
 #include "draco/core/encoder_buffer.h"
 #include "draco/mesh/mesh.h"
 
-#include "stb_image_write.h"
+#include <stb_image_write.h>
 
 // KTX2 compression flag
 static bool b_use_ktx2_compression = true;

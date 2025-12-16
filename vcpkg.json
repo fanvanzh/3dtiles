@@ -2,10 +2,12 @@
   "name": "3dtiles",
   "version-string": "1.0.0",
   "description": "A 3D Tiles generation library",
-  "builtin-baseline": "d5182f703b51d7b258f83f94d936ac03488dcdbe",
+  "builtin-baseline": "74e6536215718009aae747d86d84b78376bf9e09",
   "dependencies": [
     "basisu",
     "draco",
+    "earcut-hpp",
+    "eigen3",
     {
       "name": "gdal",
       "default-features": false,
@@ -24,25 +26,58 @@
         "zstd"
       ]
     },
+    "glm",
     "meshoptimizer",
-    {
-      "name": "osg",
-      "default-features": false,
-      "features": [
-        "plugins"
-      ],
-      "platform": "osx"
-    },
-    {
-      "name": "osg",
-      "platform": "!osx"
-    },
-    "sqlite3"
+    "nlohmann-json",
+    "osg",
+    "sqlite3",
+    "stb",
+    "tinygltf"
   ],
   "overrides": [
     {
+      "name": "draco",
+      "version": "1.5.7"
+    },
+    {
+      "name": "earcut-hpp",
+      "version": "2.2.4"
+    },
+    {
+      "name": "eigen3",
+      "version": "3.4.1#1"
+    },
+    {
       "name": "gdal",
-      "version": "3.8.4"
+      "version": "3.11.4"
+    },
+    {
+      "name": "glm",
+      "version": "1.0.2"
+    },
+    {
+      "name": "meshoptimizer",
+      "version": "0.25"
+    },
+    {
+      "name": "nlohmann-json",
+      "version": "3.12.0#1"
+    },
+    {
+      "name": "osg",
+      "version": "3.6.5#27"
+    },
+    {
+      "name": "tinygltf",
+      "version": "2.9.6"
+    },
+    {
+      "name": "sqlite3",
+      "version": "3.50.4"
+    },
+    {
+      "name": "stb",
+      "version": "2024-07-29#1"
     }
   ]
 }

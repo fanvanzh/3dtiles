@@ -76,6 +76,7 @@ if (GDAL_FOUND)
 endif()
 
 # Find OpenSceneGraph with all required components
+set(osg_OPENGL_PROFILE GL3)
 find_package(OpenSceneGraph REQUIRED COMPONENTS
     osg
     osgDB
@@ -99,12 +100,43 @@ if (OpenSceneGraph_FOUND)
     target_include_directories(_3dtile PUBLIC ${OSG_INCLUDE_DIR})
 endif()
 
+# basis-universal
 find_package(basisu CONFIG REQUIRED)
 target_link_libraries(_3dtile PRIVATE basisu::basisu_encoder)
+
+# draco
 find_package(draco CONFIG REQUIRED)
 target_link_libraries(_3dtile PRIVATE draco::draco)
+
+# meshoptimizer
 find_package(meshoptimizer CONFIG REQUIRED)
 target_link_libraries(_3dtile PRIVATE meshoptimizer::meshoptimizer)
+
+# glm
+find_package(glm CONFIG REQUIRED)
+target_link_libraries(_3dtile PRIVATE glm::glm-header-only)
+
+# earcut.hpp
+find_path(EARCUT_HPP_INCLUDE_DIRS "mapbox/earcut.hpp")
+target_include_directories(_3dtile PRIVATE ${EARCUT_HPP_INCLUDE_DIRS})
+
+# tinygltf
+find_path(TINYGLTF_INCLUDE_DIRS "tiny_gltf.h")
+target_include_directories(_3dtile PRIVATE ${TINYGLTF_INCLUDE_DIRS})
+
+# stb
+find_package(Stb REQUIRED)
+target_include_directories(_3dtile PUBLIC ${Stb_INCLUDE_DIR})
+
+# nlohmann_json(json.hpp)
+find_package(nlohmann_json CONFIG REQUIRED)
+target_link_libraries(_3dtile PUBLIC nlohmann_json::nlohmann_json)
+
+# Eigen3
+find_package(Eigen3 CONFIG REQUIRED)
+target_link_libraries(_3dtile PUBLIC Eigen3::Eigen)
+
+# sqlite3
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 target_link_libraries(_3dtile PRIVATE unofficial::sqlite3::sqlite3)
 

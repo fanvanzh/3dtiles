@@ -1,13 +1,13 @@
-#include "tiny_gltf.h"
-#include "earcut.hpp"
+#include <tiny_gltf.h>
+#include <nlohmann/json.hpp>
+#include <mapbox/earcut.hpp>
 #include "extern.h"
+
 #include "mesh_processor.h"
 #include "attribute_storage.h"
 #include "GeoTransform.h"
 #include "lod_pipeline.h"
 #include "shape.h"
-
-#include "json.hpp"
 
 /* vcpkg path */
 #include <ogrsf_frmts.h>
