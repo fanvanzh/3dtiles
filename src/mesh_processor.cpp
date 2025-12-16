@@ -617,7 +617,8 @@ bool simplify_mesh_geometry(osg::Geometry* geometry, const SimplificationParams&
 
 // Function to compress mesh geometry using Draco
 bool compress_mesh_geometry(osg::Geometry* geometry, const DracoCompressionParams& params,
-                           std::vector<unsigned char>& compressed_data, size_t& compressed_size) {
+                           std::vector<unsigned char>& compressed_data, size_t& compressed_size,
+                           int* out_position_att_id, int* out_normal_att_id) {
     if (!params.enable_compression || !geometry) {
         return false;
     }
@@ -649,10 +650,11 @@ bool compress_mesh_geometry(osg::Geometry* geometry, const DracoCompressionParam
 
     // Handle normals if present
     osg::Vec3Array* normalArray = dynamic_cast<osg::Vec3Array*>(geometry->getNormalArray());
+    int normalAttId = -1;
     if (normalArray && normalArray->size() == vertexCount) {
         draco::GeometryAttribute normalAttr;
         normalAttr.Init(draco::GeometryAttribute::NORMAL, nullptr, 3, draco::DT_FLOAT32, false, sizeof(float) * 3, 0);
-        int normalAttId = dracoMesh->AddAttribute(normalAttr, true, vertexCount);
+        normalAttId = dracoMesh->AddAttribute(normalAttr, true, vertexCount);
 
         // Copy normals
         for (size_t i = 0; i < vertexCount; ++i) {
@@ -711,6 +713,13 @@ bool compress_mesh_geometry(osg::Geometry* geometry, const DracoCompressionParam
     compressed_size = buffer.size();
     compressed_data.resize(compressed_size);
     std::memcpy(compressed_data.data(), buffer.data(), compressed_size);
+
+    if (out_position_att_id) {
+        *out_position_att_id = posAttId;
+    }
+    if (out_normal_att_id) {
+        *out_normal_att_id = normalAttId;
+    }
 
     return true;
 }

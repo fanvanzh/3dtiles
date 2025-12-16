@@ -8,6 +8,7 @@ extern crate log;
 extern crate byteorder;
 extern crate chrono;
 extern crate env_logger;
+extern crate libc;
 
 pub mod fun_c;
 mod osgb;
@@ -175,6 +176,12 @@ fn main() {
                 .help("Enable texture compression (KTX2)")
                 .takes_value(false),
         )
+        .arg(
+            Arg::with_name("enable-lod")
+                .long("enable-lod")
+                .help("Enable LOD (Level of Detail) with default configuration")
+                .takes_value(false),
+        )
         .get_matches();
 
     let input = matches.value_of("input").unwrap();
@@ -187,6 +194,7 @@ fn main() {
     let enable_draco = matches.is_present("enable-draco");
     let enable_simplify = matches.is_present("enable-simplify");
     let enable_texture_compress = matches.is_present("enable-texture-compress");
+    let enable_lod = matches.is_present("enable-lod");
 
     if matches.is_present("verbose") {
         info!("set program versose on");
@@ -200,6 +208,10 @@ fn main() {
     if enable_texture_compress {
         info!("Texture compression (KTX2) enabled");
     }
+    if enable_lod {
+        info!("LOD (Level of Detail) enabled with default configuration [1.0, 0.5, 0.25]");
+    }
+
     let in_path = std::path::Path::new(input);
     if !in_path.exists() {
         error!("{} does not exists.", input);
@@ -210,7 +222,14 @@ fn main() {
             convert_osgb(input, output, tile_config, enable_simplify, enable_texture_compress, enable_draco);
         }
         "shape" => {
-            convert_shapefile(input, output, height_field, enable_simplify);
+            convert_shapefile(
+                input,
+                output,
+                height_field,
+                enable_lod,
+                enable_simplify,
+                enable_draco,
+            );
         }
         "gltf" => {
             convert_gltf(input, output);
@@ -545,14 +564,28 @@ fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enab
     info!("task over, cost {:.2} s.", tick_num);
 }
 
-fn convert_shapefile(src: &str, dest: &str, height: &str, enable_simplify: bool) {
+fn convert_shapefile(
+    src: &str,
+    dest: &str,
+    height: &str,
+    enable_lod: bool,
+    enable_simplify: bool,
+    enable_draco: bool,
+) {
     if height.is_empty() {
         error!("you must set the height field by --height xxx");
         return;
     }
     let tick = std::time::SystemTime::now();
 
-    let ret = shape::shape_batch_convert(src, dest, height, enable_simplify);
+    let ret = shape::shape_batch_convert(
+        src,
+        dest,
+        height,
+        enable_lod,
+        enable_simplify,
+        enable_draco,
+    );
     if !ret {
         error!("convert shapefile failed");
     } else {
