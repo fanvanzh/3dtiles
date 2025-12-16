@@ -27,7 +27,7 @@ jobs:
         VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
     - name: Install automake (including aclocal)
-      run: brew install autoconf autoconf-archive automake libtoolize
+      run: brew install autoconf autoconf-archive automake libtool
 
     - name: Install Rust toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
