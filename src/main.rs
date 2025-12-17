@@ -255,6 +255,10 @@ fn main() {
         error!("{} does not exists.", input);
         return;
     }
+    // Canonicalize path to ensure absolute paths for C++ loader
+    let abs_input_buf = in_path.canonicalize().unwrap_or(in_path.to_path_buf());
+    let input = abs_input_buf.to_str().unwrap();
+
     match format {
         "osgb" => {
             convert_osgb(input, output, tile_config, enable_simplify, enable_texture_compress, enable_draco);

@@ -12,6 +12,8 @@
 #include <set>
 
 // Use existing tinygltf if possible, or include it
+#include <osgDB/ReaderWriter>
+#include <osgDB/Registry>
 #include <tiny_gltf.h>
 #include <nlohmann/json.hpp>
 #include "mesh_processor.h"
@@ -501,22 +503,63 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                      std::string mimeType = "image/png"; // default
 
                      bool hasData = false;
-                     if (!imgPath.empty() && fs::exists(imgPath)) {
-                         std::ifstream file(imgPath, std::ios::binary | std::ios::ate);
-                         if (file) {
-                             size_t size = file.tellg();
-                             imgData.resize(size);
-                             file.seekg(0);
-                             file.read(reinterpret_cast<char*>(imgData.data()), size);
-                             hasData = true;
+                    if (!imgPath.empty() && fs::exists(imgPath)) {
+                        std::ifstream file(imgPath, std::ios::binary | std::ios::ate);
+                        if (file) {
+                            size_t size = file.tellg();
+                            imgData.resize(size);
+                            file.seekg(0);
+                            file.read(reinterpret_cast<char*>(imgData.data()), size);
+                            hasData = true;
 
-                             std::string ext = fs::path(imgPath).extension().string();
-                             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                             if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
-                         }
-                     }
+                            std::string ext = fs::path(imgPath).extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                            if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+                        }
+                    }
 
-                     if (hasData) {
+                    // Fallback: If file not found but image data exists (e.g. embedded or generated)
+                    if (!hasData && img->data() != nullptr) {
+                        std::string ext = "png";
+                        if (!imgPath.empty()) {
+                            std::string e = fs::path(imgPath).extension().string();
+                            if (!e.empty() && e.size() > 1) {
+                                ext = e.substr(1); // remove dot
+                                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                            }
+                        }
+
+                        // Try to write to memory
+                        std::stringstream ss;
+                        osgDB::ReaderWriter* rw = osgDB::Registry::instance()->getReaderWriterForExtension(ext);
+                        if (rw) {
+                            osgDB::ReaderWriter::WriteResult wr = rw->writeImage(*img, ss);
+                            if (wr.success()) {
+                                std::string s = ss.str();
+                                imgData.assign(s.begin(), s.end());
+                                hasData = true;
+                                if (ext == "jpg" || ext == "jpeg") mimeType = "image/jpeg";
+                                else mimeType = "image/png";
+                            }
+                        }
+
+                        // Retry with PNG if failed
+                        if (!hasData && ext != "png") {
+                            rw = osgDB::Registry::instance()->getReaderWriterForExtension("png");
+                            if (rw) {
+                                std::stringstream ss2;
+                                osgDB::ReaderWriter::WriteResult wr = rw->writeImage(*img, ss2);
+                                if (wr.success()) {
+                                    std::string s = ss2.str();
+                                    imgData.assign(s.begin(), s.end());
+                                    hasData = true;
+                                    mimeType = "image/png";
+                                }
+                            }
+                        }
+                    }
+
+                    if (hasData) {
                          // Add Image
                          tinygltf::Image gltfImg;
                          gltfImg.mimeType = mimeType;

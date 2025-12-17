@@ -24,6 +24,9 @@
 #include <string>
 #include <vector>
 
+#include <osgDB/ReaderWriter>
+#include <osgDB/Registry>
+
 // Helper functions
 static std::string hash_bytes(const void* data, size_t len) {
   std::ostringstream oss;
@@ -149,15 +152,52 @@ osg::StateSet* FBXLoader::getOrCreateStateSet(const ufbx_material* mat) {
     else if (mat->fbx.diffuse_color.texture) tex = mat->fbx.diffuse_color.texture;
 
     if (tex) {
-        std::filesystem::path filename = resolve_texture_path(source_filename, tex);
-        if (!filename.empty()) {
-            osg::ref_ptr<osg::Image> image = osgDB::readImageFile(filename.string());
-            if (image) {
-                osg::Texture2D* texture = new osg::Texture2D(image);
-                texture->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
-                texture->setWrap(osg::Texture::WRAP_T, osg::Texture::REPEAT);
-                stateSet->setTextureAttributeAndModes(0, texture);
+        osg::ref_ptr<osg::Image> image;
+
+        // 1. Try embedded content
+        if (tex->content.data && tex->content.size > 0) {
+             std::string ext = "png"; // default fallback
+             std::string filename = ufbx_string_to_std(tex->filename);
+             if (filename.length() > 4 && filename.find('.') != std::string::npos) {
+                 ext = filename.substr(filename.find_last_of('.') + 1);
+             }
+
+             // Create stream from memory
+             // Note: stringstream copies data, but it's safe.
+             // Ideally we'd use a streambuf wrapper around the pointer to avoid copy, but this is cleaner.
+             std::string data((const char*)tex->content.data, tex->content.size);
+             std::stringstream ss(data);
+
+             osgDB::ReaderWriter* rw = osgDB::Registry::instance()->getReaderWriterForExtension(ext);
+             if (rw) {
+                 osgDB::ReaderWriter::ReadResult rr = rw->readImage(ss);
+                 if (rr.success()) {
+                     image = rr.getImage();
+                     if (image) {
+                         // Set a filename so we can identify it later if needed (though it won't exist on disk)
+                         image->setFileName(filename.empty() ? "embedded.png" : filename);
+                     }
+                 } else {
+                     LOG_E("Failed to decode embedded image: %s", rr.message().c_str());
+                 }
+             } else {
+                 LOG_E("No ReaderWriter for extension: %s", ext.c_str());
+             }
+        }
+
+        // 2. Try file path if not embedded or failed
+        if (!image) {
+            std::filesystem::path filename = resolve_texture_path(source_filename, tex);
+            if (!filename.empty()) {
+                image = osgDB::readImageFile(filename.string());
             }
+        }
+
+        if (image) {
+            osg::Texture2D* texture = new osg::Texture2D(image);
+            texture->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
+            texture->setWrap(osg::Texture::WRAP_T, osg::Texture::REPEAT);
+            stateSet->setTextureAttributeAndModes(0, texture);
         }
     }
 
