@@ -177,6 +177,24 @@ fn main() {
                 .help("Enable LOD (Level of Detail) with default configuration")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+           Arg::new("lon")
+            .long("lon")
+            .help("Set the longitude")
+            .num_args(1), 
+        )
+        .arg(
+           Arg::new("lat")
+            .long("lat")
+            .help("Set the latitude")
+            .num_args(1), 
+        )
+        .arg(
+           Arg::new("alt")
+            .long("alt")
+            .help("Set the altitude")
+            .num_args(1), 
+        )
         .get_matches();
 
     let input = matches
@@ -199,6 +217,16 @@ fn main() {
         .get_one::<String>("height")
         .map(|s| s.as_str())
         .unwrap_or("");
+
+    let lat_val = matches
+        .get_one::<String>("lat")
+        .and_then(|s| s.parse::<f64>().ok());
+    let lon_val = matches
+        .get_one::<String>("lon")
+        .and_then(|s| s.parse::<f64>().ok());
+    let alt_val = matches
+        .get_one::<String>("alt")
+        .and_then(|s| s.parse::<f64>().ok());
 
     // Parse feature flags
     let enable_draco = matches.get_flag("enable-draco");
@@ -248,7 +276,17 @@ fn main() {
             convert_b3dm(input, output);
         }
         "fbx" => {
-            convert_fbx_cmd(input, output, tile_config, enable_texture_compress, enable_simplify, enable_draco);
+            convert_fbx_cmd(
+                input,
+                output,
+                tile_config,
+                enable_texture_compress,
+                enable_simplify,
+                enable_draco,
+                lat_val,
+                lon_val,
+                alt_val,
+            );
         }
         _ => {
             error!("not support now.");
@@ -263,29 +301,40 @@ fn convert_fbx_cmd(
     enable_texture_compress: bool,
     enable_simplify: bool,
     enable_draco: bool,
+    lat: Option<f64>,
+    lon: Option<f64>,
+    height: Option<f64>,
 ) {
     use serde_json::Value;
 
     let mut max_lvl: Option<i32> = None;
-    let mut longitude = 0.0;
-    let mut latitude = 0.0;
-    let mut height = 0.0;
+    // Default to CLI args, or 0.0
+    let mut longitude = lon.unwrap_or(0.0);
+    let mut latitude = lat.unwrap_or(0.0);
+    let mut height_f = height.unwrap_or(0.0);
 
     if !config.is_empty() {
         if let Ok(val) = serde_json::from_str::<Value>(config) {
             if let Some(lvl) = val["max_lvl"].as_i64() {
                 max_lvl = Some(lvl as i32);
             }
-            if let Some(x) = val["x"].as_f64() {
-                longitude = x;
+            // Only use config values if CLI args are not provided
+            if lon.is_none() {
+                if let Some(x) = val["x"].as_f64() {
+                    longitude = x;
+                }
             }
-            if let Some(y) = val["y"].as_f64() {
-                latitude = y;
+            if lat.is_none() {
+                if let Some(y) = val["y"].as_f64() {
+                    latitude = y;
+                }
             }
-            if let Some(h) = val["height"].as_f64() {
-                height = h;
-            } else if let Some(offset) = val["offset"].as_f64() {
-                height = offset;
+            if height.is_none() {
+                if let Some(h) = val["height"].as_f64() {
+                    height_f = h;
+                } else if let Some(offset) = val["offset"].as_f64() {
+                    height_f = offset;
+                }
             }
         } else {
             error!("config is not valid json");
@@ -293,7 +342,7 @@ fn convert_fbx_cmd(
     }
 
     info!("Starting FBX conversion: {} -> {}", input, output);
-    info!("Origin: lon={}, lat={}, height={}", longitude, latitude, height);
+    info!("Origin: lon={}, lat={}, height={}", longitude, latitude, height_f);
 
     if let Err(e) = osgb::convert_fbx(
         input,
@@ -304,7 +353,7 @@ fn convert_fbx_cmd(
         enable_draco,
         longitude,
         latitude,
-        height,
+        height_f,
     ) {
         error!("FBX conversion failed: {}", e);
     } else {
