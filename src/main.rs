@@ -181,19 +181,19 @@ fn main() {
            Arg::new("lon")
             .long("lon")
             .help("Set the longitude")
-            .num_args(1), 
+            .num_args(1),
         )
         .arg(
            Arg::new("lat")
             .long("lat")
             .help("Set the latitude")
-            .num_args(1), 
+            .num_args(1),
         )
         .arg(
            Arg::new("alt")
             .long("alt")
             .help("Set the altitude")
-            .num_args(1), 
+            .num_args(1),
         )
         .get_matches();
 

@@ -231,7 +231,7 @@ void FBXPipeline::buildOctree(OctreeNode* node) {
 }
 
 // Helper to append geometry to tinygltf model
-void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef>& instances, const PipelineSettings& settings, json* batchTableJson, int* batchIdCounter, const SimplificationParams& simParams) {
+void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef>& instances, const PipelineSettings& settings, json* batchTableJson, int* batchIdCounter, const SimplificationParams& simParams, osg::BoundingBox* outBox = nullptr) {
     if (instances.empty()) return;
 
     // Ensure model has at least one buffer
@@ -314,6 +314,11 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                 if (enu_x > maxPos[0]) maxPos[0] = enu_x;
                 if (enu_y > maxPos[1]) maxPos[1] = enu_y;
                 if (enu_z > maxPos[2]) maxPos[2] = enu_z;
+
+                // Accumulate to global outBox if provided
+                if (outBox) {
+                    outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                }
 
                 if (n && i < n->size()) {
                     osg::Vec3d nm = (*n)[i];
@@ -590,53 +595,108 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
 
 json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
     json nodeJson;
-
-    // 1. Calculate Geometric Error
-    // Heuristic: Diagonal / (Depth + 1) * constant?
-    // Or just diagonal.
-    double dx = node->bbox.xMax() - node->bbox.xMin();
-    double dy = node->bbox.yMax() - node->bbox.yMin();
-    double dz = node->bbox.zMax() - node->bbox.zMin();
-    double diagonal = std::sqrt(dx*dx + dy*dy + dz*dz);
-
-    // For leaf, 0 error? Or pixel error?
-    // Usually leaf geometric error is 0.
-    // Parent geometric error should be larger than children.
-
-    nodeJson["geometricError"] = node->isLeaf() ? 0.0 : diagonal;
-    nodeJson["boundingVolume"] = {
-        {"box", {
-            node->bbox.center().x(), node->bbox.center().y(), node->bbox.center().z(),
-            (node->bbox.xMax() - node->bbox.xMin())/2, 0, 0,
-            0, (node->bbox.yMax() - node->bbox.yMin())/2, 0,
-            0, 0, (node->bbox.zMax() - node->bbox.zMin())/2
-        }}
-    };
     nodeJson["refine"] = "REPLACE";
+
+    osg::BoundingBox tightBox;
+    bool hasTightBox = false;
 
     // 2. Content
     if (!node->content.empty()) {
         std::string tileName = "tile_" + std::to_string(node->depth) + "_" + std::to_string((uintptr_t)node); // Unique name
-        std::string contentUrl;
 
         // Create content
         // For B3DM
-        contentUrl = createB3DM(node->content, parentPath, tileName);
-        nodeJson["content"] = {{"uri", contentUrl}};
+        auto result = createB3DM(node->content, parentPath, tileName);
+        std::string contentUrl = result.first;
+        osg::BoundingBox cBox = result.second;
+
+        if (!contentUrl.empty()) {
+            nodeJson["content"] = {{"uri", contentUrl}};
+            if (cBox.valid()) {
+                tightBox.expandBy(cBox);
+                hasTightBox = true;
+            }
+        }
     }
 
     // 3. Children
     if (!node->children.empty()) {
         nodeJson["children"] = json::array();
         for (auto child : node->children) {
-            nodeJson["children"].push_back(processNode(child, parentPath));
+            json childJson = processNode(child, parentPath);
+            nodeJson["children"].push_back(childJson);
+
+            // Expand tightBox by child's bounding volume
+            try {
+                auto& cBoxJson = childJson["boundingVolume"]["box"];
+                if (cBoxJson.is_array() && cBoxJson.size() == 12) {
+                    double cx = cBoxJson[0];
+                    double cy = cBoxJson[1];
+                    double cz = cBoxJson[2];
+                    double dx = cBoxJson[3];
+                    double dy = cBoxJson[7];
+                    double dz = cBoxJson[11];
+
+                    // Reconstruct box (approximate AABB from OBB)
+                    tightBox.expandBy(osg::Vec3d(cx - dx, cy - dy, cz - dz));
+                    tightBox.expandBy(osg::Vec3d(cx + dx, cy + dy, cz + dz));
+                    hasTightBox = true;
+                }
+            } catch (...) {}
         }
     }
+
+    // 1. Calculate Geometric Error and Bounding Volume
+    double diagonal = 0.0;
+    if (hasTightBox) {
+        double dx = tightBox.xMax() - tightBox.xMin();
+        double dy = tightBox.yMax() - tightBox.yMin();
+        double dz = tightBox.zMax() - tightBox.zMin();
+        diagonal = std::sqrt(dx*dx + dy*dy + dz*dz);
+
+        double cx = tightBox.center().x();
+        double cy = tightBox.center().y();
+        double cz = tightBox.center().z();
+        double hx = (tightBox.xMax() - tightBox.xMin()) / 2.0;
+        double hy = (tightBox.yMax() - tightBox.yMin()) / 2.0;
+        double hz = (tightBox.zMax() - tightBox.zMin()) / 2.0;
+
+        nodeJson["boundingVolume"] = {
+            {"box", {
+                cx, cy, cz,
+                hx, 0, 0,
+                0, hy, 0,
+                0, 0, hz
+            }}
+        };
+    } else {
+        // Fallback: Transform node->bbox from Y-up to Z-up
+        double cx = node->bbox.center().x();
+        double cy = node->bbox.center().y();
+        double cz = node->bbox.center().z();
+
+        double extentX = (node->bbox.xMax() - node->bbox.xMin()) / 2.0;
+        double extentY = (node->bbox.yMax() - node->bbox.yMin()) / 2.0;
+        double extentZ = (node->bbox.zMax() - node->bbox.zMin()) / 2.0;
+
+        diagonal = std::sqrt(extentX*extentX*4 + extentY*extentY*4 + extentZ*extentZ*4);
+
+        nodeJson["boundingVolume"] = {
+            {"box", {
+                cx, -cz, cy,           // Center transformed
+                extentX, 0, 0,         // X axis
+                0, extentZ, 0,         // Y axis (was Z)
+                0, 0, extentY          // Z axis (was Y)
+            }}
+        };
+    }
+
+    nodeJson["geometricError"] = node->isLeaf() ? 0.0 : diagonal;
 
     return nodeJson;
 }
 
-std::string FBXPipeline::createB3DM(const std::vector<InstanceRef>& instances, const std::string& tilePath, const std::string& tileName, const SimplificationParams& simParams) {
+std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vector<InstanceRef>& instances, const std::string& tilePath, const std::string& tileName, const SimplificationParams& simParams) {
     // 1. Create GLB (TinyGLTF)
     tinygltf::Model model;
     tinygltf::Asset asset;
@@ -646,8 +706,9 @@ std::string FBXPipeline::createB3DM(const std::vector<InstanceRef>& instances, c
 
     json batchTableJson;
     int batchIdCounter = 0;
+    osg::BoundingBox contentBox;
 
-    appendGeometryToModel(model, instances, settings, &batchTableJson, &batchIdCounter, simParams);
+    appendGeometryToModel(model, instances, settings, &batchTableJson, &batchIdCounter, simParams, &contentBox);
 
     // 2. Create B3DM wrapping GLB
     std::string filename = tileName + ".b3dm";
@@ -656,7 +717,7 @@ std::string FBXPipeline::createB3DM(const std::vector<InstanceRef>& instances, c
     std::ofstream outfile(fullPath, std::ios::binary);
     if (!outfile) {
         LOG_E("Failed to create B3DM file: %s", fullPath.c_str());
-        return "";
+        return {"", contentBox};
     }
 
     // Serialize GLB to memory
@@ -696,7 +757,7 @@ std::string FBXPipeline::createB3DM(const std::vector<InstanceRef>& instances, c
     outfile.write(glbData.data(), glbData.size());
     outfile.close();
 
-    return filename;
+    return {filename, contentBox};
 }
 
 std::string FBXPipeline::createI3DM(MeshInstanceInfo* meshInfo, const std::vector<int>& transformIndices, const std::string& tilePath, const std::string& tileName, const SimplificationParams& simParams) {
@@ -710,16 +771,29 @@ void FBXPipeline::writeTilesetJson(const std::string& basePath, const osg::Bound
         {"gltfUpAxis", "Z"} // OSG/FBX usually Z-up or we converted
     };
 
-    // Calculate Geometric Error (Diagonal of global bounds)
-    double dx = globalBounds.xMax() - globalBounds.xMin();
-    double dy = globalBounds.yMax() - globalBounds.yMin();
-    double dz = globalBounds.zMax() - globalBounds.zMin();
-    double geometricError = std::sqrt(dx*dx + dy*dy + dz*dz);
+    // Use geometric error from root content if available, otherwise fallback to global bounds
+    double geometricError = 0.0;
+    if (rootContent.contains("geometricError")) {
+        geometricError = rootContent["geometricError"];
+    } else {
+        double dx = globalBounds.xMax() - globalBounds.xMin();
+        double dy = globalBounds.yMax() - globalBounds.yMin();
+        double dz = globalBounds.zMax() - globalBounds.zMin();
+        geometricError = std::sqrt(dx*dx + dy*dy + dz*dz);
+    }
     tileset["geometricError"] = geometricError;
 
     // Root
     tileset["root"] = rootContent;
-    tileset["root"]["geometricError"] = geometricError;
+
+    // Do NOT overwrite root geometric error logic, as processNode handles it better (e.g. leaf=0.0)
+    if (!rootContent.contains("geometricError")) {
+         if (rootContent.contains("children")) {
+            tileset["root"]["geometricError"] = geometricError;
+        } else {
+            tileset["root"]["geometricError"] = 0.0;
+        }
+    }
 
     // Add Transform if geolocation is provided
     if (settings.longitude != 0.0 || settings.latitude != 0.0 || settings.height != 0.0) {
