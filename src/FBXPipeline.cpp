@@ -3,6 +3,7 @@
 #include "GeoTransform.h"
 #include <osg/MatrixTransform>
 #include <osg/Geode>
+#include <osg/Material>
 #include <iostream>
 #include <filesystem>
 #include <fstream>
@@ -285,26 +286,46 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
             for (unsigned int i = 0; i < v->size(); ++i) {
                 osg::Vec3d p = (*v)[i];
                 p = p * inst.matrix;
-                positions.push_back((float)p.x());
-                positions.push_back((float)p.y());
-                positions.push_back((float)p.z());
 
-                if (p.x() < minPos[0]) minPos[0] = p.x();
-                if (p.y() < minPos[1]) minPos[1] = p.y();
-                if (p.z() < minPos[2]) minPos[2] = p.z();
-                if (p.x() > maxPos[0]) maxPos[0] = p.x();
-                if (p.y() > maxPos[1]) maxPos[1] = p.y();
-                if (p.z() > maxPos[2]) maxPos[2] = p.z();
+                // Input is Y-up from ufbx, but the data seems to be Z-up oriented (X-Y plane geometry)
+                // The user reports the model is standing up (Vertical) when it should be lying down (Horizontal).
+                // This implies the raw data is in X-Y plane (Z-up ground), but we are treating it as Y-up (X-Z ground).
+                // So we apply a Z-up to Y-up rotation to "lie it down".
+                // x -> x
+                // y -> z
+                // z -> -y
+                float px = (float)p.x();
+                float py = (float)p.z();
+                float pz = (float)-p.y();
+
+                positions.push_back(px);
+                positions.push_back(py);
+                positions.push_back(pz);
+
+                // Compute bounds in ENU (Z-up) for tileset.json
+                // glTF Y -> ENU Z
+                // glTF Z -> ENU -Y
+                float enu_x = px;
+                float enu_y = -pz;
+                float enu_z = py;
+
+                if (enu_x < minPos[0]) minPos[0] = enu_x;
+                if (enu_y < minPos[1]) minPos[1] = enu_y;
+                if (enu_z < minPos[2]) minPos[2] = enu_z;
+                if (enu_x > maxPos[0]) maxPos[0] = enu_x;
+                if (enu_y > maxPos[1]) maxPos[1] = enu_y;
+                if (enu_z > maxPos[2]) maxPos[2] = enu_z;
 
                 if (n && i < n->size()) {
                     osg::Vec3d nm = (*n)[i];
                     nm = osg::Matrix::transform3x3(osg::Matrix::inverse(inst.matrix), nm);
                     nm.normalize();
+                    // Rotate normal same as position (Z-up to Y-up)
                     normals.push_back((float)nm.x());
-                    normals.push_back((float)nm.y());
                     normals.push_back((float)nm.z());
+                    normals.push_back((float)-nm.y());
                 } else {
-                    normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f);
+                    normals.push_back(0.0f); normals.push_back(1.0f); normals.push_back(0.0f); // Up is Y
                 }
 
                 if (t && i < t->size()) {
@@ -453,11 +474,20 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
         // Material
         tinygltf::Material mat;
         mat.name = "Default";
+        mat.doubleSided = true; // Fix for potential backface culling issues
 
         const osg::StateSet* stateSet = pair.first;
+        std::vector<double> baseColor = {1.0, 1.0, 1.0, 1.0};
 
         // Check for texture in StateSet
         if (stateSet) {
+             // Get Material Color
+             const osg::Material* osgMat = dynamic_cast<const osg::Material*>(stateSet->getAttribute(osg::StateAttribute::MATERIAL));
+             if (osgMat) {
+                 osg::Vec4 diffuse = osgMat->getDiffuse(osg::Material::FRONT);
+                 baseColor = {diffuse.r(), diffuse.g(), diffuse.b(), diffuse.a()};
+             }
+
              const osg::Texture* tex = dynamic_cast<const osg::Texture*>(stateSet->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
              if (tex && tex->getNumImages() > 0) {
                  const osg::Image* img = tex->getImage(0);
@@ -512,14 +542,16 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
 
                          // Link to Material
                          mat.pbrMetallicRoughness.baseColorTexture.index = texIdx;
-                         mat.pbrMetallicRoughness.baseColorFactor = {1.0, 1.0, 1.0, 1.0};
                      }
                  }
              }
         }
 
-        if (mat.pbrMetallicRoughness.baseColorTexture.index < 0) {
-            mat.pbrMetallicRoughness.baseColorFactor = {1.0, 1.0, 1.0, 1.0};
+        mat.pbrMetallicRoughness.baseColorFactor = baseColor;
+        if (baseColor[3] < 0.99) {
+            mat.alphaMode = "BLEND";
+        } else {
+            mat.alphaMode = "OPAQUE";
         }
 
         mat.pbrMetallicRoughness.metallicFactor = 0.0;

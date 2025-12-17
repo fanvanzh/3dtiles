@@ -210,6 +210,10 @@ std::unordered_map<std::string, std::string> FBXLoader::collectNodeAttrs(const u
 
 void FBXLoader::load() {
     ufbx_load_opts opts = {};
+    opts.target_axes = ufbx_axes_right_handed_y_up; // Convert to glTF/OpenGL standard (Y-up)
+    opts.target_unit_meters = 1.0f;
+    opts.clean_skin_weights = true;
+
     // Ensure we handle triangulation if needed (though ufbx does this well by default)
     // opts.generate_indices is NOT a field in ufbx_load_opts. We must call ufbx_generate_indices manually per mesh.
 
@@ -220,6 +224,24 @@ void FBXLoader::load() {
         return;
     }
 
+    // Log settings for debugging (metadata often contains the original file info)
+    if (scene->settings.axes.up == UFBX_COORDINATE_AXIS_POSITIVE_X) LOG_I("FBX File Up-Axis: +X");
+    else if (scene->settings.axes.up == UFBX_COORDINATE_AXIS_NEGATIVE_X) LOG_I("FBX File Up-Axis: -X");
+    else if (scene->settings.axes.up == UFBX_COORDINATE_AXIS_POSITIVE_Y) LOG_I("FBX File Up-Axis: +Y");
+    else if (scene->settings.axes.up == UFBX_COORDINATE_AXIS_NEGATIVE_Y) LOG_I("FBX File Up-Axis: -Y");
+    else if (scene->settings.axes.up == UFBX_COORDINATE_AXIS_POSITIVE_Z) LOG_I("FBX File Up-Axis: +Z");
+    else if (scene->settings.axes.up == UFBX_COORDINATE_AXIS_NEGATIVE_Z) LOG_I("FBX File Up-Axis: -Z");
+    else LOG_I("FBX File Up-Axis: Unknown");
+
+    if (scene->settings.axes.front == UFBX_COORDINATE_AXIS_POSITIVE_X) LOG_I("FBX File Front-Axis: +X");
+    else if (scene->settings.axes.front == UFBX_COORDINATE_AXIS_NEGATIVE_X) LOG_I("FBX File Front-Axis: -X");
+    else if (scene->settings.axes.front == UFBX_COORDINATE_AXIS_POSITIVE_Y) LOG_I("FBX File Front-Axis: +Y");
+    else if (scene->settings.axes.front == UFBX_COORDINATE_AXIS_NEGATIVE_Y) LOG_I("FBX File Front-Axis: -Y");
+    else if (scene->settings.axes.front == UFBX_COORDINATE_AXIS_POSITIVE_Z) LOG_I("FBX File Front-Axis: +Z");
+    else if (scene->settings.axes.front == UFBX_COORDINATE_AXIS_NEGATIVE_Z) LOG_I("FBX File Front-Axis: -Z");
+
+    LOG_I("FBX File Unit Meters: %f", scene->settings.unit_meters);
+
     // Start loading from the root node
     if (scene->root_node) {
         _root = loadNode(scene->root_node, osg::Matrixd::identity());
@@ -229,8 +251,20 @@ void FBXLoader::load() {
 osg::ref_ptr<osg::Node> FBXLoader::loadNode(ufbx_node *node, const osg::Matrixd &parentXform) {
     if (!node) return nullptr;
 
+    // Use ufbx's precomputed node_to_world if available, or accumulate node_to_parent.
+    // ufbx computes node_to_world considering all inheritance rules.
+    // However, since we are building an OSG scene graph which is hierarchical,
+    // we normally use local transforms (node_to_parent) for the OSG nodes (MatrixTransform).
+    // BUT, for flattening meshes into world space for 3D Tiles (B3DM), we need the absolute world transform.
+
+    // For OSG scene graph structure (visualizing locally):
     osg::Matrixd localMatrix = ufbx_matrix_to_osg(node->node_to_parent);
-    osg::Matrixd globalMatrix = localMatrix * parentXform;
+
+    // For Mesh processing (flattening to world):
+    // ufbx provides node_to_world which handles complex inheritance.
+    // It is safer to use node_to_world directly for geometry processing than accumulating local matrices manually
+    // if there are complex inheritance flags (which ufbx handles).
+    osg::Matrixd globalMatrix = ufbx_matrix_to_osg(node->node_to_world);
 
     osg::ref_ptr<osg::Group> group;
     osg::ref_ptr<osg::MatrixTransform> transform;
@@ -246,20 +280,38 @@ osg::ref_ptr<osg::Node> FBXLoader::loadNode(ufbx_node *node, const osg::Matrixd 
     std::string name = ufbx_string_to_std(node->name);
     group->setName(name);
 
-    // Collect attributes (optional, for debugging or metadata)
-    // std::unordered_map<std::string, std::string> attrs = collectNodeAttrs(node);
-
     // Process Meshes
     if (node->mesh) {
         ufbx_mesh *mesh = node->mesh;
-        osg::ref_ptr<osg::Geode> geode = processMesh(node, mesh, globalMatrix);
+
+        // Apply Geometry Transform (Pivot/Offset specific to the mesh attachment)
+        // ufbx provides geometry_to_node which transforms mesh to node local space.
+        // Or geometry_to_world directly.
+        // Let's check if geometry_to_world is available or compute it.
+        // geometry_to_world = geometry_to_node * node_to_world
+
+        osg::Matrixd geomToNode = ufbx_matrix_to_osg(node->geometry_to_node);
+        osg::Matrixd meshGlobalMatrix = geomToNode * globalMatrix;
+
+        osg::ref_ptr<osg::Geode> geode = processMesh(node, mesh, meshGlobalMatrix);
         if (geode) {
             group->addChild(geode);
         }
     }
 
     // Process Children
+    // We pass globalMatrix just in case, but actually if we switch to using node->node_to_world for everyone,
+    // we don't strictly need to pass accumulated parentXform down for calculation,
+    // BUT loadNode signature expects it.
+    // The recursive call logic here is fine for scene graph building.
+
     for (size_t i = 0; i < node->children.count; ++i) {
+        // For the child, the parent transform is THIS node's global transform?
+        // Wait, 'parentXform' passed to loadNode is the parent's world transform.
+        // 'globalMatrix' computed here IS this node's world transform.
+        // So passing 'globalMatrix' to children is correct for accumulation if we were doing it manually.
+        // But since we use ufbx's node_to_world, the child will just use its own node_to_world.
+
         osg::ref_ptr<osg::Node> childNode = loadNode(node->children.data[i], globalMatrix);
         if (childNode) {
             group->addChild(childNode);
