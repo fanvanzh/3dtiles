@@ -251,6 +251,11 @@ void FBXLoader::load() {
 osg::ref_ptr<osg::Node> FBXLoader::loadNode(ufbx_node *node, const osg::Matrixd &parentXform) {
     if (!node) return nullptr;
 
+    // Check visibility
+    if (!node->visible) {
+        return nullptr;
+    }
+
     // Use ufbx's precomputed node_to_world if available, or accumulate node_to_parent.
     // ufbx computes node_to_world considering all inheritance rules.
     // However, since we are building an OSG scene graph which is hierarchical,

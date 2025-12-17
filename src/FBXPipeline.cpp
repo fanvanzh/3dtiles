@@ -287,27 +287,26 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                 osg::Vec3d p = (*v)[i];
                 p = p * inst.matrix;
 
-                // Input is Y-up from ufbx, but the data seems to be Z-up oriented (X-Y plane geometry)
-                // The user reports the model is standing up (Vertical) when it should be lying down (Horizontal).
-                // This implies the raw data is in X-Y plane (Z-up ground), but we are treating it as Y-up (X-Z ground).
-                // So we apply a Z-up to Y-up rotation to "lie it down".
-                // x -> x
-                // y -> z
-                // z -> -y
+                // Input is Y-up from ufbx (due to opts.target_axes = ufbx_axes_right_handed_y_up).
+                // We want to convert to ENU (East-North-Up) coordinates for 3D Tiles (Z-up).
+                // X (Right) -> East (+X)
+                // Y (Up)    -> Up   (+Z)
+                // Z (Back)  -> South (-Y) or North (+Y)?
+                // usually OpenGL -Z is Forward (North). So +Z is Back (South).
+                // So Z -> -Y.
+
                 float px = (float)p.x();
-                float py = (float)p.z();
-                float pz = (float)-p.y();
+                float py = (float)-p.z();
+                float pz = (float)p.y();
 
                 positions.push_back(px);
                 positions.push_back(py);
                 positions.push_back(pz);
 
                 // Compute bounds in ENU (Z-up) for tileset.json
-                // glTF Y -> ENU Z
-                // glTF Z -> ENU -Y
                 float enu_x = px;
-                float enu_y = -pz;
-                float enu_z = py;
+                float enu_y = py;
+                float enu_z = pz;
 
                 if (enu_x < minPos[0]) minPos[0] = enu_x;
                 if (enu_y < minPos[1]) minPos[1] = enu_y;
@@ -320,12 +319,12 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     osg::Vec3d nm = (*n)[i];
                     nm = osg::Matrix::transform3x3(osg::Matrix::inverse(inst.matrix), nm);
                     nm.normalize();
-                    // Rotate normal same as position (Z-up to Y-up)
+                    // Rotate normal same as position
                     normals.push_back((float)nm.x());
-                    normals.push_back((float)nm.z());
-                    normals.push_back((float)-nm.y());
+                    normals.push_back((float)-nm.z());
+                    normals.push_back((float)nm.y());
                 } else {
-                    normals.push_back(0.0f); normals.push_back(1.0f); normals.push_back(0.0f); // Up is Y
+                    normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f); // Up is Z (ENU)
                 }
 
                 if (t && i < t->size()) {
