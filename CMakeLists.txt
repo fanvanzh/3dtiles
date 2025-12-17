@@ -72,6 +72,7 @@ endif()
 
 if (WIN32)
     target_compile_definitions(_3dtile PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(_3dtile PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Zc:preprocessor>)
     target_precompile_headers(_3dtile PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/osg_fix.h")
 endif()
 

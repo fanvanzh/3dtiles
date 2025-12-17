@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdarg>
+#include <cstdio>
 #include <fmt/printf.h>
 #include <spdlog/spdlog.h>
 
@@ -7,11 +9,12 @@
 extern "C" bool mkdirs(const char* path);
 extern "C" bool write_file(const char* filename, const char* buf, unsigned long buf_len);
 
+// NOTE: `format` is a printf-style format string for the variadic arguments.
 inline void log_printf_impl(spdlog::level::level_enum lvl, const char* format, ...) {
 	char buf[1024];
 	va_list args;
 	va_start(args, format);
-	vsnprintf(buf, sizeof(buf), format, args);
+	std::vsnprintf(buf, sizeof(buf), format, args);
 	va_end(args);
 	spdlog::log(lvl, "{}", buf);
 }
