@@ -27,6 +27,36 @@
 #include <osgDB/ReaderWriter>
 #include <osgDB/Registry>
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_STATIC
+#include <stb_image.h>
+
+// Helper to create osg::Image from stb_image data
+static osg::Image* createImageFromSTB(unsigned char* imgData, int width, int height, int channels, const std::string& filename) {
+    if (!imgData) return nullptr;
+
+    osg::Image* image = new osg::Image();
+    GLenum pixelFormat = GL_RGB;
+    if (channels == 1) pixelFormat = GL_LUMINANCE;
+    else if (channels == 2) pixelFormat = GL_LUMINANCE_ALPHA;
+    else if (channels == 3) pixelFormat = GL_RGB;
+    else if (channels == 4) pixelFormat = GL_RGBA;
+
+    // Use USE_MALLOC_FREE so OSG takes ownership of the malloc'd data from stbi
+    image->setImage(width, height, 1,
+                    (GLint)pixelFormat,
+                    pixelFormat,
+                    GL_UNSIGNED_BYTE,
+                    imgData,
+                    osg::Image::USE_MALLOC_FREE);
+
+    if (image) {
+        image->setFileName(filename.empty() ? "image.png" : filename);
+        image->flipVertical();
+    }
+    return image;
+}
+
 // Helper functions
 static std::string hash_bytes(const void* data, size_t len) {
   std::ostringstream oss;
@@ -156,32 +186,18 @@ osg::StateSet* FBXLoader::getOrCreateStateSet(const ufbx_material* mat) {
 
         // 1. Try embedded content
         if (tex->content.data && tex->content.size > 0) {
-             std::string ext = "png"; // default fallback
              std::string filename = ufbx_string_to_std(tex->filename);
-             if (filename.length() > 4 && filename.find('.') != std::string::npos) {
-                 ext = filename.substr(filename.find_last_of('.') + 1);
-             }
 
-             // Create stream from memory
-             // Note: stringstream copies data, but it's safe.
-             // Ideally we'd use a streambuf wrapper around the pointer to avoid copy, but this is cleaner.
-             std::string data((const char*)tex->content.data, tex->content.size);
-             std::stringstream ss(data);
+             int width, height, channels;
+             unsigned char* imgData = stbi_load_from_memory(
+                 (const unsigned char*)tex->content.data,
+                 (int)tex->content.size,
+                 &width, &height, &channels, 0);
 
-             osgDB::ReaderWriter* rw = osgDB::Registry::instance()->getReaderWriterForExtension(ext);
-             if (rw) {
-                 osgDB::ReaderWriter::ReadResult rr = rw->readImage(ss);
-                 if (rr.success()) {
-                     image = rr.getImage();
-                     if (image) {
-                         // Set a filename so we can identify it later if needed (though it won't exist on disk)
-                         image->setFileName(filename.empty() ? "embedded.png" : filename);
-                     }
-                 } else {
-                     LOG_E("Failed to decode embedded image: %s", rr.message().c_str());
-                 }
+             if (imgData) {
+                 image = createImageFromSTB(imgData, width, height, channels, filename.empty() ? "embedded.png" : filename);
              } else {
-                 LOG_E("No ReaderWriter for extension: %s", ext.c_str());
+                 LOG_E("Failed to decode embedded image with stb_image");
              }
         }
 
@@ -189,7 +205,17 @@ osg::StateSet* FBXLoader::getOrCreateStateSet(const ufbx_material* mat) {
         if (!image) {
             std::filesystem::path filename = resolve_texture_path(source_filename, tex);
             if (!filename.empty()) {
-                image = osgDB::readImageFile(filename.string());
+                // Try STB first
+                int width, height, channels;
+                std::string pathStr = filename.string();
+                unsigned char* imgData = stbi_load(pathStr.c_str(), &width, &height, &channels, 0);
+
+                if (imgData) {
+                    image = createImageFromSTB(imgData, width, height, channels, pathStr);
+                } else {
+                    // Fallback to OSG if STB fails
+                    image = osgDB::readImageFile(pathStr);
+                }
             }
         }
 

@@ -565,6 +565,15 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                          gltfImg.mimeType = mimeType;
 
                          // Create BufferView for image data (Embedded)
+                         // Ensure 4-byte alignment before writing image
+                         size_t currentSize = buffer.data.size();
+                         size_t padding = (4 - (currentSize % 4)) % 4;
+                         if (padding > 0) {
+                             buffer.data.resize(currentSize + padding);
+                             // Fill padding with 0
+                             memset(buffer.data.data() + currentSize, 0, padding);
+                         }
+
                          size_t imgOffset = buffer.data.size();
                          size_t imgLen = imgData.size();
                          buffer.data.resize(imgOffset + imgLen);
@@ -589,10 +598,18 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
 
                          // Link to Material
                          mat.pbrMetallicRoughness.baseColorTexture.index = texIdx;
-                     }
-                 }
-             }
-        }
+
+                         // Ensure 4-byte alignment AFTER writing image, so next bufferView starts aligned
+                         size_t endSize = buffer.data.size();
+                         size_t endPadding = (4 - (endSize % 4)) % 4;
+                         if (endPadding > 0) {
+                            buffer.data.resize(endSize + endPadding);
+                            memset(buffer.data.data() + endSize, 0, endPadding);
+                        }
+                    }
+                }
+            }
+       }
 
         mat.pbrMetallicRoughness.baseColorFactor = baseColor;
         if (baseColor[3] < 0.99) {
@@ -704,6 +721,11 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
         double hy = (tightBox.yMax() - tightBox.yMin()) / 2.0;
         double hz = (tightBox.zMax() - tightBox.zMin()) / 2.0;
 
+        // Add small padding (10%) to avoid near-plane culling or precision issues
+        hx *= 1.1;
+        hy *= 1.1;
+        hz *= 1.1;
+
         nodeJson["boundingVolume"] = {
             {"box", {
                 cx, cy, cz,
@@ -722,6 +744,11 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
         double extentY = (node->bbox.yMax() - node->bbox.yMin()) / 2.0;
         double extentZ = (node->bbox.zMax() - node->bbox.zMin()) / 2.0;
 
+        // Add padding to fallback as well
+        extentX *= 1.1;
+        extentY *= 1.1;
+        extentZ *= 1.1;
+
         diagonal = std::sqrt(extentX*extentX*4 + extentY*extentY*4 + extentZ*extentZ*4);
 
         nodeJson["boundingVolume"] = {
@@ -734,6 +761,10 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
         };
     }
 
+    // Use a small non-zero error even for leaves to prevent aggressive culling in some viewers,
+    // or keep 0.0 if strict compliance is desired.
+    // However, if it is a root node (diagonal large), 0.0 might be confusing.
+    // For now, we stick to 0.0 for leaves but ensure diagonal is correct for parents.
     nodeJson["geometricError"] = node->isLeaf() ? 0.0 : diagonal;
 
     return nodeJson;
@@ -771,18 +802,41 @@ std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vect
 
     // Create Feature Table JSON
     json featureTable;
-    featureTable["BATCH_LENGTH"] = batchIdCounter;
+
+    // For single instance (or merged mesh), if we have only 1 batch ID (0),
+    // we can simplify by setting BATCH_LENGTH to 0, which implies no batching.
+    // This avoids issues with _BATCHID attribute requirement if BATCH_LENGTH > 0.
+    // However, if we do have multiple batches, we set it.
+    if (batchIdCounter <= 1) {
+        featureTable["BATCH_LENGTH"] = 0;
+    } else {
+        featureTable["BATCH_LENGTH"] = batchIdCounter;
+    }
+
     std::string featureTableString = featureTable.dump();
 
     // Calculate Padding
     // Header (28 bytes) + FeatureTableJSON (N bytes) + Padding (P bytes)
-    // (28 + N + P) % 8 == 0
-    size_t currentLength = 28 + featureTableString.size();
-    size_t padding = (8 - (currentLength % 8)) % 8;
+    // Spec: "The byte length of the Feature Table JSON ... must be aligned to 8 bytes."
+    // This strictly means featureTableJSONByteLength % 8 == 0.
 
-    // Append padding spaces
+    size_t jsonLen = featureTableString.size();
+    size_t padding = (8 - (jsonLen % 8)) % 8;
     for(size_t i=0; i<padding; ++i) {
         featureTableString += " ";
+    }
+
+    // Now featureTableString.size() is multiple of 8.
+    // Header is 28 bytes.
+    // 28 + featureTableString.size() is 4 mod 8.
+    // So GLB starts at 4 mod 8. This is valid for GLB (4-byte alignment).
+
+    // Also, align GLB data size to 8 bytes (Spec recommendation for B3DM body end? No, just good practice)
+    // Actually, B3DM byteLength doesn't need to be aligned, but let's align it to 8 bytes for safety.
+    size_t glbLen = glbData.size();
+    size_t glbPadding = (8 - (glbLen % 8)) % 8;
+    for(size_t i=0; i<glbPadding; ++i) {
+        glbData += '\0';
     }
 
     // Write header
@@ -829,13 +883,45 @@ void FBXPipeline::writeTilesetJson(const std::string& basePath, const osg::Bound
     // Root
     tileset["root"] = rootContent;
 
-    // Do NOT overwrite root geometric error logic, as processNode handles it better (e.g. leaf=0.0)
-    if (!rootContent.contains("geometricError")) {
-         if (rootContent.contains("children")) {
-            tileset["root"]["geometricError"] = geometricError;
-        } else {
-            tileset["root"]["geometricError"] = 0.0;
-        }
+    // Force geometric error for root node if it's 0.0 (which happens if it's a leaf)
+    // A root node with 0.0 geometric error might cause visibility issues in some viewers
+    // if the screen space error calculation behaves unexpectedly.
+    // We set it to the calculated diagonal size to ensure it passes the SSE check initially.
+    if (tileset["root"]["geometricError"] == 0.0) {
+         double diag = 0.0;
+         if (rootContent["boundingVolume"].contains("box")) {
+            auto& box = rootContent["boundingVolume"]["box"];
+             if (box.is_array() && box.size() == 12) {
+                // box is center(3) + x_axis(3) + y_axis(3) + z_axis(3)
+                // Half axes vectors (assuming AABB structure as generated in processNode)
+                double hx = box[3]; // box[3], box[4], box[5]
+                double hy = box[7]; // box[6], box[7], box[8]
+                double hz = box[11]; // box[9], box[10], box[11]
+
+                // If it's not strictly AABB (rotated), we should compute length of vectors
+                // But our processNode generates diagonal matrices for axes.
+                double xlen = std::sqrt(double(box[3])*double(box[3]) + double(box[4])*double(box[4]) + double(box[5])*double(box[5]));
+                double ylen = std::sqrt(double(box[6])*double(box[6]) + double(box[7])*double(box[7]) + double(box[8])*double(box[8]));
+                double zlen = std::sqrt(double(box[9])*double(box[9]) + double(box[10])*double(box[10]) + double(box[11])*double(box[11]));
+
+                // Diagonal of the box (2 * half_diagonal)
+                diag = 2.0 * std::sqrt(xlen*xlen + ylen*ylen + zlen*zlen);
+             }
+         }
+
+         if (diag > 0.0) {
+            tileset["root"]["geometricError"] = diag;
+            LOG_I("Forcing root geometric error to %f (calculated from root box)", diag);
+         } else {
+             // Fallback to globalBounds if box missing (unlikely)
+             // globalBounds is Y-up from FBX, but size is same
+             double dx = globalBounds.xMax() - globalBounds.xMin();
+             double dy = globalBounds.yMax() - globalBounds.yMin();
+             double dz = globalBounds.zMax() - globalBounds.zMin();
+             double fallbackDiag = std::sqrt(dx*dx + dy*dy + dz*dz);
+             tileset["root"]["geometricError"] = fallbackDiag;
+             LOG_I("Forcing root geometric error to %f (calculated from global bounds)", fallbackDiag);
+         }
     }
 
     // Add Transform if geolocation is provided
