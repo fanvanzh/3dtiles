@@ -13,6 +13,7 @@ A powerful 3D-Tiles converter toolkit for efficient conversion of large-scale 3D
 ## Features
 
 - **Osgb to 3D-Tiles**: Convert OpenSceneGraph Binary format to 3D-Tiles format
+- **FBX to 3D-Tiles**: Convert FBX format to 3D-Tiles format
 - **Shapefile to 3D-Tiles**: Convert Esri Shapefile data to 3D-Tiles format
 - **Mesh Optimization**: Optional mesh simplification using meshoptimizer for reduced polygon count
 - **Draco Compression**: Optional Google Draco compression for 3-6x geometry size reduction

@@ -123,14 +123,14 @@ void FBXPipeline::run() {
         MeshInstanceInfo& info = pair.second;
         if (!info.geometry) continue;
 
-        osg::BoundingBox geomBox = info.geometry->getBoundingBox();
+        const osg::Vec3Array* verts = dynamic_cast<const osg::Vec3Array*>(info.geometry->getVertexArray());
+        if (!verts || verts->empty()) continue;
         for (size_t i = 0; i < info.transforms.size(); ++i) {
             const auto& mat = info.transforms[i];
-
-            // Expand global bounds
-            osg::BoundingBox instBox;
-            for (int k = 0; k < 8; ++k) instBox.expandBy(geomBox.corner(k) * mat);
-            globalBounds.expandBy(instBox);
+            for (size_t v = 0; v < verts->size(); ++v) {
+                osg::Vec3d p = (*verts)[v] * mat;
+                globalBounds.expandBy(p);
+            }
 
             // Add to root node content initially
             InstanceRef ref;
@@ -141,11 +141,15 @@ void FBXPipeline::run() {
     }
     rootNode->bbox = globalBounds;
 
+    // Compute global offset to center the model
+    osg::Vec3d globalOffset = globalBounds.center();
+    LOG_I("Global Offset (Centering): %f, %f, %f", globalOffset.x(), globalOffset.y(), globalOffset.z());
+
     LOG_I("Building Octree...");
     buildOctree(rootNode);
 
     LOG_I("Processing Nodes and Generating Tiles...");
-    json rootJson = processNode(rootNode, settings.outputPath);
+    json rootJson = processNode(rootNode, settings.outputPath, globalOffset);
 
     LOG_I("Writing tileset.json...");
     writeTilesetJson(settings.outputPath, globalBounds, rootJson);
@@ -233,7 +237,7 @@ void FBXPipeline::buildOctree(OctreeNode* node) {
 }
 
 // Helper to append geometry to tinygltf model
-void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef>& instances, const PipelineSettings& settings, json* batchTableJson, int* batchIdCounter, const SimplificationParams& simParams, osg::BoundingBox* outBox = nullptr) {
+void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef>& instances, const PipelineSettings& settings, json* batchTableJson, int* batchIdCounter, const SimplificationParams& simParams, const osg::Vec3d& globalOffset, osg::BoundingBox* outBox = nullptr) {
     if (instances.empty()) return;
 
     // Ensure model has at least one buffer
@@ -288,6 +292,10 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
             for (unsigned int i = 0; i < v->size(); ++i) {
                 osg::Vec3d p = (*v)[i];
                 p = p * inst.matrix;
+
+                // Subtract global offset (center model)
+                // globalOffset is in Y-up (original) space
+                p -= globalOffset;
 
                 // Input is Y-up from ufbx (due to opts.target_axes = ufbx_axes_right_handed_y_up).
                 // We want to convert to ENU (East-North-Up) coordinates for 3D Tiles (Z-up).
@@ -653,7 +661,7 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
     model.defaultScene = 0;
 }
 
-json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
+json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, const osg::Vec3d& globalOffset) {
     json nodeJson;
     nodeJson["refine"] = "REPLACE";
 
@@ -666,7 +674,7 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
 
         // Create content
         // For B3DM
-        auto result = createB3DM(node->content, parentPath, tileName);
+        auto result = createB3DM(node->content, parentPath, tileName, globalOffset, settings.enableSimplify ? SimplificationParams() : SimplificationParams());
         std::string contentUrl = result.first;
         osg::BoundingBox cBox = result.second;
 
@@ -683,7 +691,7 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
     if (!node->children.empty()) {
         nodeJson["children"] = json::array();
         for (auto child : node->children) {
-            json childJson = processNode(child, parentPath);
+            json childJson = processNode(child, parentPath, globalOffset);
             nodeJson["children"].push_back(childJson);
 
             // Expand tightBox by child's bounding volume
@@ -722,9 +730,15 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
         double hz = (tightBox.zMax() - tightBox.zMin()) / 2.0;
 
         // Add small padding (10%) to avoid near-plane culling or precision issues
-        hx *= 1.1;
-        hy *= 1.1;
-        hz *= 1.1;
+        // Also ensure minimum size to avoid degenerate (0-volume) bounding boxes
+        hx = std::max(hx * 1.1, 0.01);
+        hy = std::max(hy * 1.1, 0.01);
+        hz = std::max(hz * 1.1, 0.01);
+
+        // Since tightBox is accumulated from B3DM content (which is already Z-up)
+        // and child bounding volumes (also Z-up), tightBox is ALREADY in Z-up coordinates.
+        // So we do NOT need to apply the (x, -z, y) transform here.
+        // We just use it directly.
 
         nodeJson["boundingVolume"] = {
             {"box", {
@@ -736,27 +750,36 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
         };
     } else {
         // Fallback: Transform node->bbox from Y-up to Z-up
-        double cx = node->bbox.center().x();
-        double cy = node->bbox.center().y();
-        double cz = node->bbox.center().z();
+        // node->bbox comes from the Octree which is built on the original scene bounds (Y-up)
+        // So here we MUST apply the transform (x, -z, y).
+
+        // Subtract global offset first!
+        osg::Vec3d center = node->bbox.center() - globalOffset;
+
+        double cx = center.x();
+        double cy = center.y();
+        double cz = center.z();
 
         double extentX = (node->bbox.xMax() - node->bbox.xMin()) / 2.0;
         double extentY = (node->bbox.yMax() - node->bbox.yMin()) / 2.0;
         double extentZ = (node->bbox.zMax() - node->bbox.zMin()) / 2.0;
 
         // Add padding to fallback as well
-        extentX *= 1.1;
-        extentY *= 1.1;
-        extentZ *= 1.1;
+        extentX = std::max(extentX * 1.1, 0.01);
+        extentY = std::max(extentY * 1.1, 0.01);
+        extentZ = std::max(extentZ * 1.1, 0.01);
 
         diagonal = std::sqrt(extentX*extentX*4 + extentY*extentY*4 + extentZ*extentZ*4);
 
+        // Apply transform: (x, y, z) -> (x, -z, y)
+        // Center: (cx, -cz, cy)
+        // Extents: X->X, Y->Z, Z->-Y (magnitude Y)
         nodeJson["boundingVolume"] = {
             {"box", {
-                cx, -cz, cy,           // Center transformed
-                extentX, 0, 0,         // X axis
-                0, extentZ, 0,         // Y axis (was Z)
-                0, 0, extentY          // Z axis (was Y)
+                cx, -cz, cy,
+                extentX, 0, 0,
+                0, extentZ, 0,
+                0, 0, extentY
             }}
         };
     }
@@ -770,7 +793,7 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
     return nodeJson;
 }
 
-std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vector<InstanceRef>& instances, const std::string& tilePath, const std::string& tileName, const SimplificationParams& simParams) {
+std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vector<InstanceRef>& instances, const std::string& tilePath, const std::string& tileName, const osg::Vec3d& globalOffset, const SimplificationParams& simParams) {
     // 1. Create GLB (TinyGLTF)
     tinygltf::Model model;
     tinygltf::Asset asset;
@@ -782,7 +805,12 @@ std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vect
     int batchIdCounter = 0;
     osg::BoundingBox contentBox;
 
-    appendGeometryToModel(model, instances, settings, &batchTableJson, &batchIdCounter, simParams, &contentBox);
+    appendGeometryToModel(model, instances, settings, &batchTableJson, &batchIdCounter, simParams, globalOffset, &contentBox);
+
+    if (model.meshes.empty()) {
+        LOG_W("No geometry generated for tile %s. Skipping B3DM creation.", tileName.c_str());
+        return {"", osg::BoundingBox()};
+    }
 
     // 2. Create B3DM wrapping GLB
     std::string filename = tileName + ".b3dm";
@@ -883,6 +911,94 @@ void FBXPipeline::writeTilesetJson(const std::string& basePath, const osg::Bound
     // Root
     tileset["root"] = rootContent;
 
+    std::function<void(json&)> sanitizeNodeBV;
+    sanitizeNodeBV = [&](json& node) {
+        if (node.contains("boundingVolume") && node["boundingVolume"].contains("box")) {
+            auto& box = node["boundingVolume"]["box"];
+            if (box.is_array() && box.size() == 12) {
+                double cx = box[0];
+                double cy = box[1];
+                double cz = box[2];
+                double ax0 = box[3], ax1 = box[4], ax2 = box[5];
+                double ay0 = box[6], ay1 = box[7], ay2 = box[8];
+                double az0 = box[9], az1 = box[10], az2 = box[11];
+                auto len = [](double x, double y, double z) { return std::sqrt(x*x + y*y + z*z); };
+                double lx = len(ax0, ax1, ax2);
+                double ly = len(ay0, ay1, ay2);
+                double lz = len(az0, az1, az2);
+                if (!std::isfinite(lx) || lx < 1e-6) lx = 0.01;
+                if (!std::isfinite(ly) || ly < 1e-6) ly = 0.01;
+                if (!std::isfinite(lz) || lz < 1e-6) lz = 0.01;
+                box = {cx, cy, cz, lx, 0.0, 0.0, 0.0, ly, 0.0, 0.0, 0.0, lz};
+            }
+        }
+        if (node.contains("children") && node["children"].is_array()) {
+            for (auto& c : node["children"]) sanitizeNodeBV(c);
+        }
+    };
+    sanitizeNodeBV(tileset["root"]);
+
+    // Validate root boundingVolume; if invalid or extreme, reconstruct from globalBounds in meters
+    bool needReconstructRootBV = true;
+    try {
+        auto& box = tileset["root"]["boundingVolume"]["box"];
+        if (box.is_array() && box.size() == 12) {
+            double vals[12];
+            for (int i = 0; i < 12; ++i) vals[i] = box[i];
+            auto finite = [](double v) { return std::isfinite(v); };
+            bool allFinite = true;
+            for (int i = 0; i < 12; ++i) { if (!finite(vals[i])) { allFinite = false; break; } }
+            // Threshold: reject if any half-axis is unrealistically large (>1e9 meters) or zero-sized
+            double xlen = std::sqrt(vals[3]*vals[3] + vals[4]*vals[4] + vals[5]*vals[5]);
+            double ylen = std::sqrt(vals[6]*vals[6] + vals[7]*vals[7] + vals[8]*vals[8]);
+            double zlen = std::sqrt(vals[9]*vals[9] + vals[10]*vals[10] + vals[11]*vals[11]);
+            bool sizeOk = xlen > 1e-6 && ylen > 1e-6 && zlen > 1e-6 && xlen < 1e9 && ylen < 1e9 && zlen < 1e9;
+            needReconstructRootBV = !(allFinite && sizeOk);
+        }
+    } catch (...) {
+        needReconstructRootBV = true;
+    }
+
+    if (needReconstructRootBV) {
+        double cx = (globalBounds.xMin() + globalBounds.xMax()) * 0.5;
+        double cy = (globalBounds.yMin() + globalBounds.yMax()) * 0.5;
+        double cz = (globalBounds.zMin() + globalBounds.zMax()) * 0.5;
+
+        double hx = std::max((globalBounds.xMax() - globalBounds.xMin()) * 0.5, 0.01);
+        double hy = std::max((globalBounds.yMax() - globalBounds.yMin()) * 0.5, 0.01);
+        double hz = std::max((globalBounds.zMax() - globalBounds.zMin()) * 0.5, 0.01);
+
+        tileset["root"]["boundingVolume"] = {
+            {"box", {
+                cx, cy, cz,
+                hx, 0, 0,
+                0, hy, 0,
+                0, 0, hz
+            }}
+        };
+
+        double dx = globalBounds.xMax() - globalBounds.xMin();
+        double dy = globalBounds.yMax() - globalBounds.yMin();
+        double dz = globalBounds.zMax() - globalBounds.zMin();
+        double diag = std::sqrt(dx*dx + dy*dy + dz*dz);
+        tileset["root"]["geometricError"] = diag;
+        geometricError = diag;
+        LOG_I("Reconstructed root boundingVolume from global bounds. center=(%f,%f,%f) halfAxes=(%f,%f,%f), geometricError=%f", cx, cy, cz, hx, hy, hz, geometricError);
+    }
+
+    try {
+        auto& box = tileset["root"]["boundingVolume"]["box"];
+        if (box.is_array() && box.size() == 12) {
+            double cx = box[0];
+            double cy = box[1];
+            double cz = box[2];
+            double hx = std::sqrt(double(box[3])*double(box[3]) + double(box[4])*double(box[4]) + double(box[5])*double(box[5]));
+            double hy = std::sqrt(double(box[6])*double(box[6]) + double(box[7])*double(box[7]) + double(box[8])*double(box[8]));
+            double hz = std::sqrt(double(box[9])*double(box[9]) + double(box[10])*double(box[10]) + double(box[11])*double(box[11]));
+            LOG_I("Root BV center=(%f,%f,%f) halfAxes=(%f,%f,%f), geometricError=%f", cx, cy, cz, hx, hy, hz, geometricError);
+        }
+    } catch (...) {}
+
     // Force geometric error for root node if it's 0.0 (which happens if it's a leaf)
     // A root node with 0.0 geometric error might cause visibility issues in some viewers
     // if the screen space error calculation behaves unexpectedly.
@@ -931,6 +1047,40 @@ void FBXPipeline::writeTilesetJson(const std::string& basePath, const osg::Bound
 
         // GLM is column-major, 3D Tiles expects column-major array of 16 numbers
         const double* m = (const double*)&enuToEcef;
+
+        // Validate upper-left 3x3 determinant (should be ~1 for a rotation)
+        double m0 = m[0],  m1 = m[1],  m2 = m[2];
+        double m4 = m[4],  m5 = m[5],  m6 = m[6];
+        double m8 = m[8],  m9 = m[9],  m10 = m[10];
+        double det3 = m0*(m5*m10 - m9*m6) - m4*(m1*m10 - m9*m2) + m8*(m1*m6 - m5*m2);
+        if (!std::isfinite(det3) || std::abs(det3) < 1e-12) {
+            // Recompute orthonormal ENU basis defensively
+            const double pi = std::acos(-1.0);
+            double lon = settings.longitude * pi / 180.0;
+            double lat = settings.latitude * pi / 180.0;
+            double sinLat = std::sin(lat), cosLat = std::cos(lat);
+            double sinLon = std::sin(lon), cosLon = std::cos(lon);
+            double east_x = -sinLon,  east_y =  cosLon,      east_z = 0.0;
+            double north_x = -sinLat * cosLon, north_y = -sinLat * sinLon, north_z =  cosLat;
+            double up_x =    cosLat * cosLon,  up_y =    cosLat * sinLon,  up_z =    sinLat;
+            // Overwrite rotation columns in-place
+            const_cast<double*>(m)[0]  = east_x;
+            const_cast<double*>(m)[1]  = east_y;
+            const_cast<double*>(m)[2]  = east_z;
+            const_cast<double*>(m)[4]  = north_x;
+            const_cast<double*>(m)[5]  = north_y;
+            const_cast<double*>(m)[6]  = north_z;
+            const_cast<double*>(m)[8]  = up_x;
+            const_cast<double*>(m)[9]  = up_y;
+            const_cast<double*>(m)[10] = up_z;
+            // Ensure last row is [0,0,0,1]
+            const_cast<double*>(m)[3]  = 0.0;
+            const_cast<double*>(m)[7]  = 0.0;
+            const_cast<double*>(m)[11] = 0.0;
+            const_cast<double*>(m)[15] = 1.0;
+            // Recompute determinant check (optional)
+        }
+
         tileset["root"]["transform"] = {
             m[0], m[1], m[2], m[3],
             m[4], m[5], m[6], m[7],
@@ -955,6 +1105,7 @@ extern "C" void* fbx23dtile(
     bool enable_texture_compress,
     bool enable_meshopt,
     bool enable_draco,
+    bool enable_lod,
     double longitude,
     double latitude,
     double height
@@ -969,7 +1120,7 @@ extern "C" void* fbx23dtile(
     settings.enableTextureCompress = enable_texture_compress;
     settings.enableDraco = enable_draco;
     settings.enableSimplify = enable_meshopt;
-    settings.enableLOD = false; // HLOD not yet implemented
+    settings.enableLOD = enable_lod;
     settings.longitude = longitude;
     settings.latitude = latitude;
     settings.height = height;
