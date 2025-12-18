@@ -60,6 +60,10 @@ public:
 
     // 缓存已处理的材质 (ufbx_material* -> osg::StateSet*)
     std::unordered_map<const ufbx_material*, osg::ref_ptr<osg::StateSet>> materialCache;
+    // 基于材质内容哈希的去重缓存 (hash -> osg::StateSet*)
+    std::unordered_map<std::string, osg::ref_ptr<osg::StateSet>> materialHashCache;
+    // 基于几何内容哈希的去重缓存 (hash -> osg::Geometry*)
+    std::unordered_map<std::string, osg::ref_ptr<osg::Geometry>> geometryHashCache;
 
     // 处理 Mesh 并返回 Geode (如果需要挂载到场景)
     osg::ref_ptr<osg::Geode> processMesh(ufbx_node *node, ufbx_mesh *mesh, const osg::Matrixd &globalXform);
@@ -72,8 +76,26 @@ public:
     static std::string calcMaterialHash(const ufbx_material *mat);
     static std::unordered_map<std::string, std::string> collectNodeAttrs(const ufbx_node *node);
 
+    struct DedupStats {
+        int material_created;
+        int material_hash_reused;
+        int material_ptr_reused;
+        int geometry_created;
+        int geometry_hash_reused;
+        int mesh_cache_hits;
+        size_t unique_statesets;
+        size_t unique_geometries;
+    };
+    DedupStats getStats() const;
+
 private:
     ufbx_scene *scene = nullptr;
     std::string source_filename;
     osg::ref_ptr<osg::Node> _root;
+    int material_created_count = 0;
+    int material_reused_hash_count = 0;
+    int material_reused_ptr_count = 0;
+    int geometry_created_count = 0;
+    int geometry_reused_hash_count = 0;
+    int mesh_cache_hit_count = 0;
 };

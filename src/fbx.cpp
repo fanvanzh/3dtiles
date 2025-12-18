@@ -23,6 +23,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <cctype>
 
 #include <osgDB/ReaderWriter>
 #include <osgDB/Registry>
@@ -65,6 +66,58 @@ static std::string hash_bytes(const void* data, size_t len) {
   for (size_t i = 0; i < len; ++i) h = (h ^ p[i]) * 16777619u;
   oss << std::hex << h;
   return oss.str();
+}
+
+static std::string calc_part_geom_hash(
+    size_t num_vertices,
+    const std::vector<ufbx_vec3>& pos,
+    const std::vector<ufbx_vec3>& norm,
+    const std::vector<ufbx_vec2>& uv,
+    const std::vector<ufbx_vec4>& color,
+    const std::vector<uint32_t>& indices)
+{
+  std::ostringstream oss;
+  uint8_t mask = 0;
+  if (!pos.empty()) mask |= 1 << 0;
+  if (!norm.empty()) mask |= 1 << 1;
+  if (!uv.empty()) mask |= 1 << 2;
+  if (!color.empty()) mask |= 1 << 3;
+  oss.write(reinterpret_cast<const char*>(&mask), sizeof(mask));
+  uint32_t nv = (uint32_t)num_vertices;
+  oss.write(reinterpret_cast<const char*>(&nv), sizeof(nv));
+  for (size_t i = 0; i < num_vertices; ++i) {
+    if (!pos.empty()) {
+      float x = (float)pos[i].x, y = (float)pos[i].y, z = (float)pos[i].z;
+      oss.write(reinterpret_cast<const char*>(&x), sizeof(x));
+      oss.write(reinterpret_cast<const char*>(&y), sizeof(y));
+      oss.write(reinterpret_cast<const char*>(&z), sizeof(z));
+    }
+    if (!norm.empty()) {
+      float x = (float)norm[i].x, y = (float)norm[i].y, z = (float)norm[i].z;
+      oss.write(reinterpret_cast<const char*>(&x), sizeof(x));
+      oss.write(reinterpret_cast<const char*>(&y), sizeof(y));
+      oss.write(reinterpret_cast<const char*>(&z), sizeof(z));
+    }
+    if (!uv.empty()) {
+      float x = (float)uv[i].x, y = (float)uv[i].y;
+      oss.write(reinterpret_cast<const char*>(&x), sizeof(x));
+      oss.write(reinterpret_cast<const char*>(&y), sizeof(y));
+    }
+    if (!color.empty()) {
+      float x = (float)color[i].x, y = (float)color[i].y, z = (float)color[i].z, w = (float)color[i].w;
+      oss.write(reinterpret_cast<const char*>(&x), sizeof(x));
+      oss.write(reinterpret_cast<const char*>(&y), sizeof(y));
+      oss.write(reinterpret_cast<const char*>(&z), sizeof(z));
+      oss.write(reinterpret_cast<const char*>(&w), sizeof(w));
+    }
+  }
+  uint32_t ni = (uint32_t)indices.size();
+  oss.write(reinterpret_cast<const char*>(&ni), sizeof(ni));
+  if (!indices.empty()) {
+    oss.write(reinterpret_cast<const char*>(indices.data()), indices.size() * sizeof(uint32_t));
+  }
+  std::string s = oss.str();
+  return hash_bytes(s.data(), s.size());
 }
 
 static osg::Matrixd ufbx_matrix_to_osg(const ufbx_matrix &m) {
@@ -132,10 +185,18 @@ static std::filesystem::path resolve_texture_path(const std::string &fbxPath,
 osg::StateSet* FBXLoader::getOrCreateStateSet(const ufbx_material* mat) {
     if (!mat) return nullptr;
 
-    // Check cache
     auto it = materialCache.find(mat);
     if (it != materialCache.end()) {
+        material_reused_ptr_count++;
         return it->second.get();
+    }
+
+    std::string matHash = calcMaterialHash(mat);
+    auto hit = materialHashCache.find(matHash);
+    if (hit != materialHashCache.end()) {
+        materialCache[mat] = hit->second;
+        material_reused_hash_count++;
+        return hit->second.get();
     }
 
     osg::StateSet* stateSet = new osg::StateSet;
@@ -227,8 +288,9 @@ osg::StateSet* FBXLoader::getOrCreateStateSet(const ufbx_material* mat) {
         }
     }
 
-    // Cache it
     materialCache[mat] = stateSet;
+    materialHashCache[matHash] = stateSet;
+    material_created_count++;
     return stateSet;
 }
 
@@ -239,6 +301,19 @@ FBXLoader::~FBXLoader() {
     ufbx_free_scene(scene);
     scene = nullptr;
   }
+}
+
+FBXLoader::DedupStats FBXLoader::getStats() const {
+  DedupStats s;
+  s.material_created = material_created_count;
+  s.material_hash_reused = material_reused_hash_count;
+  s.material_ptr_reused = material_reused_ptr_count;
+  s.geometry_created = geometry_created_count;
+  s.geometry_hash_reused = geometry_reused_hash_count;
+  s.mesh_cache_hits = mesh_cache_hit_count;
+  s.unique_statesets = materialHashCache.size();
+  s.unique_geometries = geometryHashCache.size();
+  return s;
 }
 
 std::string FBXLoader::calcMeshHash(const ufbx_mesh *mesh) {
@@ -254,10 +329,79 @@ std::string FBXLoader::calcMeshHash(const ufbx_mesh *mesh) {
 
 std::string FBXLoader::calcMaterialHash(const ufbx_material *mat) {
   if (!mat) return "0";
-  // Hash name and main texture path
-  std::string name = mat->name.data ? std::string(mat->name.data, mat->name.length) : "";
-  std::string tex = mat->pbr.base_color.texture && mat->pbr.base_color.texture->filename.data ? std::string(mat->pbr.base_color.texture->filename.data, mat->pbr.base_color.texture->filename.length) : "";
-  std::string s = name + tex;
+
+  std::ostringstream oss;
+
+  // Diffuse
+  float diffuse[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+  if (mat->pbr.base_color.has_value) {
+    diffuse[0] = mat->pbr.base_color.value_vec4.x;
+    diffuse[1] = mat->pbr.base_color.value_vec4.y;
+    diffuse[2] = mat->pbr.base_color.value_vec4.z;
+    diffuse[3] = mat->pbr.base_color.value_vec4.w;
+  } else if (mat->fbx.diffuse_color.has_value) {
+    float factor = mat->fbx.diffuse_factor.has_value ? (float)mat->fbx.diffuse_factor.value_real : 1.0f;
+    diffuse[0] = (float)mat->fbx.diffuse_color.value_vec3.x * factor;
+    diffuse[1] = (float)mat->fbx.diffuse_color.value_vec3.y * factor;
+    diffuse[2] = (float)mat->fbx.diffuse_color.value_vec3.z * factor;
+    diffuse[3] = 1.0f;
+  }
+  oss.write(reinterpret_cast<const char*>(diffuse), sizeof(diffuse));
+
+  // Specular
+  float specular[3] = {0.0f, 0.0f, 0.0f};
+  if (mat->fbx.specular_color.has_value) {
+    float sf = mat->fbx.specular_factor.has_value ? (float)mat->fbx.specular_factor.value_real : 1.0f;
+    specular[0] = (float)mat->fbx.specular_color.value_vec3.x * sf;
+    specular[1] = (float)mat->fbx.specular_color.value_vec3.y * sf;
+    specular[2] = (float)mat->fbx.specular_color.value_vec3.z * sf;
+  }
+  oss.write(reinterpret_cast<const char*>(specular), sizeof(specular));
+
+  float shininess = mat->fbx.specular_exponent.has_value ? (float)mat->fbx.specular_exponent.value_real : 0.0f;
+  oss.write(reinterpret_cast<const char*>(&shininess), sizeof(shininess));
+
+  float emission[3] = {0.0f, 0.0f, 0.0f};
+  if (mat->pbr.emission_color.has_value) {
+    emission[0] = (float)mat->pbr.emission_color.value_vec3.x;
+    emission[1] = (float)mat->pbr.emission_color.value_vec3.y;
+    emission[2] = (float)mat->pbr.emission_color.value_vec3.z;
+  } else if (mat->fbx.emission_color.has_value) {
+    float ef = mat->fbx.emission_factor.has_value ? (float)mat->fbx.emission_factor.value_real : 1.0f;
+    emission[0] = (float)mat->fbx.emission_color.value_vec3.x * ef;
+    emission[1] = (float)mat->fbx.emission_color.value_vec3.y * ef;
+    emission[2] = (float)mat->fbx.emission_color.value_vec3.z * ef;
+  }
+  oss.write(reinterpret_cast<const char*>(emission), sizeof(emission));
+
+  const ufbx_texture* tex = nullptr;
+  if (mat->pbr.base_color.texture) tex = mat->pbr.base_color.texture;
+  else if (mat->fbx.diffuse_color.texture) tex = mat->fbx.diffuse_color.texture;
+
+  if (tex) {
+    if (tex->content.data && tex->content.size > 0) {
+      std::string contentHash = hash_bytes(tex->content.data, tex->content.size);
+      oss.write(contentHash.data(), contentHash.size());
+    } else {
+      std::string path;
+      if (tex->absolute_filename.data && tex->absolute_filename.length) {
+        path.assign(tex->absolute_filename.data, tex->absolute_filename.length);
+      } else if (tex->filename.data && tex->filename.length) {
+        path.assign(tex->filename.data, tex->filename.length);
+      } else if (tex->relative_filename.data && tex->relative_filename.length) {
+        path.assign(tex->relative_filename.data, tex->relative_filename.length);
+      }
+      if (!path.empty()) {
+        for (char &c : path) {
+          if (c == '\\') c = '/';
+          c = (char)std::tolower((unsigned char)c);
+        }
+        oss.write(path.data(), path.size());
+      }
+    }
+  }
+
+  std::string s = oss.str();
   return hash_bytes(s.data(), s.size());
 }
 
@@ -312,6 +456,11 @@ void FBXLoader::load() {
     if (scene->root_node) {
         _root = loadNode(scene->root_node, osg::Matrixd::identity());
     }
+
+    LOG_I("Material dedup: created=%d reused_by_hash=%d pointer_hits=%d unique_statesets=%zu",
+          material_created_count, material_reused_hash_count, material_reused_ptr_count, materialHashCache.size());
+    LOG_I("Mesh dedup: geometries_created=%d reused_by_hash=%d mesh_cache_hits=%d unique_geometries=%zu",
+          geometry_created_count, geometry_reused_hash_count, mesh_cache_hit_count, geometryHashCache.size());
 }
 
 osg::ref_ptr<osg::Node> FBXLoader::loadNode(ufbx_node *node, const osg::Matrixd &parentXform) {
@@ -400,6 +549,7 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
     // 1. Check Cache
     auto it = meshCache.find(mesh);
     if (it != meshCache.end()) {
+        mesh_cache_hit_count += (int)it->second.size();
         for (const auto& part : it->second) {
             geode->addDrawable(part.geometry);
 
@@ -560,14 +710,7 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
 
         if (partFaces.empty()) continue;
 
-        osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
-        geometry->setVertexArray(osgPos);
-        if (osgNorm->size() > 0) geometry->setNormalArray(osgNorm, osg::Array::BIND_PER_VERTEX);
-        if (osgUV->size() > 0) geometry->setTexCoordArray(0, osgUV, osg::Array::BIND_PER_VERTEX);
-        if (osgColor->size() > 0) geometry->setColorArray(osgColor, osg::Array::BIND_PER_VERTEX);
-
-        osg::ref_ptr<osg::DrawElementsUInt> drawElements = new osg::DrawElementsUInt(osg::PrimitiveSet::TRIANGLES);
-
+        std::vector<uint32_t> partIndices;
         for (uint32_t faceIdx : partFaces) {
             ufbx_face face = mesh->faces.data[faceIdx];
 
@@ -579,12 +722,30 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
                     uint32_t wedgeIdx = triIndices[t * 3 + v];
                     // Map wedge index to unique index
                     uint32_t uniqueIdx = generated_indices[wedgeIdx];
-                    drawElements->push_back(uniqueIdx);
+                    partIndices.push_back(uniqueIdx);
                 }
             }
         }
 
-        geometry->addPrimitiveSet(drawElements);
+        std::string geomHash = calc_part_geom_hash(num_vertices, tempPos, tempNorm, tempUV, tempColor, partIndices);
+        osg::ref_ptr<osg::Geometry> geometry;
+        auto ghit = geometryHashCache.find(geomHash);
+        if (ghit != geometryHashCache.end()) {
+            geometry = ghit->second;
+            geometry_reused_hash_count++;
+        } else {
+            geometry = new osg::Geometry;
+            geometry->setVertexArray(osgPos);
+            if (osgNorm->size() > 0) geometry->setNormalArray(osgNorm, osg::Array::BIND_PER_VERTEX);
+            if (osgUV->size() > 0) geometry->setTexCoordArray(0, osgUV, osg::Array::BIND_PER_VERTEX);
+            if (osgColor->size() > 0) geometry->setColorArray(osgColor, osg::Array::BIND_PER_VERTEX);
+            osg::ref_ptr<osg::DrawElementsUInt> drawElements = new osg::DrawElementsUInt(osg::PrimitiveSet::TRIANGLES);
+            drawElements->reserve(partIndices.size());
+            for (uint32_t idx : partIndices) drawElements->push_back(idx);
+            geometry->addPrimitiveSet(drawElements);
+            geometryHashCache[geomHash] = geometry;
+            geometry_created_count++;
+        }
 
         // Material
         if (mesh->materials.count > matIndex) {
@@ -597,7 +758,7 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
         // Cache Info
         CachedPart cpart;
         cpart.geometry = geometry;
-        cpart.geomHash = meshHash;
+        cpart.geomHash = geomHash;
         cpart.matHash = calcMaterialHash(mesh->materials.count > matIndex ? mesh->materials.data[matIndex] : nullptr);
         cachedParts.push_back(cpart);
 

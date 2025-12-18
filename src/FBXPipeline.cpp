@@ -70,6 +70,13 @@ void FBXPipeline::run() {
     loader = new FBXLoader(settings.inputPath);
     loader->load();
     LOG_I("FBX Loaded. Mesh Pool Size: %zu", loader->meshPool.size());
+    {
+        auto stats = loader->getStats();
+        LOG_I("Material dedup: created=%d reused_by_hash=%d pointer_hits=%d unique_statesets=%zu",
+              stats.material_created, stats.material_hash_reused, stats.material_ptr_reused, stats.unique_statesets);
+        LOG_I("Mesh dedup: geometries_created=%d reused_by_hash=%d mesh_cache_hits=%d unique_geometries=%zu",
+              stats.geometry_created, stats.geometry_hash_reused, stats.mesh_cache_hits, stats.unique_geometries);
+    }
 
     // Lambda to generate LOD settings chain
     auto generateLODChain = [&](const PipelineSettings& cfg) -> LODPipelineSettings {
@@ -151,6 +158,13 @@ void FBXPipeline::run() {
     writeTilesetJson(settings.outputPath, globalBounds, rootJson);
 
     LOG_I("FBXPipeline Finished.");
+    {
+        auto stats = loader->getStats();
+        LOG_I("Material dedup: created=%d reused_by_hash=%d pointer_hits=%d unique_statesets=%zu",
+              stats.material_created, stats.material_hash_reused, stats.material_ptr_reused, stats.unique_statesets);
+        LOG_I("Mesh dedup: geometries_created=%d reused_by_hash=%d mesh_cache_hits=%d unique_geometries=%zu",
+              stats.geometry_created, stats.geometry_hash_reused, stats.mesh_cache_hits, stats.unique_geometries);
+    }
 }
 
 void FBXPipeline::buildOctree(OctreeNode* node) {
