@@ -82,7 +82,7 @@ public:
         int material_ptr_reused;
         int geometry_created;
         int geometry_hash_reused;
-        int mesh_cache_hits;
+        int mesh_cache_hit_count;
         size_t unique_statesets;
         size_t unique_geometries;
     };
@@ -98,4 +98,5 @@ private:
     int geometry_created_count = 0;
     int geometry_reused_hash_count = 0;
     int mesh_cache_hit_count = 0;
+    std::unordered_set<const ufbx_node*> displayLayerHiddenNodes;
 };

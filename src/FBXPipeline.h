@@ -8,6 +8,7 @@
 #include <osg/Geometry>
 #include <nlohmann/json.hpp>
 #include "mesh_processor.h"
+#include <unordered_map>
 
 // Forward declarations
 namespace tinygltf {
@@ -31,6 +32,12 @@ struct PipelineSettings {
     double longitude = 0.0;
     double latitude = 0.0;
     double height = 0.0;
+
+    // Geometric error scale (multiplier applied to boundingVolume diagonal)
+    double geScale = 30.0;
+
+    // Split strategy: when true, split by average count using maxItemsPerTile; when false, use octree
+    bool splitAverageByCount = true;
 };
 
 struct InstanceRef {
@@ -48,6 +55,10 @@ public:
 private:
     PipelineSettings settings;
     FBXLoader* loader = nullptr;
+    struct LevelAccum { size_t count = 0; double sumDiag = 0.0; double sumGe = 0.0; size_t tightCount = 0; size_t fallbackCount = 0; size_t refineAdd = 0; size_t refineReplace = 0; };
+    std::unordered_map<int, LevelAccum> levelStats;
+    void logLevelStats();
+    nlohmann::json buildAverageTiles(const osg::BoundingBox& globalBounds, const std::string& parentPath);
 
     // Octree Node Definition
     struct OctreeNode {
@@ -67,7 +78,7 @@ private:
 
     // Process Octree to generate Tiles
     // Returns the JSON object representing this node and its children (if any)
-    nlohmann::json processNode(OctreeNode* node, const std::string& parentPath);
+    nlohmann::json processNode(OctreeNode* node, const std::string& parentPath, int parentDepth, int childIndexAtParent);
 
     // Converters
     // Returns filename created and the tight bounding box of the content (in ENU)

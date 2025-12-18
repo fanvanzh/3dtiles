@@ -310,7 +310,7 @@ FBXLoader::DedupStats FBXLoader::getStats() const {
   s.material_ptr_reused = material_reused_ptr_count;
   s.geometry_created = geometry_created_count;
   s.geometry_hash_reused = geometry_reused_hash_count;
-  s.mesh_cache_hits = mesh_cache_hit_count;
+  s.mesh_cache_hit_count = mesh_cache_hit_count;
   s.unique_statesets = materialHashCache.size();
   s.unique_geometries = geometryHashCache.size();
   return s;
@@ -452,6 +452,16 @@ void FBXLoader::load() {
 
     LOG_I("FBX File Unit Meters: %f", scene->settings.unit_meters);
 
+    displayLayerHiddenNodes.clear();
+    for (size_t i = 0; i < scene->display_layers.count; i++) {
+        ufbx_display_layer *layer = scene->display_layers.data[i];
+        if (!layer->visible || layer->frozen) {
+            for (size_t j = 0; j < layer->nodes.count; j++) {
+                displayLayerHiddenNodes.insert(layer->nodes.data[j]);
+            }
+        }
+    }
+
     // Start loading from the root node
     if (scene->root_node) {
         _root = loadNode(scene->root_node, osg::Matrixd::identity());
@@ -468,6 +478,9 @@ osg::ref_ptr<osg::Node> FBXLoader::loadNode(ufbx_node *node, const osg::Matrixd 
 
     // Check visibility
     if (!node->visible) {
+        return nullptr;
+    }
+    if (displayLayerHiddenNodes.find(node) != displayLayerHiddenNodes.end()) {
         return nullptr;
     }
 
@@ -710,6 +723,18 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
 
         if (partFaces.empty()) continue;
 
+        if (mesh->face_hole.data && mesh->face_hole.count == mesh->num_faces) {
+            std::vector<uint32_t> filteredFaces;
+            filteredFaces.reserve(partFaces.size());
+            for (uint32_t fi : partFaces) {
+                if (fi < mesh->num_faces && !mesh->face_hole.data[fi]) {
+                    filteredFaces.push_back(fi);
+                }
+            }
+            partFaces.swap(filteredFaces);
+            if (partFaces.empty()) continue;
+        }
+
         std::vector<uint32_t> partIndices;
         for (uint32_t faceIdx : partFaces) {
             ufbx_face face = mesh->faces.data[faceIdx];
@@ -725,6 +750,10 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
                     partIndices.push_back(uniqueIdx);
                 }
             }
+        }
+
+        if (partIndices.empty()) {
+            continue;
         }
 
         std::string geomHash = calc_part_geom_hash(num_vertices, tempPos, tempNorm, tempUV, tempColor, partIndices);

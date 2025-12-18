@@ -20,6 +20,8 @@
 #include <osg/Texture>
 #include <osg/Image>
 #include "lod_pipeline.h"
+#include <typeinfo>
+#include <osg/GL>
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -74,8 +76,8 @@ void FBXPipeline::run() {
         auto stats = loader->getStats();
         LOG_I("Material dedup: created=%d reused_by_hash=%d pointer_hits=%d unique_statesets=%zu",
               stats.material_created, stats.material_hash_reused, stats.material_ptr_reused, stats.unique_statesets);
-        LOG_I("Mesh dedup: geometries_created=%d reused_by_hash=%d mesh_cache_hits=%d unique_geometries=%zu",
-              stats.geometry_created, stats.geometry_hash_reused, stats.mesh_cache_hits, stats.unique_geometries);
+        LOG_I("Mesh dedup: geometries_created=%d reused_by_hash=%d mesh_cache_hit_count=%d unique_geometries=%zu",
+              stats.geometry_created, stats.geometry_hash_reused, stats.mesh_cache_hit_count, stats.unique_geometries);
     }
 
     // Lambda to generate LOD settings chain
@@ -148,22 +150,28 @@ void FBXPipeline::run() {
     }
     rootNode->bbox = globalBounds;
 
-    LOG_I("Building Octree...");
-    buildOctree(rootNode);
-
-    LOG_I("Processing Nodes and Generating Tiles...");
-    json rootJson = processNode(rootNode, settings.outputPath);
+    json rootJson;
+    if (settings.splitAverageByCount) {
+        LOG_I("Using average count split tiling...");
+        rootJson = buildAverageTiles(globalBounds, settings.outputPath);
+    } else {
+        LOG_I("Building Octree...");
+        buildOctree(rootNode);
+        LOG_I("Processing Nodes and Generating Tiles...");
+        rootJson = processNode(rootNode, settings.outputPath, -1, -1);
+    }
 
     LOG_I("Writing tileset.json...");
     writeTilesetJson(settings.outputPath, globalBounds, rootJson);
 
     LOG_I("FBXPipeline Finished.");
+    logLevelStats();
     {
         auto stats = loader->getStats();
         LOG_I("Material dedup: created=%d reused_by_hash=%d pointer_hits=%d unique_statesets=%zu",
               stats.material_created, stats.material_hash_reused, stats.material_ptr_reused, stats.unique_statesets);
-        LOG_I("Mesh dedup: geometries_created=%d reused_by_hash=%d mesh_cache_hits=%d unique_geometries=%zu",
-              stats.geometry_created, stats.geometry_hash_reused, stats.mesh_cache_hits, stats.unique_geometries);
+        LOG_I("Mesh dedup: geometries_created=%d reused_by_hash=%d mesh_cache_hit_count=%d unique_geometries=%zu",
+              stats.geometry_created, stats.geometry_hash_reused, stats.mesh_cache_hit_count, stats.unique_geometries);
     }
 }
 
@@ -246,8 +254,8 @@ void FBXPipeline::buildOctree(OctreeNode* node) {
     node->children.erase(it, node->children.end());
 }
 
-// Helper to append geometry to tinygltf model
-void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef>& instances, const PipelineSettings& settings, json* batchTableJson, int* batchIdCounter, const SimplificationParams& simParams, osg::BoundingBox* outBox = nullptr) {
+struct TileStats { size_t node_count = 0; size_t vertex_count = 0; size_t triangle_count = 0; size_t material_count = 0; };
+void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef>& instances, const PipelineSettings& settings, json* batchTableJson, int* batchIdCounter, const SimplificationParams& simParams, osg::BoundingBox* outBox = nullptr, TileStats* stats = nullptr, const char* dbgTileName = nullptr) {
     if (instances.empty()) return;
 
     // Ensure model has at least one buffer
@@ -271,6 +279,10 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
         materialGroups[ss].push_back({geom, ref.meshInfo->transforms[ref.transformIndex], *batchIdCounter});
         (*batchIdCounter)++;
     }
+    if (stats) {
+        stats->node_count = instances.size();
+        stats->material_count = materialGroups.size();
+    }
 
     // Process each material group
     for (auto& pair : materialGroups) {
@@ -283,6 +295,8 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
 
         double minPos[3] = {1e30, 1e30, 1e30};
         double maxPos[3] = {-1e30, -1e30, -1e30};
+        int triSets = 0, stripSets = 0, fanSets = 0, otherSets = 0, drawArraysSets = 0;
+        int missingVertexInstances = 0;
 
         for (const auto& inst : pair.second) {
             osg::ref_ptr<osg::Geometry> processedGeom = inst.geom;
@@ -291,94 +305,485 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                 simplify_mesh_geometry(processedGeom.get(), simParams);
             }
 
-            osg::Vec3Array* v = dynamic_cast<osg::Vec3Array*>(processedGeom->getVertexArray());
-            osg::Vec3Array* n = dynamic_cast<osg::Vec3Array*>(processedGeom->getNormalArray());
-            osg::Vec2Array* t = dynamic_cast<osg::Vec2Array*>(processedGeom->getTexCoordArray(0));
-
-            if (!v || v->empty()) continue;
+            osg::Matrixd normalXform;
+            normalXform.transpose(osg::Matrix::inverse(inst.matrix));
 
             uint32_t baseIndex = (uint32_t)(positions.size() / 3);
+            osg::Array* va = processedGeom->getVertexArray();
+            osg::Vec3Array* v = dynamic_cast<osg::Vec3Array*>(va);
+            osg::Vec3dArray* v3d = dynamic_cast<osg::Vec3dArray*>(va);
+            osg::Vec4Array* v4 = dynamic_cast<osg::Vec4Array*>(va);
+            osg::Vec4dArray* v4d = dynamic_cast<osg::Vec4dArray*>(va);
+            osg::Array* na = processedGeom->getNormalArray();
+            osg::Vec3Array* n = dynamic_cast<osg::Vec3Array*>(na);
+            osg::Vec3dArray* n3d = dynamic_cast<osg::Vec3dArray*>(na);
+            osg::Array* ta = processedGeom->getTexCoordArray(0);
+            osg::Vec2Array* t = dynamic_cast<osg::Vec2Array*>(ta);
+            osg::Vec2dArray* t2d = dynamic_cast<osg::Vec2dArray*>(ta);
 
-            for (unsigned int i = 0; i < v->size(); ++i) {
-                osg::Vec3d p = (*v)[i];
-                p = p * inst.matrix;
-
-                // Input is Y-up from ufbx (due to opts.target_axes = ufbx_axes_right_handed_y_up).
-                // We want to convert to ENU (East-North-Up) coordinates for 3D Tiles (Z-up).
-                // X (Right) -> East (+X)
-                // Y (Up)    -> Up   (+Z)
-                // Z (Back)  -> South (-Y) or North (+Y)?
-                // usually OpenGL -Z is Forward (North). So +Z is Back (South).
-                // So Z -> -Y.
-
-                float px = (float)p.x();
-                float py = (float)-p.z();
-                float pz = (float)p.y();
-
-                positions.push_back(px);
-                positions.push_back(py);
-                positions.push_back(pz);
-
-                // Compute bounds in ENU (Z-up) for tileset.json
-                float enu_x = px;
-                float enu_y = py;
-                float enu_z = pz;
-
-                if (enu_x < minPos[0]) minPos[0] = enu_x;
-                if (enu_y < minPos[1]) minPos[1] = enu_y;
-                if (enu_z < minPos[2]) minPos[2] = enu_z;
-                if (enu_x > maxPos[0]) maxPos[0] = enu_x;
-                if (enu_y > maxPos[1]) maxPos[1] = enu_y;
-                if (enu_z > maxPos[2]) maxPos[2] = enu_z;
-
-                // Accumulate to global outBox if provided
-                if (outBox) {
-                    outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+            bool handledVertices = false;
+            if ((!v || v->empty()) && (!v3d || v3d->empty()) && (!v4 || v4->empty()) && (!v4d || v4d->empty())) {
+                if (va && va->getNumElements() > 0) {
+                    GLenum dt = va->getDataType();
+                    unsigned int cnt = va->getNumElements();
+                    unsigned int totalBytes = va->getTotalDataSize();
+                    if (dt == GL_FLOAT || dt == GL_DOUBLE) {
+                        unsigned int comps = dt == GL_FLOAT ? totalBytes / (cnt * (unsigned int)sizeof(float)) : totalBytes / (cnt * (unsigned int)sizeof(double));
+                        if (comps >= 3) {
+                            if (dt == GL_FLOAT) {
+                                const float* ptr = static_cast<const float*>(va->getDataPointer());
+                                for (unsigned int i = 0; i < cnt; ++i) {
+                                    osg::Vec3d p((double)ptr[i*comps+0], (double)ptr[i*comps+1], (double)ptr[i*comps+2]);
+                                    p = p * inst.matrix;
+                                    float px = (float)p.x();
+                                    float py = (float)-p.z();
+                                    float pz = (float)p.y();
+                                    positions.push_back(px); positions.push_back(py); positions.push_back(pz);
+                                    float enu_x = px, enu_y = py, enu_z = pz;
+                                    if (enu_x < minPos[0]) minPos[0] = enu_x;
+                                    if (enu_y < minPos[1]) minPos[1] = enu_y;
+                                    if (enu_z < minPos[2]) minPos[2] = enu_z;
+                                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
+                                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
+                                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
+                                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                                    if (n && i < n->size()) {
+                                        osg::Vec3 nm = (*n)[i];
+                                        osg::Vec3d nmd(nm.x(), nm.y(), nm.z());
+                                        nmd = osg::Matrix::transform3x3(normalXform, nmd); nmd.normalize();
+                                        normals.push_back((float)nmd.x()); normals.push_back((float)-nmd.z()); normals.push_back((float)nmd.y());
+                                    } else if (n3d && i < n3d->size()) {
+                                        osg::Vec3d nmd = (*n3d)[i];
+                                        nmd = osg::Matrix::transform3x3(normalXform, nmd); nmd.normalize();
+                                        normals.push_back((float)nmd.x()); normals.push_back((float)-nmd.z()); normals.push_back((float)nmd.y());
+                                    } else if (na && na->getNumElements() > i) {
+                                        GLenum ndt = na->getDataType();
+                                        unsigned int ncnt = na->getNumElements();
+                                        unsigned int nbytes = na->getTotalDataSize();
+                                        unsigned int ncomps = ndt == GL_FLOAT ? nbytes / (ncnt * (unsigned int)sizeof(float)) : ndt == GL_DOUBLE ? nbytes / (ncnt * (unsigned int)sizeof(double)) : 0;
+                                        if (ncomps >= 3) {
+                                            if (ndt == GL_FLOAT) {
+                                                const float* nptr = static_cast<const float*>(na->getDataPointer());
+                                                osg::Vec3d nm2((double)nptr[i*ncomps+0], (double)nptr[i*ncomps+1], (double)nptr[i*ncomps+2]);
+                                                nm2 = osg::Matrix::transform3x3(normalXform, nm2); nm2.normalize();
+                                                normals.push_back((float)nm2.x()); normals.push_back((float)-nm2.z()); normals.push_back((float)nm2.y());
+                                            } else if (ndt == GL_DOUBLE) {
+                                                const double* nptr = static_cast<const double*>(na->getDataPointer());
+                                                osg::Vec3d nm2(nptr[i*ncomps+0], nptr[i*ncomps+1], nptr[i*ncomps+2]);
+                                                nm2 = osg::Matrix::transform3x3(normalXform, nm2); nm2.normalize();
+                                                normals.push_back((float)nm2.x()); normals.push_back((float)-nm2.z()); normals.push_back((float)nm2.y());
+                                            } else {
+                                                normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f);
+                                            }
+                                        } else {
+                                            normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f);
+                                        }
+                                    } else {
+                                        normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f);
+                                    }
+                                    if (t && i < t->size()) {
+                                        texcoords.push_back((float)(*t)[i].x());
+                                        texcoords.push_back((float)(*t)[i].y());
+                                    } else if (t2d && i < t2d->size()) {
+                                        texcoords.push_back((float)(*t2d)[i].x());
+                                        texcoords.push_back((float)(*t2d)[i].y());
+                                    } else if (ta && ta->getNumElements() > i) {
+                                        GLenum tdt = ta->getDataType();
+                                        unsigned int tcnt = ta->getNumElements();
+                                        unsigned int tbytes = ta->getTotalDataSize();
+                                        unsigned int tcomps = tdt == GL_FLOAT ? tbytes / (tcnt * (unsigned int)sizeof(float)) : tdt == GL_DOUBLE ? tbytes / (tcnt * (unsigned int)sizeof(double)) : 0;
+                                        if (tcomps >= 2) {
+                                            if (tdt == GL_FLOAT) {
+                                                const float* tptr = static_cast<const float*>(ta->getDataPointer());
+                                                texcoords.push_back((float)tptr[i*tcomps+0]);
+                                                texcoords.push_back((float)tptr[i*tcomps+1]);
+                                            } else if (tdt == GL_DOUBLE) {
+                                                const double* tptr = static_cast<const double*>(ta->getDataPointer());
+                                                texcoords.push_back((float)tptr[i*tcomps+0]);
+                                                texcoords.push_back((float)tptr[i*tcomps+1]);
+                                            } else {
+                                                texcoords.push_back(0.0f); texcoords.push_back(0.0f);
+                                            }
+                                        } else {
+                                            texcoords.push_back(0.0f); texcoords.push_back(0.0f);
+                                        }
+                                    } else {
+                                        texcoords.push_back(0.0f); texcoords.push_back(0.0f);
+                                    }
+                                    batchIds.push_back((float)inst.originalBatchId);
+                                }
+                            } else {
+                                const double* ptr = static_cast<const double*>(va->getDataPointer());
+                                for (unsigned int i = 0; i < cnt; ++i) {
+                                    osg::Vec3d p(ptr[i*comps+0], ptr[i*comps+1], ptr[i*comps+2]);
+                                    p = p * inst.matrix;
+                                    float px = (float)p.x();
+                                    float py = (float)-p.z();
+                                    float pz = (float)p.y();
+                                    positions.push_back(px); positions.push_back(py); positions.push_back(pz);
+                                    float enu_x = px, enu_y = py, enu_z = pz;
+                                    if (enu_x < minPos[0]) minPos[0] = enu_x;
+                                    if (enu_y < minPos[1]) minPos[1] = enu_y;
+                                    if (enu_z < minPos[2]) minPos[2] = enu_z;
+                                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
+                                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
+                                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
+                                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                                    if (n && i < n->size()) {
+                                        osg::Vec3 nm = (*n)[i];
+                                        osg::Vec3d nmd(nm.x(), nm.y(), nm.z());
+                                        nmd = osg::Matrix::transform3x3(normalXform, nmd); nmd.normalize();
+                                        normals.push_back((float)nmd.x()); normals.push_back((float)-nmd.z()); normals.push_back((float)nmd.y());
+                                    } else if (n3d && i < n3d->size()) {
+                                        osg::Vec3d nmd = (*n3d)[i];
+                                        nmd = osg::Matrix::transform3x3(normalXform, nmd); nmd.normalize();
+                                        normals.push_back((float)nmd.x()); normals.push_back((float)-nmd.z()); normals.push_back((float)nmd.y());
+                                    } else if (na && na->getNumElements() > i) {
+                                        GLenum ndt = na->getDataType();
+                                        unsigned int ncnt = na->getNumElements();
+                                        unsigned int nbytes = na->getTotalDataSize();
+                                        unsigned int ncomps = ndt == GL_FLOAT ? nbytes / (ncnt * (unsigned int)sizeof(float)) : ndt == GL_DOUBLE ? nbytes / (ncnt * (unsigned int)sizeof(double)) : 0;
+                                        if (ncomps >= 3) {
+                                            if (ndt == GL_FLOAT) {
+                                                const float* nptr = static_cast<const float*>(na->getDataPointer());
+                                                osg::Vec3d nm2((double)nptr[i*ncomps+0], (double)nptr[i*ncomps+1], (double)nptr[i*ncomps+2]);
+                                                nm2 = osg::Matrix::transform3x3(normalXform, nm2); nm2.normalize();
+                                                normals.push_back((float)nm2.x()); normals.push_back((float)-nm2.z()); normals.push_back((float)nm2.y());
+                                            } else if (ndt == GL_DOUBLE) {
+                                                const double* nptr = static_cast<const double*>(na->getDataPointer());
+                                                osg::Vec3d nm2(nptr[i*ncomps+0], nptr[i*ncomps+1], nptr[i*ncomps+2]);
+                                                nm2 = osg::Matrix::transform3x3(normalXform, nm2); nm2.normalize();
+                                                normals.push_back((float)nm2.x()); normals.push_back((float)-nm2.z()); normals.push_back((float)nm2.y());
+                                            } else {
+                                                normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f);
+                                            }
+                                        } else {
+                                            normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f);
+                                        }
+                                    } else {
+                                        normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f);
+                                    }
+                                    if (t && i < t->size()) {
+                                        texcoords.push_back((float)(*t)[i].x());
+                                        texcoords.push_back((float)(*t)[i].y());
+                                    } else if (t2d && i < t2d->size()) {
+                                        texcoords.push_back((float)(*t2d)[i].x());
+                                        texcoords.push_back((float)(*t2d)[i].y());
+                                    } else if (ta && ta->getNumElements() > i) {
+                                        GLenum tdt = ta->getDataType();
+                                        unsigned int tcnt = ta->getNumElements();
+                                        unsigned int tbytes = ta->getTotalDataSize();
+                                        unsigned int tcomps = tdt == GL_FLOAT ? tbytes / (tcnt * (unsigned int)sizeof(float)) : tdt == GL_DOUBLE ? tbytes / (tcnt * (unsigned int)sizeof(double)) : 0;
+                                        if (tcomps >= 2) {
+                                            if (tdt == GL_FLOAT) {
+                                                const float* tptr = static_cast<const float*>(ta->getDataPointer());
+                                                texcoords.push_back((float)tptr[i*tcomps+0]);
+                                                texcoords.push_back((float)tptr[i*tcomps+1]);
+                                            } else if (tdt == GL_DOUBLE) {
+                                                const double* tptr = static_cast<const double*>(ta->getDataPointer());
+                                                texcoords.push_back((float)tptr[i*tcomps+0]);
+                                                texcoords.push_back((float)tptr[i*tcomps+1]);
+                                            } else {
+                                                texcoords.push_back(0.0f); texcoords.push_back(0.0f);
+                                            }
+                                        } else {
+                                            texcoords.push_back(0.0f); texcoords.push_back(0.0f);
+                                        }
+                                    } else {
+                                        texcoords.push_back(0.0f); texcoords.push_back(0.0f);
+                                    }
+                                    batchIds.push_back((float)inst.originalBatchId);
+                                }
+                            }
+                            handledVertices = true;
+                        }
+                    }
                 }
-
-                if (n && i < n->size()) {
-                    osg::Vec3d nm = (*n)[i];
-                    nm = osg::Matrix::transform3x3(osg::Matrix::inverse(inst.matrix), nm);
-                    nm.normalize();
-                    // Rotate normal same as position
-                    normals.push_back((float)nm.x());
-                    normals.push_back((float)-nm.z());
-                    normals.push_back((float)nm.y());
-                } else {
-                    normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f); // Up is Z (ENU)
+                if (!handledVertices) {
+                    missingVertexInstances++;
+                    if (dbgTileName) {
+                        if (!va) {
+                            LOG_I("Tile %s: missing vertex array (null)", dbgTileName);
+                        } else if (va->getNumElements() == 0) {
+                            LOG_I("Tile %s: empty vertex array (0 elements), type: %s", dbgTileName, typeid(*va).name());
+                        } else {
+                            LOG_I("Tile %s: unsupported vertex array type: %s", dbgTileName, typeid(*va).name());
+                        }
+                    }
+                    continue;
                 }
-
-                if (t && i < t->size()) {
-                    texcoords.push_back((float)(*t)[i].x());
-                    texcoords.push_back((float)(*t)[i].y());
-                } else {
-                    texcoords.push_back(0.0f); texcoords.push_back(0.0f);
-                }
-
-                // Batch ID (optional, for picking)
-                batchIds.push_back((float)inst.originalBatchId);
             }
 
-            // Indices
-            for (unsigned int k = 0; k < processedGeom->getNumPrimitiveSets(); ++k) {
-                osg::PrimitiveSet* ps = processedGeom->getPrimitiveSet(k);
-                if (ps->getMode() != osg::PrimitiveSet::TRIANGLES) continue;
+            if (v && !v->empty()) {
+                for (unsigned int i = 0; i < v->size(); ++i) {
+                    osg::Vec3 vf = (*v)[i];
+                    osg::Vec3d p(vf.x(), vf.y(), vf.z());
+                    p = p * inst.matrix;
+                    float px = (float)p.x();
+                    float py = (float)-p.z();
+                    float pz = (float)p.y();
+                    positions.push_back(px); positions.push_back(py); positions.push_back(pz);
+                    float enu_x = px, enu_y = py, enu_z = pz;
+                    if (enu_x < minPos[0]) minPos[0] = enu_x;
+                    if (enu_y < minPos[1]) minPos[1] = enu_y;
+                    if (enu_z < minPos[2]) minPos[2] = enu_z;
+                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
+                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
+                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
+                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                    if (n && i < n->size()) {
+                        osg::Vec3 nmf = (*n)[i];
+                        osg::Vec3d nm(nmf.x(), nmf.y(), nmf.z());
+                        nm = osg::Matrix::transform3x3(normalXform, nm); nm.normalize();
+                        normals.push_back((float)nm.x()); normals.push_back((float)-nm.z()); normals.push_back((float)nm.y());
+                    } else if (n3d && i < n3d->size()) {
+                        osg::Vec3d nm = (*n3d)[i];
+                        nm = osg::Matrix::transform3x3(normalXform, nm); nm.normalize();
+                        normals.push_back((float)nm.x()); normals.push_back((float)-nm.z()); normals.push_back((float)nm.y());
+                    } else {
+                        normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f);
+                    }
+                    if (t && i < t->size()) {
+                        texcoords.push_back((float)(*t)[i].x());
+                        texcoords.push_back((float)(*t)[i].y());
+                    } else if (t2d && i < t2d->size()) {
+                        texcoords.push_back((float)(*t2d)[i].x());
+                        texcoords.push_back((float)(*t2d)[i].y());
+                    } else {
+                        texcoords.push_back(0.0f); texcoords.push_back(0.0f);
+                    }
+                    batchIds.push_back((float)inst.originalBatchId);
+                }
+            } else if (v3d && !v3d->empty()) {
+                for (unsigned int i = 0; i < v3d->size(); ++i) {
+                    osg::Vec3d p = (*v3d)[i];
+                    p = p * inst.matrix;
+                    float px = (float)p.x();
+                    float py = (float)-p.z();
+                    float pz = (float)p.y();
+                    positions.push_back(px); positions.push_back(py); positions.push_back(pz);
+                    float enu_x = px, enu_y = py, enu_z = pz;
+                    if (enu_x < minPos[0]) minPos[0] = enu_x;
+                    if (enu_y < minPos[1]) minPos[1] = enu_y;
+                    if (enu_z < minPos[2]) minPos[2] = enu_z;
+                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
+                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
+                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
+                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                    if (n3d && i < n3d->size()) {
+                        osg::Vec3d nm = (*n3d)[i];
+                        nm = osg::Matrix::transform3x3(normalXform, nm); nm.normalize();
+                        normals.push_back((float)nm.x()); normals.push_back((float)-nm.z()); normals.push_back((float)nm.y());
+                    } else if (n && i < n->size()) {
+                        osg::Vec3 nmf = (*n)[i];
+                        osg::Vec3d nm(nmf.x(), nmf.y(), nmf.z());
+                        nm = osg::Matrix::transform3x3(normalXform, nm); nm.normalize();
+                        normals.push_back((float)nm.x()); normals.push_back((float)-nm.z()); normals.push_back((float)nm.y());
+                    } else {
+                        normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f);
+                    }
+                    if (t2d && i < t2d->size()) {
+                        texcoords.push_back((float)(*t2d)[i].x());
+                        texcoords.push_back((float)(*t2d)[i].y());
+                    } else if (t && i < t->size()) {
+                        texcoords.push_back((float)(*t)[i].x());
+                        texcoords.push_back((float)(*t)[i].y());
+                    } else {
+                        texcoords.push_back(0.0f); texcoords.push_back(0.0f);
+                    }
+                    batchIds.push_back((float)inst.originalBatchId);
+                }
+            } else if (v4 && !v4->empty()) {
+                for (unsigned int i = 0; i < v4->size(); ++i) {
+                    osg::Vec4 vf = (*v4)[i];
+                    osg::Vec3d p(vf.x(), vf.y(), vf.z());
+                    p = p * inst.matrix;
+                    float px = (float)p.x();
+                    float py = (float)-p.z();
+                    float pz = (float)p.y();
+                    positions.push_back(px); positions.push_back(py); positions.push_back(pz);
+                    float enu_x = px, enu_y = py, enu_z = pz;
+                    if (enu_x < minPos[0]) minPos[0] = enu_x;
+                    if (enu_y < minPos[1]) minPos[1] = enu_y;
+                    if (enu_z < minPos[2]) minPos[2] = enu_z;
+                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
+                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
+                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
+                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                    if (n && i < n->size()) {
+                        osg::Vec3 nmf = (*n)[i];
+                        osg::Vec3d nm(nmf.x(), nmf.y(), nmf.z());
+                        nm = osg::Matrix::transform3x3(normalXform, nm); nm.normalize();
+                        normals.push_back((float)nm.x()); normals.push_back((float)-nm.z()); normals.push_back((float)nm.y());
+                    } else if (n3d && i < n3d->size()) {
+                        osg::Vec3d nm = (*n3d)[i];
+                        nm = osg::Matrix::transform3x3(normalXform, nm); nm.normalize();
+                        normals.push_back((float)nm.x()); normals.push_back((float)-nm.z()); normals.push_back((float)nm.y());
+                    } else {
+                        normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f);
+                    }
+                    if (t && i < t->size()) {
+                        texcoords.push_back((float)(*t)[i].x());
+                        texcoords.push_back((float)(*t)[i].y());
+                    } else if (t2d && i < t2d->size()) {
+                        texcoords.push_back((float)(*t2d)[i].x());
+                        texcoords.push_back((float)(*t2d)[i].y());
+                    } else {
+                        texcoords.push_back(0.0f); texcoords.push_back(0.0f);
+                    }
+                    batchIds.push_back((float)inst.originalBatchId);
+                }
+            } else if (v4d && !v4d->empty()) {
+                for (unsigned int i = 0; i < v4d->size(); ++i) {
+                    osg::Vec4d vd = (*v4d)[i];
+                    osg::Vec3d p(vd.x(), vd.y(), vd.z());
+                    p = p * inst.matrix;
+                    float px = (float)p.x();
+                    float py = (float)-p.z();
+                    float pz = (float)p.y();
+                    positions.push_back(px); positions.push_back(py); positions.push_back(pz);
+                    float enu_x = px, enu_y = py, enu_z = pz;
+                    if (enu_x < minPos[0]) minPos[0] = enu_x;
+                    if (enu_y < minPos[1]) minPos[1] = enu_y;
+                    if (enu_z < minPos[2]) minPos[2] = enu_z;
+                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
+                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
+                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
+                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                    if (n3d && i < n3d->size()) {
+                        osg::Vec3d nm = (*n3d)[i];
+                        nm = osg::Matrix::transform3x3(normalXform, nm); nm.normalize();
+                        normals.push_back((float)nm.x()); normals.push_back((float)-nm.z()); normals.push_back((float)nm.y());
+                    } else if (n && i < n->size()) {
+                        osg::Vec3 nmf = (*n)[i];
+                        osg::Vec3d nm(nmf.x(), nmf.y(), nmf.z());
+                        nm = osg::Matrix::transform3x3(normalXform, nm); nm.normalize();
+                        normals.push_back((float)nm.x()); normals.push_back((float)-nm.z()); normals.push_back((float)nm.y());
+                    } else {
+                        normals.push_back(0.0f); normals.push_back(0.0f); normals.push_back(1.0f);
+                    }
+                    if (t2d && i < t2d->size()) {
+                        texcoords.push_back((float)(*t2d)[i].x());
+                        texcoords.push_back((float)(*t2d)[i].y());
+                    } else if (t && i < t->size()) {
+                        texcoords.push_back((float)(*t)[i].x());
+                        texcoords.push_back((float)(*t)[i].y());
+                    } else {
+                        texcoords.push_back(0.0f); texcoords.push_back(0.0f);
+                    }
+                    batchIds.push_back((float)inst.originalBatchId);
+                }
+            }
 
-                const osg::DrawElementsUShort* deus = dynamic_cast<const osg::DrawElementsUShort*>(ps);
-                const osg::DrawElementsUInt* deui = dynamic_cast<const osg::DrawElementsUInt*>(ps);
+        // Indices
+        for (unsigned int k = 0; k < processedGeom->getNumPrimitiveSets(); ++k) {
+            osg::PrimitiveSet* ps = processedGeom->getPrimitiveSet(k);
+            osg::PrimitiveSet::Mode mode = (osg::PrimitiveSet::Mode)ps->getMode();
+            if (mode == osg::PrimitiveSet::TRIANGLES) { triSets++; }
+            else if (mode == osg::PrimitiveSet::TRIANGLE_STRIP) { stripSets++; }
+            else if (mode == osg::PrimitiveSet::TRIANGLE_FAN) { fanSets++; }
+            else { otherSets++; continue; }
 
-                if (deus) {
+            const osg::DrawElementsUShort* deus = dynamic_cast<const osg::DrawElementsUShort*>(ps);
+            const osg::DrawElementsUInt* deui = dynamic_cast<const osg::DrawElementsUInt*>(ps);
+            const osg::DrawArrays* da = dynamic_cast<const osg::DrawArrays*>(ps);
+            if (da) {
+                drawArraysSets++;
+                if (mode == osg::PrimitiveSet::TRIANGLES) {
+                    unsigned int first = da->getFirst();
+                    unsigned int count = da->getCount();
+                    for (unsigned int idx = 0; idx + 2 < count; idx += 3) {
+                        indices.push_back(baseIndex + first + idx);
+                        indices.push_back(baseIndex + first + idx + 1);
+                        indices.push_back(baseIndex + first + idx + 2);
+                    }
+                } else if (mode == osg::PrimitiveSet::TRIANGLE_STRIP) {
+                    unsigned int first = da->getFirst();
+                    unsigned int count = da->getCount();
+                    for (unsigned int i = 0; i + 2 < count; ++i) {
+                        unsigned int a = baseIndex + first + i;
+                        unsigned int b = baseIndex + first + i + 1;
+                        unsigned int c = baseIndex + first + i + 2;
+                        if ((i & 1) == 0) { indices.push_back(a); indices.push_back(b); indices.push_back(c); }
+                        else { indices.push_back(b); indices.push_back(a); indices.push_back(c); }
+                    }
+                } else if (mode == osg::PrimitiveSet::TRIANGLE_FAN) {
+                    unsigned int first = da->getFirst();
+                    unsigned int count = da->getCount();
+                    unsigned int center = baseIndex + first;
+                    for (unsigned int i = 1; i + 1 < count; ++i) {
+                        indices.push_back(center);
+                        indices.push_back(baseIndex + first + i);
+                        indices.push_back(baseIndex + first + i + 1);
+                    }
+                }
+            }
+
+            if (deus) {
+                if (mode == osg::PrimitiveSet::TRIANGLES) {
                     for (unsigned int idx = 0; idx < deus->size(); ++idx) indices.push_back(baseIndex + (*deus)[idx]);
-                } else if (deui) {
+                } else if (mode == osg::PrimitiveSet::TRIANGLE_STRIP) {
+                    if (deus->size() >= 3) {
+                        for (unsigned int i = 0; i + 2 < deus->size(); ++i) {
+                            unsigned int a = baseIndex + (*deus)[i];
+                            unsigned int b = baseIndex + (*deus)[i + 1];
+                            unsigned int c = baseIndex + (*deus)[i + 2];
+                            if ((i & 1) == 0) { indices.push_back(a); indices.push_back(b); indices.push_back(c); }
+                            else { indices.push_back(b); indices.push_back(a); indices.push_back(c); }
+                        }
+                    }
+                } else if (mode == osg::PrimitiveSet::TRIANGLE_FAN) {
+                    if (deus->size() >= 3) {
+                        unsigned int center = baseIndex + (*deus)[0];
+                        for (unsigned int i = 1; i + 1 < deus->size(); ++i) {
+                            indices.push_back(center);
+                            indices.push_back(baseIndex + (*deus)[i]);
+                            indices.push_back(baseIndex + (*deus)[i + 1]);
+                        }
+                    }
+                }
+            } else if (deui) {
+                if (mode == osg::PrimitiveSet::TRIANGLES) {
                     for (unsigned int idx = 0; idx < deui->size(); ++idx) indices.push_back(baseIndex + (*deui)[idx]);
-                } else {
-                    // DrawArrays?
-                    // Not handled for now
+                } else if (mode == osg::PrimitiveSet::TRIANGLE_STRIP) {
+                    if (deui->size() >= 3) {
+                        for (unsigned int i = 0; i + 2 < deui->size(); ++i) {
+                            unsigned int a = baseIndex + (*deui)[i];
+                            unsigned int b = baseIndex + (*deui)[i + 1];
+                            unsigned int c = baseIndex + (*deui)[i + 2];
+                            if ((i & 1) == 0) { indices.push_back(a); indices.push_back(b); indices.push_back(c); }
+                            else { indices.push_back(b); indices.push_back(a); indices.push_back(c); }
+                        }
+                    }
+                } else if (mode == osg::PrimitiveSet::TRIANGLE_FAN) {
+                    if (deui->size() >= 3) {
+                        unsigned int center = baseIndex + (*deui)[0];
+                        for (unsigned int i = 1; i + 1 < deui->size(); ++i) {
+                            indices.push_back(center);
+                            indices.push_back(baseIndex + (*deui)[i]);
+                            indices.push_back(baseIndex + (*deui)[i + 1]);
+                        }
+                    }
                 }
             }
         }
+        }
 
-        if (positions.empty() || indices.empty()) continue;
+        if (positions.empty() || indices.empty()) {
+            if (dbgTileName) {
+                LOG_I("Tile %s: group produced no triangles: v=%zu i=%zu tri=%d strip=%d fan=%d other=%d missVtxInst=%d drawArrays=%d",
+                      dbgTileName,
+                      positions.size() / 3,
+                      indices.size() / 3,
+                      triSets, stripSets, fanSets, otherSets,
+                      missingVertexInstances, drawArraysSets);
+            }
+            continue;
+        }
+        if (stats) {
+            stats->vertex_count += positions.size() / 3;
+            stats->triangle_count += indices.size() / 3;
+        }
 
         // Write to buffer
         size_t posOffset = buffer.data.size();
@@ -667,7 +1072,7 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
     model.defaultScene = 0;
 }
 
-json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
+json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, int parentDepth, int childIndexAtParent) {
     json nodeJson;
     nodeJson["refine"] = "REPLACE";
 
@@ -700,27 +1105,29 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
     // 3. Children
     if (!node->children.empty()) {
         nodeJson["children"] = json::array();
-        for (auto child : node->children) {
-            json childJson = processNode(child, parentPath);
-            nodeJson["children"].push_back(childJson);
-
-            // Expand tightBox by child's bounding volume
-            try {
-                auto& cBoxJson = childJson["boundingVolume"]["box"];
-                if (cBoxJson.is_array() && cBoxJson.size() == 12) {
-                    double cx = cBoxJson[0];
-                    double cy = cBoxJson[1];
-                    double cz = cBoxJson[2];
-                    double dx = cBoxJson[3];
-                    double dy = cBoxJson[7];
-                    double dz = cBoxJson[11];
-
-                    // Reconstruct box (approximate AABB from OBB)
-                    tightBox.expandBy(osg::Vec3d(cx - dx, cy - dy, cz - dz));
-                    tightBox.expandBy(osg::Vec3d(cx + dx, cy + dy, cz + dz));
-                    hasTightBox = true;
-                }
-            } catch (...) {}
+        for (size_t i = 0; i < node->children.size(); ++i) {
+            auto child = node->children[i];
+            json childJson = processNode(child, parentPath, node->depth, (int)i);
+            bool isEmptyChild = (!childJson.contains("content")) && (!childJson.contains("children") || childJson["children"].empty());
+            if (!isEmptyChild) {
+                nodeJson["children"].push_back(childJson);
+                try {
+                    auto& cBoxJson = childJson["boundingVolume"]["box"];
+                    if (cBoxJson.is_array() && cBoxJson.size() == 12) {
+                        double cx = cBoxJson[0];
+                        double cy = cBoxJson[1];
+                        double cz = cBoxJson[2];
+                        double dx = cBoxJson[3];
+                        double dy = cBoxJson[7];
+                        double dz = cBoxJson[11];
+                        tightBox.expandBy(osg::Vec3d(cx - dx, cy - dy, cz - dz));
+                        tightBox.expandBy(osg::Vec3d(cx + dx, cy + dy, cz + dz));
+                        hasTightBox = true;
+                    }
+                } catch (...) {}
+            } else {
+                LOG_I("Filtered empty tile: parentDepth=%d childIndex=%d nodes=%zu", node->depth, (int)i, node->children[i]->content.size());
+            }
         }
     }
 
@@ -730,7 +1137,7 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
         double dx = tightBox.xMax() - tightBox.xMin();
         double dy = tightBox.yMax() - tightBox.yMin();
         double dz = tightBox.zMax() - tightBox.zMin();
-        diagonal = std::sqrt(dx*dx + dy*dy + dz*dz);
+        double diagonalOriginal = std::sqrt(dx*dx + dy*dy + dz*dz);
 
         double cx = tightBox.center().x();
         double cy = tightBox.center().y();
@@ -739,10 +1146,12 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
         double hy = (tightBox.yMax() - tightBox.yMin()) / 2.0;
         double hz = (tightBox.zMax() - tightBox.zMin()) / 2.0;
 
-        // Add small padding (10%) to avoid near-plane culling or precision issues
-        hx *= 1.1;
-        hy *= 1.1;
-        hz *= 1.1;
+        // Add small padding to avoid near-plane culling or precision issues
+        hx = std::max(hx * 1.25, 1e-6);
+        hy = std::max(hy * 1.25, 1e-6);
+        hz = std::max(hz * 1.25, 1e-6);
+        diagonal = 2.0 * std::sqrt(hx*hx + hy*hy + hz*hz);
+        LOG_I("Node depth=%d tightBox center=(%.3f,%.3f,%.3f) halfAxes=(%.3f,%.3f,%.3f) diagOriginal=%.3f diagInflated=%.3f inflate=1.25", node->depth, cx, cy, cz, hx, hy, hz, diagonalOriginal, diagonal);
 
         nodeJson["boundingVolume"] = {
             {"box", {
@@ -762,10 +1171,11 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
         double extentY = (node->bbox.yMax() - node->bbox.yMin()) / 2.0;
         double extentZ = (node->bbox.zMax() - node->bbox.zMin()) / 2.0;
 
-        // Add padding to fallback as well
-        extentX *= 1.1;
-        extentY *= 1.1;
-        extentZ *= 1.1;
+        extentX = std::max(extentX * 1.25, 1e-6);
+        extentY = std::max(extentY * 1.25, 1e-6);
+        extentZ = std::max(extentZ * 1.25, 1e-6);
+        diagonal = 2.0 * std::sqrt(extentX*extentX + extentY*extentY + extentZ*extentZ);
+        LOG_I("Node depth=%d fallbackBox center=(%.3f,%.3f,%.3f) halfAxes=(%.3f,%.3f,%.3f) diagInflated=%.3f inflate=1.25", node->depth, cx, -cz, cy, extentX, extentZ, extentY, diagonal);
 
         diagonal = std::sqrt(extentX*extentX*4 + extentY*extentY*4 + extentZ*extentZ*4);
 
@@ -779,11 +1189,20 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath) {
         };
     }
 
-    // Use a small non-zero error even for leaves to prevent aggressive culling in some viewers,
-    // or keep 0.0 if strict compliance is desired.
-    // However, if it is a root node (diagonal large), 0.0 might be confusing.
-    // For now, we stick to 0.0 for leaves but ensure diagonal is correct for parents.
-    nodeJson["geometricError"] = node->isLeaf() ? 0.0 : diagonal;
+    // Geometric error = scale * diagonal (no clamp). Ensure > 0 by epsilon if degenerate.
+    double geOut = settings.geScale * (diagonal > 0.0 ? diagonal : 1e-3);
+    nodeJson["geometricError"] = geOut;
+    std::string refineMode = "REPLACE";
+    nodeJson["refine"] = refineMode;
+    LOG_I("Node depth=%d isLeaf=%d content=%zu children=%zu geScale=%.3f geOut=%.3f refine=%s", node->depth, (int)node->isLeaf(), node->content.size(), node->children.size(), settings.geScale, geOut, refineMode.c_str());
+    {
+        auto& acc = levelStats[node->depth];
+        acc.count += 1;
+        acc.sumDiag += diagonal;
+        acc.sumGe += geOut;
+        if (hasTightBox) acc.tightCount += 1; else acc.fallbackCount += 1;
+        if (refineMode == "ADD") acc.refineAdd += 1; else acc.refineReplace += 1;
+    }
 
     return nodeJson;
 }
@@ -800,7 +1219,15 @@ std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vect
     int batchIdCounter = 0;
     osg::BoundingBox contentBox;
 
-    appendGeometryToModel(model, instances, settings, &batchTableJson, &batchIdCounter, simParams, &contentBox);
+    TileStats tileStats;
+    appendGeometryToModel(model, instances, settings, &batchTableJson, &batchIdCounter, simParams, &contentBox, &tileStats, tileName.c_str());
+    LOG_I("Tile %s: nodes=%zu triangles=%zu vertices=%zu materials=%zu", tileName.c_str(), tileStats.node_count, tileStats.triangle_count, tileStats.vertex_count, tileStats.material_count);
+
+    // Skip writing B3DM if no mesh content was generated
+    if (tileStats.triangle_count == 0 || model.meshes.empty()) {
+        LOG_I("Tile %s: no content generated, skip B3DM", tileName.c_str());
+        return {"", contentBox};
+    }
 
     // 2. Create B3DM wrapping GLB
     std::string filename = tileName + ".b3dm";
@@ -897,6 +1324,7 @@ void FBXPipeline::writeTilesetJson(const std::string& basePath, const osg::Bound
         geometricError = std::sqrt(dx*dx + dy*dy + dz*dz);
     }
     tileset["geometricError"] = geometricError;
+    LOG_I("Tileset top-level geometricError=%.3f", geometricError);
 
     // Root
     tileset["root"] = rootContent;
@@ -924,6 +1352,7 @@ void FBXPipeline::writeTilesetJson(const std::string& basePath, const osg::Bound
 
                 // Diagonal of the box (2 * half_diagonal)
                 diag = 2.0 * std::sqrt(xlen*xlen + ylen*ylen + zlen*zlen);
+                LOG_I("Root boundingVolume lengths x=%.3f y=%.3f z=%.3f diag=%.3f", xlen, ylen, zlen, diag);
              }
          }
 
@@ -931,6 +1360,7 @@ void FBXPipeline::writeTilesetJson(const std::string& basePath, const osg::Bound
             tileset["root"]["geometricError"] = diag;
             tileset["geometricError"] = tileset["root"]["geometricError"];
             LOG_I("Forcing root geometric error to %f (calculated from root box)", diag);
+            LOG_I("Tileset geometricError updated to root=%.3f", double(tileset["root"]["geometricError"]));
          } else {
              // Fallback to globalBounds if box missing (unlikely)
              // globalBounds is Y-up from FBX, but size is same
@@ -941,15 +1371,13 @@ void FBXPipeline::writeTilesetJson(const std::string& basePath, const osg::Bound
              tileset["root"]["geometricError"] = fallbackDiag;
              tileset["geometricError"] = tileset["root"]["geometricError"];
              LOG_I("Forcing root geometric error to %f (calculated from global bounds)", fallbackDiag);
+             LOG_I("Tileset geometricError updated to fallback=%.3f", double(tileset["root"]["geometricError"]));
          }
     }
 
-    // Add Transform if geolocation is provided
+    // Always add Transform to anchor local ENU coordinates to ECEF
     if (settings.longitude != 0.0 || settings.latitude != 0.0 || settings.height != 0.0) {
-        // Calculate ENU to ECEF matrix
         glm::dmat4 enuToEcef = GeoTransform::CalcEnuToEcefMatrix(settings.longitude, settings.latitude, settings.height);
-
-        // GLM is column-major, 3D Tiles expects column-major array of 16 numbers
         const double* m = (const double*)&enuToEcef;
         tileset["root"]["transform"] = {
             m[0], m[1], m[2], m[3],
@@ -957,12 +1385,140 @@ void FBXPipeline::writeTilesetJson(const std::string& basePath, const osg::Bound
             m[8], m[9], m[10], m[11],
             m[12], m[13], m[14], m[15]
         };
+        LOG_I("Applied root transform ENU->ECEF at lon=%.6f lat=%.6f h=%.3f", settings.longitude, settings.latitude, settings.height);
+    } else {
+        LOG_W("No geolocation provided; root.transform not set. Tiles remain in local ENU space.");
     }
 
     std::string s = tileset.dump(4);
     std::ofstream out(fs::path(basePath) / "tileset.json");
     out << s;
     out.close();
+}
+
+void FBXPipeline::logLevelStats() {
+    std::vector<int> levels;
+    levels.reserve(levelStats.size());
+    for (const auto& kv : levelStats) levels.push_back(kv.first);
+    std::sort(levels.begin(), levels.end());
+    LOG_I("LevelStats summary begin");
+    for (int d : levels) {
+        const auto& acc = levelStats[d];
+        double avgDiag = acc.count ? acc.sumDiag / acc.count : 0.0;
+        double avgGe = acc.count ? acc.sumGe / acc.count : 0.0;
+        double tightPct = acc.count ? (double)acc.tightCount * 100.0 / (double)acc.count : 0.0;
+        double fallbackPct = acc.count ? (double)acc.fallbackCount * 100.0 / (double)acc.count : 0.0;
+        double addPct = acc.count ? (double)acc.refineAdd * 100.0 / (double)acc.count : 0.0;
+        double replacePct = acc.count ? (double)acc.refineReplace * 100.0 / (double)acc.count : 0.0;
+        LOG_I("LevelStats depth=%d tiles=%zu avgDiag=%.3f avgGe=%.3f inflate=1.25 tight=%.1f%% fallback=%.1f%% refineAdd=%.1f%% refineReplace=%.1f%%", d, acc.count, avgDiag, avgGe, tightPct, fallbackPct, addPct, replacePct);
+    }
+    LOG_I("LevelStats summary end");
+}
+
+nlohmann::json FBXPipeline::buildAverageTiles(const osg::BoundingBox& globalBounds, const std::string& parentPath) {
+    nlohmann::json rootJson;
+    rootJson["children"] = nlohmann::json::array();
+    rootJson["refine"] = "REPLACE";
+
+    // Gather all instances
+    std::vector<InstanceRef> all;
+    for (auto& pair : loader->meshPool) {
+        MeshInstanceInfo& info = pair.second;
+        if (!info.geometry) continue;
+        for (size_t i = 0; i < info.transforms.size(); ++i) {
+            InstanceRef ref;
+            ref.meshInfo = &info;
+            ref.transformIndex = (int)i;
+            all.push_back(ref);
+        }
+    }
+
+    // Split by average count and generate children; simultaneously accumulate ENU global bounds
+    osg::BoundingBox enuGlobal;
+    size_t total = all.size();
+    size_t step = std::max<size_t>(1, (size_t)settings.maxItemsPerTile);
+    size_t tiles = (total + step - 1) / step;
+    for (size_t t = 0; t < tiles; ++t) {
+        size_t start = t * step;
+        size_t end = std::min(total, start + step);
+        if (start >= end) break;
+        std::vector<InstanceRef> chunk(all.begin() + start, all.begin() + end);
+        std::string tileName = "tile_" + std::to_string(t);
+        SimplificationParams simParams;
+        auto b3dm = createB3DM(chunk, parentPath, tileName, simParams);
+        if (b3dm.first.empty()) {
+            LOG_I("AvgSplit tile=%s produced no content, skipped", tileName.c_str());
+            continue;
+        }
+        osg::BoundingBox cb = b3dm.second; // Already ENU due to appendGeometryToModel
+        enuGlobal.expandBy(cb);
+
+        double cx = cb.center().x();
+        double cy = cb.center().y();
+        double cz = cb.center().z();
+        double hx = std::max((cb.xMax() - cb.xMin()) / 2.0 * 1.25, 1e-6);
+        double hy = std::max((cb.yMax() - cb.yMin()) / 2.0 * 1.25, 1e-6);
+        double hz = std::max((cb.zMax() - cb.zMin()) / 2.0 * 1.25, 1e-6);
+        double diag = 2.0 * std::sqrt(hx*hx + hy*hy + hz*hz);
+        double geOut = settings.geScale * diag;
+
+        nlohmann::json child;
+        child["boundingVolume"]["box"] = { cx, cy, cz, hx, 0, 0, 0, hy, 0, 0, 0, hz };
+        child["geometricError"] = geOut;
+        child["refine"] = "REPLACE";
+        child["content"]["uri"] = b3dm.first;
+        rootJson["children"].push_back(child);
+
+        auto& acc = levelStats[1];
+        acc.count += 1;
+        acc.sumDiag += diag;
+        acc.sumGe += geOut;
+        acc.tightCount += 1;
+        acc.refineReplace += 1;
+        LOG_I("AvgSplit tile=%s count=%zu diag=%.3f ge=%.3f", tileName.c_str(), chunk.size(), diag, geOut);
+    }
+
+    // Compute root bounding volume from union of children (ENU space, consistent with root.transform)
+    if (enuGlobal.valid()) {
+        double gcx = enuGlobal.center().x();
+        double gcy = enuGlobal.center().y();
+        double gcz = enuGlobal.center().z();
+        double halfX = std::max((enuGlobal.xMax() - enuGlobal.xMin()) / 2.0 * 1.25, 1e-6);
+        double halfY = std::max((enuGlobal.yMax() - enuGlobal.yMin()) / 2.0 * 1.25, 1e-6);
+        double halfZ = std::max((enuGlobal.zMax() - enuGlobal.zMin()) / 2.0 * 1.25, 1e-6);
+        double gdiag = 2.0 * std::sqrt(halfX*halfX + halfY*halfY + halfZ*halfZ);
+        double gge = settings.geScale * gdiag;
+        rootJson["boundingVolume"]["box"] = { gcx, gcy, gcz, halfX, 0, 0, 0, halfY, 0, 0, 0, halfZ };
+        rootJson["geometricError"] = gge;
+        auto& acc = levelStats[0];
+        acc.count += 1;
+        acc.sumDiag += gdiag;
+        acc.sumGe += gge;
+        acc.tightCount += 1;
+        acc.refineReplace += 1;
+        LOG_I("AvgSplit root diag=%.3f ge=%.3f center=(%.3f,%.3f,%.3f) halfAxes=(%.3f,%.3f,%.3f)", gdiag, gge, gcx, gcy, gcz, halfX, halfY, halfZ);
+    } else {
+        // Fallback to transformed original global bounds if no children created
+        double halfX = std::max((globalBounds.xMax() - globalBounds.xMin()) / 2.0 * 1.25, 1e-6);
+        double halfY = std::max((globalBounds.yMax() - globalBounds.yMin()) / 2.0 * 1.25, 1e-6);
+        double halfZ = std::max((globalBounds.zMax() - globalBounds.zMin()) / 2.0 * 1.25, 1e-6);
+        double gdiag = 2.0 * std::sqrt(halfX*halfX + halfY*halfY + halfZ*halfZ);
+        double gge = settings.geScale * gdiag;
+        double gcx = globalBounds.center().x();
+        double gcy = -globalBounds.center().z();
+        double gcz = globalBounds.center().y();
+        rootJson["boundingVolume"]["box"] = { gcx, gcy, gcz, halfX, 0, 0, 0, halfZ, 0, 0, 0, halfY };
+        rootJson["geometricError"] = gge;
+        auto& acc = levelStats[0];
+        acc.count += 1;
+        acc.sumDiag += gdiag;
+        acc.sumGe += gge;
+        acc.fallbackCount += 1;
+        acc.refineReplace += 1;
+        LOG_I("AvgSplit root (fallback) diag=%.3f ge=%.3f center=(%.3f,%.3f,%.3f) halfAxes=(%.3f,%.3f,%.3f)", gdiag, gge, gcx, gcy, gcz, halfX, halfZ, halfY);
+    }
+
+    return rootJson;
 }
 
 // C-API Implementation
