@@ -9,7 +9,6 @@
 ## Features
 
 - **Osgb to 3D-Tiles**: Convert OpenSceneGraph Binary format to 3D-Tiles format for efficient geospatial data visualization
-- **FBX to 3D-Tiles**: Convert FBX models to 3D-Tiles format with embedded textures
 - **Shapefile to 3D-Tiles**: Transform Esri Shapefile data to 3D-Tiles for web-based 3D visualization
 - **Multi-platform Support**: Fully supported on Linux, macOS (Intel & Apple Silicon), and Windows
 - **Hybrid Stack**: Combines Rust for CLI/data handling with C++ for high-performance 3D processing
@@ -217,9 +216,6 @@ _3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"pbr\": true}"
 # from single shp file
 _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
 
-# from single fbx file
-_3dtile.exe -f fbx -i E:\Data\model.fbx -o E:\Data\output --enable-texture-compress
-
 # from single osgb file to glb file
 _3dtile.exe -f gltf -i E:\Data\TT\001.osgb -o E:\Data\TT\001.glb
 
@@ -256,7 +252,7 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 ### Required Options
 
 - `-f, --format <FORMAT>` - Input data format
-  Available formats: `osgb`, `shape`, `gltf`, `b3dm`, `fbx`
+  Available formats: `osgb`, `shape`, `gltf`, `b3dm`
 
 - `-i, --input <PATH>` - Input file or directory path
 
@@ -291,27 +287,15 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 
 - `--enable-simplify` - Enable mesh simplification
   Reduces polygon count while preserving visual quality. Uses meshoptimizer library for vertex cache optimization, overdraw reduction, and adaptive simplification.
-  - **Applies to:** OSGB, FBX, and Shapefile formats
+  - **Applies to:** OSGB and Shapefile formats
   - **Impact:** Smaller file size, faster rendering, longer processing time
   - **Use case:** Large datasets where render performance is critical
   - **With LOD:** Controls whether simplification is applied to each LOD level
 
 - `--enable-draco` - Enable Draco mesh compression
   Applies Google Draco compression to geometry data (vertices, normals, indices).
-  - **Applies to:** OSGB, FBX, and Shapefile formats
+  - **Applies to:** OSGB and Shapefile formats
   - **Impact:** 3-6x smaller geometry size, slower processing and decoding
-  - **Note:** Requires a Draco-compatible viewer (e.g., CesiumJS with Draco loader)
-
-- `--enable-texture-compress` - Enable KTX2 texture compression
-  Compresses textures to KTX2 (Basis Universal) format.
-  - **Applies to:** OSGB and FBX formats
-  - **Impact:** Significantly reduces GPU memory usage and download size
-  - **Note:** Requires a viewer with KTX2 support
-
-- `--enable-pbr` - Enable PBR material support
-  Generates glTF 2.0 PBR materials instead of legacy technique-based materials.
-  - **Applies to:** OSGB and FBX formats
-  - **Default:** Disabled (uses KHR_techniques_webgl or unlit materials)
   - **Use case:** Bandwidth-constrained scenarios, web streaming
   - **With LOD:**
     - Non-LOD mode: Compresses all output

@@ -5,7 +5,6 @@
 ## 主要功能
 
 - **Osgb 转 3D-Tiles**: 将 OpenSceneGraph 二进制格式转换为 3D-Tiles 格式，为地理空间数据提供高效可视化
-- **FBX 转 3D-Tiles**: 将 FBX 模型转换为 3D-Tiles 格式，支持嵌入式纹理
 - **Shapefile 转 3D-Tiles**: 将 Esri Shapefile 数据转换为 3D-Tiles，供网页基 3D 可视化使用
 - **多平台支持**: 完整支持 Linux, macOS (Intel & Apple Silicon) 和 Windows
 - **混合栈**: 使用 Rust 处理 CLI/数据，C++ 处理高性能 3D 处理
@@ -299,9 +298,6 @@ _3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"offset\": 0}"
 # from single shp file
 _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
 
-# from single fbx file (支持嵌入式纹理)
-_3dtile.exe -f fbx -i E:\Data\model.fbx -o E:\Data\output --enable-texture-compress
-
 # from single osgb file to glb file
 _3dtile.exe -f gltf -i E:\Data\TT\001.osgb -o E:\Data\TT\001.glb
 
@@ -335,10 +331,10 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 
 ## ③ 参数说明
 
-### 必选选项
+### 必需选项
 
-- `-f, --format <FORMAT>` - 输入数据格式
-  可用格式: `osgb`, `shape`, `gltf`, `b3dm`, `fbx`
+- `-f, --format <FORMAT>` 输入数据格式
+  可选格式：`osgb`, `shape`, `gltf`, `b3dm`
   - `osgb` 为倾斜摄影格式数据
   - `shape` 为 Shapefile 面数据
   - `gltf` 为单一通用模型转 gltf
