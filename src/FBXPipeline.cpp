@@ -22,6 +22,7 @@
 #include "lod_pipeline.h"
 #include <typeinfo>
 #include <osg/GL>
+#include <cmath>
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -127,7 +128,125 @@ void FBXPipeline::run() {
 
     rootNode = new OctreeNode();
 
+    // --- 1. Pre-pass: Detect Outliers ---
+    osg::Vec3d centroid(0,0,0);
+    size_t totalInstanceCount = 0;
+
+    // Track Extrema for Debugging
+    struct Extrema { double val; std::string name; osg::Vec3d pos; };
+    Extrema minX = {DBL_MAX, "", osg::Vec3d()};
+    Extrema maxX = {-DBL_MAX, "", osg::Vec3d()};
+    Extrema minY = {DBL_MAX, "", osg::Vec3d()};
+    Extrema maxY = {-DBL_MAX, "", osg::Vec3d()};
+    Extrema minZ = {DBL_MAX, "", osg::Vec3d()};
+    Extrema maxZ = {-DBL_MAX, "", osg::Vec3d()};
+
+    struct VolumeInfo {
+        std::string name;
+        double volume;
+        double dx, dy, dz;
+        osg::Vec3d center;
+        osg::Vec3d minPt, maxPt;
+    };
+    std::vector<VolumeInfo> volumeStats;
+
+    LOG_I("--- Analyzing All Processed Nodes (Sorted by Volume) ---");
+    {
+        osg::Vec3d sumPos(0,0,0);
+        for (auto& pair : loader->meshPool) {
+            MeshInstanceInfo& info = pair.second;
+            if (!info.geometry) continue;
+            osg::BoundingBox geomBox = info.geometry->getBoundingBox();
+            for (size_t i = 0; i < info.transforms.size(); ++i) {
+                osg::Vec3d center = geomBox.center() * info.transforms[i];
+                sumPos += center;
+                totalInstanceCount++;
+
+                // Track Extrema
+                if (center.x() < minX.val) minX = {center.x(), info.nodeNames[i], center};
+                if (center.x() > maxX.val) maxX = {center.x(), info.nodeNames[i], center};
+                if (center.y() < minY.val) minY = {center.y(), info.nodeNames[i], center};
+                if (center.y() > maxY.val) maxY = {center.y(), info.nodeNames[i], center};
+                if (center.z() < minZ.val) minZ = {center.z(), info.nodeNames[i], center};
+                if (center.z() > maxZ.val) maxZ = {center.z(), info.nodeNames[i], center};
+
+                // Calculate World AABB
+                osg::BoundingBox worldBox;
+                for(int k=0; k<8; ++k) {
+                    worldBox.expandBy(geomBox.corner(k) * info.transforms[i]);
+                }
+                double dx = worldBox.xMax() - worldBox.xMin();
+                double dy = worldBox.yMax() - worldBox.yMin();
+                double dz = worldBox.zMax() - worldBox.zMin();
+                double vol = dx * dy * dz;
+
+                volumeStats.push_back({
+                    (i < info.nodeNames.size()) ? info.nodeNames[i] : "unknown",
+                    vol, dx, dy, dz, center,
+                    osg::Vec3d(worldBox.xMin(), worldBox.yMin(), worldBox.zMin()),
+                    osg::Vec3d(worldBox.xMax(), worldBox.yMax(), worldBox.zMax())
+                });
+            }
+        }
+
+        // Sort by Volume Descending
+        std::sort(volumeStats.begin(), volumeStats.end(), [](const VolumeInfo& a, const VolumeInfo& b){
+            return a.volume > b.volume;
+        });
+
+        // Log
+        for(const auto& v : volumeStats) {
+            LOG_I("Node: '%s' Vol=%.3f Dim=(%.2f, %.2f, %.2f) Center=(%.2f, %.2f, %.2f) Min=(%.2f, %.2f, %.2f) Max=(%.2f, %.2f, %.2f)",
+                  v.name.c_str(), v.volume, v.dx, v.dy, v.dz,
+                  v.center.x(), v.center.y(), v.center.z(),
+                  v.minPt.x(), v.minPt.y(), v.minPt.z(),
+                  v.maxPt.x(), v.maxPt.y(), v.maxPt.z());
+        }
+
+        if (totalInstanceCount > 0) {
+            centroid = sumPos / (double)totalInstanceCount;
+        }
+    }
+
+    LOG_I("--- Scene Extrema Analysis ---");
+    LOG_I("Min X: '%s' at %.3f", minX.name.c_str(), minX.val);
+    LOG_I("Max X: '%s' at %.3f", maxX.name.c_str(), maxX.val);
+    LOG_I("Min Y: '%s' at %.3f", minY.name.c_str(), minY.val);
+    LOG_I("Max Y: '%s' at %.3f", maxY.name.c_str(), maxY.val);
+    LOG_I("Min Z: '%s' at %.3f", minZ.name.c_str(), minZ.val);
+    LOG_I("Max Z: '%s' at %.3f", maxZ.name.c_str(), maxZ.val);
+    LOG_I("Total Extent: X[%.3f, %.3f] Y[%.3f, %.3f] Z[%.3f, %.3f]",
+          minX.val, maxX.val, minY.val, maxY.val, minZ.val, maxZ.val);
+
+    // Calculate distance statistics
+    double maxDist = 0.0;
+    double sumDist = 0.0;
+    if (totalInstanceCount > 0) {
+        for (auto& pair : loader->meshPool) {
+            MeshInstanceInfo& info = pair.second;
+            if (!info.geometry) continue;
+            osg::BoundingBox geomBox = info.geometry->getBoundingBox();
+            for (size_t i = 0; i < info.transforms.size(); ++i) {
+                double d = (geomBox.center() * info.transforms[i] - centroid).length();
+                if (d > maxDist) maxDist = d;
+                sumDist += d;
+            }
+        }
+    }
+    double avgDist = (totalInstanceCount > 0) ? (sumDist / totalInstanceCount) : 0.0;
+
+    // Threshold: Only filter if we have very far objects (> 10km) AND they are far from average
+    // Adjust this logic as needed.
+    double outlierThreshold = std::max(10000.0, avgDist * 20.0);
+    bool hasOutliers = (maxDist > outlierThreshold);
+
+    LOG_I("Scene Analysis: Count=%zu Centroid=(%.2f, %.2f, %.2f)", totalInstanceCount, centroid.x(), centroid.y(), centroid.z());
+    LOG_I("Distance Stats: Avg=%.2f Max=%.2f Threshold=%.2f", avgDist, maxDist, outlierThreshold);
+
+    // --- 2. Main Pass: Build Root Node & Filter ---
     osg::BoundingBox globalBounds;
+    size_t skippedCount = 0;
+
     for (auto& pair : loader->meshPool) {
         MeshInstanceInfo& info = pair.second;
         if (!info.geometry) continue;
@@ -135,6 +254,19 @@ void FBXPipeline::run() {
         osg::BoundingBox geomBox = info.geometry->getBoundingBox();
         for (size_t i = 0; i < info.transforms.size(); ++i) {
             const auto& mat = info.transforms[i];
+
+            // Outlier Check
+            if (hasOutliers) {
+                osg::Vec3d instCenter = geomBox.center() * mat;
+                double d = (instCenter - centroid).length();
+                if (d > outlierThreshold) {
+                    std::string name = (i < info.nodeNames.size()) ? info.nodeNames[i] : "unknown";
+                    LOG_W("Filtering Outlier: '%s' Dist=%.2f Pos=(%.2f, %.2f, %.2f)",
+                          name.c_str(), d, instCenter.x(), instCenter.y(), instCenter.z());
+                    skippedCount++;
+                    continue; // SKIP this instance
+                }
+            }
 
             // Expand global bounds
             osg::BoundingBox instBox;
@@ -148,7 +280,13 @@ void FBXPipeline::run() {
             rootNode->content.push_back(ref);
         }
     }
+
+    if (skippedCount > 0) {
+        LOG_I("Filtered %zu outlier instances.", skippedCount);
+    }
     rootNode->bbox = globalBounds;
+
+    // --- End of Filtering ---
 
     json rootJson;
     if (settings.splitAverageByCount) {
@@ -159,6 +297,19 @@ void FBXPipeline::run() {
         buildOctree(rootNode);
         LOG_I("Processing Nodes and Generating Tiles...");
         rootJson = processNode(rootNode, settings.outputPath, -1, -1);
+    }
+
+    LOG_I("--- Generated Tile Bounding Boxes (Sorted by Volume) ---");
+    std::sort(tileStats.begin(), tileStats.end(), [](const TileInfo& a, const TileInfo& b){
+        return a.volume > b.volume;
+    });
+
+    for(const auto& t : tileStats) {
+        LOG_I("Tile: '%s' Depth=%d Vol=%.3f Dim=(%.2f, %.2f, %.2f) Center=(%.2f, %.2f, %.2f) Min=(%.2f, %.2f, %.2f) Max=(%.2f, %.2f, %.2f)",
+              t.name.c_str(), t.depth, t.volume, t.dx, t.dy, t.dz,
+              t.center.x(), t.center.y(), t.center.z(),
+              t.minPt.x(), t.minPt.y(), t.minPt.z(),
+              t.maxPt.x(), t.maxPt.y(), t.maxPt.z());
     }
 
     LOG_I("Writing tileset.json...");
@@ -255,7 +406,7 @@ void FBXPipeline::buildOctree(OctreeNode* node) {
 }
 
 struct TileStats { size_t node_count = 0; size_t vertex_count = 0; size_t triangle_count = 0; size_t material_count = 0; };
-void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef>& instances, const PipelineSettings& settings, json* batchTableJson, int* batchIdCounter, const SimplificationParams& simParams, osg::BoundingBox* outBox = nullptr, TileStats* stats = nullptr, const char* dbgTileName = nullptr) {
+void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef>& instances, const PipelineSettings& settings, json* batchTableJson, int* batchIdCounter, const SimplificationParams& simParams, osg::BoundingBox* outBox = nullptr, TileStats* stats = nullptr, const char* dbgTileName = nullptr, osg::Vec3d rtcOffset = osg::Vec3d(0,0,0)) {
     if (instances.empty()) return;
 
     // Ensure model has at least one buffer
@@ -338,15 +489,15 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                                     float px = (float)p.x();
                                     float py = (float)-p.z();
                                     float pz = (float)p.y();
+                                    // RTC disabled: No offset subtraction
                                     positions.push_back(px); positions.push_back(py); positions.push_back(pz);
-                                    float enu_x = px, enu_y = py, enu_z = pz;
-                                    if (enu_x < minPos[0]) minPos[0] = enu_x;
-                                    if (enu_y < minPos[1]) minPos[1] = enu_y;
-                                    if (enu_z < minPos[2]) minPos[2] = enu_z;
-                                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
-                                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
-                                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
-                                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                                    if (px < minPos[0]) minPos[0] = px;
+                                    if (py < minPos[1]) minPos[1] = py;
+                                    if (pz < minPos[2]) minPos[2] = pz;
+                                    if (px > maxPos[0]) maxPos[0] = px;
+                                    if (py > maxPos[1]) maxPos[1] = py;
+                                    if (pz > maxPos[2]) maxPos[2] = pz;
+                                    if (outBox) outBox->expandBy(osg::Vec3d(px, py, pz));
                                     if (n && i < n->size()) {
                                         osg::Vec3 nm = (*n)[i];
                                         osg::Vec3d nmd(nm.x(), nm.y(), nm.z());
@@ -420,15 +571,15 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                                     float px = (float)p.x();
                                     float py = (float)-p.z();
                                     float pz = (float)p.y();
+                                    // RTC disabled: No offset subtraction
                                     positions.push_back(px); positions.push_back(py); positions.push_back(pz);
-                                    float enu_x = px, enu_y = py, enu_z = pz;
-                                    if (enu_x < minPos[0]) minPos[0] = enu_x;
-                                    if (enu_y < minPos[1]) minPos[1] = enu_y;
-                                    if (enu_z < minPos[2]) minPos[2] = enu_z;
-                                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
-                                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
-                                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
-                                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                                    if (px < minPos[0]) minPos[0] = px;
+                                    if (py < minPos[1]) minPos[1] = py;
+                                    if (pz < minPos[2]) minPos[2] = pz;
+                                    if (px > maxPos[0]) maxPos[0] = px;
+                                    if (py > maxPos[1]) maxPos[1] = py;
+                                    if (pz > maxPos[2]) maxPos[2] = pz;
+                                    if (outBox) outBox->expandBy(osg::Vec3d(px, py, pz));
                                     if (n && i < n->size()) {
                                         osg::Vec3 nm = (*n)[i];
                                         osg::Vec3d nmd(nm.x(), nm.y(), nm.z());
@@ -522,15 +673,15 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     float px = (float)p.x();
                     float py = (float)-p.z();
                     float pz = (float)p.y();
+                    // RTC disabled
                     positions.push_back(px); positions.push_back(py); positions.push_back(pz);
-                    float enu_x = px, enu_y = py, enu_z = pz;
-                    if (enu_x < minPos[0]) minPos[0] = enu_x;
-                    if (enu_y < minPos[1]) minPos[1] = enu_y;
-                    if (enu_z < minPos[2]) minPos[2] = enu_z;
-                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
-                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
-                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
-                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                    if (px < minPos[0]) minPos[0] = px;
+                    if (py < minPos[1]) minPos[1] = py;
+                    if (pz < minPos[2]) minPos[2] = pz;
+                    if (px > maxPos[0]) maxPos[0] = px;
+                    if (py > maxPos[1]) maxPos[1] = py;
+                    if (pz > maxPos[2]) maxPos[2] = pz;
+                    if (outBox) outBox->expandBy(osg::Vec3d(px, py, pz));
                     if (n && i < n->size()) {
                         osg::Vec3 nmf = (*n)[i];
                         osg::Vec3d nm(nmf.x(), nmf.y(), nmf.z());
@@ -561,15 +712,15 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     float px = (float)p.x();
                     float py = (float)-p.z();
                     float pz = (float)p.y();
+                    // RTC disabled
                     positions.push_back(px); positions.push_back(py); positions.push_back(pz);
-                    float enu_x = px, enu_y = py, enu_z = pz;
-                    if (enu_x < minPos[0]) minPos[0] = enu_x;
-                    if (enu_y < minPos[1]) minPos[1] = enu_y;
-                    if (enu_z < minPos[2]) minPos[2] = enu_z;
-                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
-                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
-                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
-                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                    if (px < minPos[0]) minPos[0] = px;
+                    if (py < minPos[1]) minPos[1] = py;
+                    if (pz < minPos[2]) minPos[2] = pz;
+                    if (px > maxPos[0]) maxPos[0] = px;
+                    if (py > maxPos[1]) maxPos[1] = py;
+                    if (pz > maxPos[2]) maxPos[2] = pz;
+                    if (outBox) outBox->expandBy(osg::Vec3d(px, py, pz));
                     if (n3d && i < n3d->size()) {
                         osg::Vec3d nm = (*n3d)[i];
                         nm = osg::Matrix::transform3x3(normalXform, nm); nm.normalize();
@@ -598,18 +749,21 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     osg::Vec4 vf = (*v4)[i];
                     osg::Vec3d p(vf.x(), vf.y(), vf.z());
                     p = p * inst.matrix;
-                    float px = (float)p.x();
-                    float py = (float)-p.z();
-                    float pz = (float)p.y();
+                    double gx = p.x();
+                    double gy = -p.z();
+                    double gz = p.y();
+                    // RTC disabled
+                    float px = (float)gx;
+                    float py = (float)gy;
+                    float pz = (float)gz;
                     positions.push_back(px); positions.push_back(py); positions.push_back(pz);
-                    float enu_x = px, enu_y = py, enu_z = pz;
-                    if (enu_x < minPos[0]) minPos[0] = enu_x;
-                    if (enu_y < minPos[1]) minPos[1] = enu_y;
-                    if (enu_z < minPos[2]) minPos[2] = enu_z;
-                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
-                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
-                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
-                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                    if (px < minPos[0]) minPos[0] = px;
+                    if (py < minPos[1]) minPos[1] = py;
+                    if (pz < minPos[2]) minPos[2] = pz;
+                    if (px > maxPos[0]) maxPos[0] = px;
+                    if (py > maxPos[1]) maxPos[1] = py;
+                    if (pz > maxPos[2]) maxPos[2] = pz;
+                    if (outBox) outBox->expandBy(osg::Vec3d(gx, gy, gz));
                     if (n && i < n->size()) {
                         osg::Vec3 nmf = (*n)[i];
                         osg::Vec3d nm(nmf.x(), nmf.y(), nmf.z());
@@ -638,18 +792,21 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     osg::Vec4d vd = (*v4d)[i];
                     osg::Vec3d p(vd.x(), vd.y(), vd.z());
                     p = p * inst.matrix;
-                    float px = (float)p.x();
-                    float py = (float)-p.z();
-                    float pz = (float)p.y();
+                    double gx = p.x();
+                    double gy = -p.z();
+                    double gz = p.y();
+                    // RTC disabled
+                    float px = (float)gx;
+                    float py = (float)gy;
+                    float pz = (float)gz;
                     positions.push_back(px); positions.push_back(py); positions.push_back(pz);
-                    float enu_x = px, enu_y = py, enu_z = pz;
-                    if (enu_x < minPos[0]) minPos[0] = enu_x;
-                    if (enu_y < minPos[1]) minPos[1] = enu_y;
-                    if (enu_z < minPos[2]) minPos[2] = enu_z;
-                    if (enu_x > maxPos[0]) maxPos[0] = enu_x;
-                    if (enu_y > maxPos[1]) maxPos[1] = enu_y;
-                    if (enu_z > maxPos[2]) maxPos[2] = enu_z;
-                    if (outBox) outBox->expandBy(osg::Vec3d(enu_x, enu_y, enu_z));
+                    if (px < minPos[0]) minPos[0] = px;
+                    if (py < minPos[1]) minPos[1] = py;
+                    if (pz < minPos[2]) minPos[2] = pz;
+                    if (px > maxPos[0]) maxPos[0] = px;
+                    if (py > maxPos[1]) maxPos[1] = py;
+                    if (pz > maxPos[2]) maxPos[2] = pz;
+                    if (outBox) outBox->expandBy(osg::Vec3d(gx, gy, gz));
                     if (n3d && i < n3d->size()) {
                         osg::Vec3d nm = (*n3d)[i];
                         nm = osg::Matrix::transform3x3(normalXform, nm); nm.normalize();
@@ -903,6 +1060,10 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
 
         const osg::StateSet* stateSet = pair.first;
         std::vector<double> baseColor = {1.0, 1.0, 1.0, 1.0};
+        double emissiveColor[3] = {0.0, 0.0, 0.0};
+        float roughnessFactor = 1.0f;
+        float metallicFactor = 0.0f;
+        float aoStrength = 1.0f;
 
         // Check for texture in StateSet
         if (stateSet) {
@@ -911,17 +1072,49 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
              if (osgMat) {
                  osg::Vec4 diffuse = osgMat->getDiffuse(osg::Material::FRONT);
                  baseColor = {diffuse.r(), diffuse.g(), diffuse.b(), diffuse.a()};
+                 osg::Vec4 em = osgMat->getEmission(osg::Material::FRONT);
+                 emissiveColor[0] = em.r();
+                 emissiveColor[1] = em.g();
+                 emissiveColor[2] = em.b();
              }
+             const osg::Uniform* uR = stateSet->getUniform("roughnessFactor");
+             if (uR) uR->get(roughnessFactor);
+             const osg::Uniform* uM = stateSet->getUniform("metallicFactor");
+             if (uM) uM->get(metallicFactor);
+             const osg::Uniform* uAO = stateSet->getUniform("aoStrength");
+             if (uAO) uAO->get(aoStrength);
 
-             const osg::Texture* tex = dynamic_cast<const osg::Texture*>(stateSet->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
-             if (tex && tex->getNumImages() > 0) {
-                 const osg::Image* img = tex->getImage(0);
-                 if (img) {
-                     std::string imgPath = img->getFileName();
-                     std::vector<unsigned char> imgData;
-                     std::string mimeType = "image/png"; // default
-
-                     bool hasData = false;
+            const osg::Texture* tex = dynamic_cast<const osg::Texture*>(stateSet->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
+            if (tex && tex->getNumImages() > 0) {
+                const osg::Image* img = tex->getImage(0);
+                if (img) {
+                    std::string imgPath = img->getFileName();
+                    std::vector<unsigned char> imgData;
+                    std::string mimeType = "image/png"; // default
+                    bool hasData = false;
+                    bool hasAlphaTransparency = false;
+                    {
+                        GLenum pf = img->getPixelFormat();
+                        GLenum dt = img->getDataType();
+                        int w = img->s();
+                        int h = img->t();
+                        int channels = 0;
+                        if (pf == GL_LUMINANCE) channels = 1;
+                        else if (pf == GL_LUMINANCE_ALPHA) channels = 2;
+                        else if (pf == GL_RGB) channels = 3;
+                        else if (pf == GL_RGBA) channels = 4;
+                        if ((channels == 2 || channels == 4) && dt == GL_UNSIGNED_BYTE && img->data() && w > 0 && h > 0) {
+                            const unsigned char* p = img->data();
+                            int alphaIndex = (channels == 2) ? 1 : 3;
+                            int total = w * h;
+                            for (int i = 0; i < total; ++i) {
+                                if (p[i * channels + alphaIndex] < 255) {
+                                    hasAlphaTransparency = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     if (!imgPath.empty() && fs::exists(imgPath)) {
                         std::ifstream file(imgPath, std::ios::binary | std::ios::ate);
                         if (file) {
@@ -1005,18 +1198,18 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                          int bvImgIdx = (int)model.bufferViews.size();
                          model.bufferViews.push_back(bvImg);
 
-                         gltfImg.bufferView = bvImgIdx;
-                         int imgIdx = (int)model.images.size();
-                         model.images.push_back(gltfImg);
+                          gltfImg.bufferView = bvImgIdx;
+                          int imgIdx = (int)model.images.size();
+                          model.images.push_back(gltfImg);
 
-                         // Add Texture
-                         tinygltf::Texture gltfTex;
-                         gltfTex.source = imgIdx;
-                         int texIdx = (int)model.textures.size();
-                         model.textures.push_back(gltfTex);
+                          // Add Texture
+                          tinygltf::Texture gltfTex;
+                          gltfTex.source = imgIdx;
+                          int texIdx = (int)model.textures.size();
+                          model.textures.push_back(gltfTex);
 
-                         // Link to Material
-                         mat.pbrMetallicRoughness.baseColorTexture.index = texIdx;
+                          // Link to Material
+                          mat.pbrMetallicRoughness.baseColorTexture.index = texIdx;
 
                          // Ensure 4-byte alignment AFTER writing image, so next bufferView starts aligned
                          size_t endSize = buffer.data.size();
@@ -1025,20 +1218,325 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                             buffer.data.resize(endSize + endPadding);
                             memset(buffer.data.data() + endSize, 0, endPadding);
                         }
+                         if (hasAlphaTransparency) {
+                             mat.alphaMode = "BLEND";
+                         }
                     }
                 }
             }
-       }
-
-        mat.pbrMetallicRoughness.baseColorFactor = baseColor;
-        if (baseColor[3] < 0.99) {
-            mat.alphaMode = "BLEND";
-        } else {
-            mat.alphaMode = "OPAQUE";
+            const osg::Texture* ntex = dynamic_cast<const osg::Texture*>(stateSet->getTextureAttribute(1, osg::StateAttribute::TEXTURE));
+            if (ntex && ntex->getNumImages() > 0) {
+                const osg::Image* img = ntex->getImage(0);
+                if (img) {
+                    std::string imgPath = img->getFileName();
+                    std::vector<unsigned char> imgData;
+                    std::string mimeType = "image/png";
+                    bool hasData = false;
+                    if (!imgPath.empty() && fs::exists(imgPath)) {
+                        std::ifstream file(imgPath, std::ios::binary | std::ios::ate);
+                        if (file) {
+                            size_t size = file.tellg();
+                            imgData.resize(size);
+                            file.seekg(0);
+                            file.read(reinterpret_cast<char*>(imgData.data()), size);
+                            hasData = true;
+                            std::string ext = fs::path(imgPath).extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                            if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+                        }
+                    }
+                    if (!hasData && img->data() != nullptr) {
+                        std::string ext = "png";
+                        if (!imgPath.empty()) {
+                            std::string e = fs::path(imgPath).extension().string();
+                            if (!e.empty() && e.size() > 1) {
+                                ext = e.substr(1);
+                                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                            }
+                        }
+                        osgDB::ReaderWriter* rw = osgDB::Registry::instance()->getReaderWriterForExtension(ext);
+                        if (rw) {
+                            std::stringstream ss;
+                            osgDB::ReaderWriter::WriteResult wr = rw->writeImage(*img, ss);
+                            if (wr.success()) {
+                                std::string s = ss.str();
+                                imgData.assign(s.begin(), s.end());
+                                hasData = true;
+                                if (ext == "jpg" || ext == "jpeg") mimeType = "image/jpeg";
+                                else mimeType = "image/png";
+                            }
+                        }
+                        if (!hasData && ext != "png") {
+                            rw = osgDB::Registry::instance()->getReaderWriterForExtension("png");
+                            if (rw) {
+                                std::stringstream ss2;
+                                osgDB::ReaderWriter::WriteResult wr = rw->writeImage(*img, ss2);
+                                if (wr.success()) {
+                                    std::string s = ss2.str();
+                                    imgData.assign(s.begin(), s.end());
+                                    hasData = true;
+                                    mimeType = "image/png";
+                                }
+                            }
+                        }
+                    }
+                    if (hasData) {
+                        tinygltf::Image gltfImg;
+                        gltfImg.mimeType = mimeType;
+                        size_t currentSize = buffer.data.size();
+                        size_t padding = (4 - (currentSize % 4)) % 4;
+                        if (padding > 0) {
+                            buffer.data.resize(currentSize + padding);
+                            memset(buffer.data.data() + currentSize, 0, padding);
+                        }
+                        size_t imgOffset = buffer.data.size();
+                        size_t imgLen = imgData.size();
+                        buffer.data.resize(imgOffset + imgLen);
+                        memcpy(buffer.data.data() + imgOffset, imgData.data(), imgLen);
+                        tinygltf::BufferView bvImg;
+                        bvImg.buffer = 0;
+                        bvImg.byteOffset = imgOffset;
+                        bvImg.byteLength = imgLen;
+                        int bvImgIdx = (int)model.bufferViews.size();
+                        model.bufferViews.push_back(bvImg);
+                        gltfImg.bufferView = bvImgIdx;
+                        int imgIdx = (int)model.images.size();
+                        model.images.push_back(gltfImg);
+                        tinygltf::Texture gltfTex;
+                        gltfTex.source = imgIdx;
+                        int texIdx = (int)model.textures.size();
+                        model.textures.push_back(gltfTex);
+                        mat.normalTexture.index = texIdx;
+                        size_t endSize = buffer.data.size();
+                        size_t endPadding = (4 - (endSize % 4)) % 4;
+                        if (endPadding > 0) {
+                            buffer.data.resize(endSize + endPadding);
+                            memset(buffer.data.data() + endSize, 0, endPadding);
+                        }
+                    }
+                }
+            }
+            const osg::Texture* etex = dynamic_cast<const osg::Texture*>(stateSet->getTextureAttribute(4, osg::StateAttribute::TEXTURE));
+            if (etex && etex->getNumImages() > 0) {
+                const osg::Image* img = etex->getImage(0);
+                if (img) {
+                    std::string imgPath = img->getFileName();
+                    std::vector<unsigned char> imgData;
+                    std::string mimeType = "image/png";
+                    bool hasData = false;
+                    if (!imgPath.empty() && fs::exists(imgPath)) {
+                        std::ifstream file(imgPath, std::ios::binary | std::ios::ate);
+                        if (file) {
+                            size_t size = file.tellg();
+                            imgData.resize(size);
+                            file.seekg(0);
+                            file.read(reinterpret_cast<char*>(imgData.data()), size);
+                            hasData = true;
+                            std::string ext = fs::path(imgPath).extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                            if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+                        }
+                    }
+                    if (!hasData && img->data() != nullptr) {
+                        std::string ext = "png";
+                        if (!imgPath.empty()) {
+                            std::string e = fs::path(imgPath).extension().string();
+                            if (!e.empty() && e.size() > 1) {
+                                ext = e.substr(1);
+                                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                            }
+                        }
+                        osgDB::ReaderWriter* rw = osgDB::Registry::instance()->getReaderWriterForExtension(ext);
+                        if (rw) {
+                            std::stringstream ss;
+                            osgDB::ReaderWriter::WriteResult wr = rw->writeImage(*img, ss);
+                            if (wr.success()) {
+                                std::string s = ss.str();
+                                imgData.assign(s.begin(), s.end());
+                                hasData = true;
+                                if (ext == "jpg" || ext == "jpeg") mimeType = "image/jpeg";
+                                else mimeType = "image/png";
+                            }
+                        }
+                        if (!hasData && ext != "png") {
+                            rw = osgDB::Registry::instance()->getReaderWriterForExtension("png");
+                            if (rw) {
+                                std::stringstream ss2;
+                                osgDB::ReaderWriter::WriteResult wr = rw->writeImage(*img, ss2);
+                                if (wr.success()) {
+                                    std::string s = ss2.str();
+                                    imgData.assign(s.begin(), s.end());
+                                    hasData = true;
+                                    mimeType = "image/png";
+                                }
+                            }
+                        }
+                    }
+                    if (hasData) {
+                        tinygltf::Image gltfImg;
+                        gltfImg.mimeType = mimeType;
+                        size_t currentSize = buffer.data.size();
+                        size_t padding = (4 - (currentSize % 4)) % 4;
+                        if (padding > 0) {
+                            buffer.data.resize(currentSize + padding);
+                            memset(buffer.data.data() + currentSize, 0, padding);
+                        }
+                        size_t imgOffset = buffer.data.size();
+                        size_t imgLen = imgData.size();
+                        buffer.data.resize(imgOffset + imgLen);
+                        memcpy(buffer.data.data() + imgOffset, imgData.data(), imgLen);
+                        tinygltf::BufferView bvImg;
+                        bvImg.buffer = 0;
+                        bvImg.byteOffset = imgOffset;
+                        bvImg.byteLength = imgLen;
+                        int bvImgIdx = (int)model.bufferViews.size();
+                        model.bufferViews.push_back(bvImg);
+                        gltfImg.bufferView = bvImgIdx;
+                        int imgIdx = (int)model.images.size();
+                        model.images.push_back(gltfImg);
+                        tinygltf::Texture gltfTex;
+                        gltfTex.source = imgIdx;
+                        int texIdx = (int)model.textures.size();
+                        model.textures.push_back(gltfTex);
+                        mat.emissiveTexture.index = texIdx;
+                        size_t endSize = buffer.data.size();
+                        size_t endPadding = (4 - (endSize % 4)) % 4;
+                        if (endPadding > 0) {
+                            buffer.data.resize(endSize + endPadding);
+                            memset(buffer.data.data() + endSize, 0, endPadding);
+                        }
+                    }
+                }
+            }
+            const osg::Texture* rtex = dynamic_cast<const osg::Texture*>(stateSet->getTextureAttribute(2, osg::StateAttribute::TEXTURE));
+            const osg::Texture* mtex = dynamic_cast<const osg::Texture*>(stateSet->getTextureAttribute(3, osg::StateAttribute::TEXTURE));
+            const osg::Texture* atex = dynamic_cast<const osg::Texture*>(stateSet->getTextureAttribute(5, osg::StateAttribute::TEXTURE));
+            if ((rtex && rtex->getNumImages() > 0) || (mtex && mtex->getNumImages() > 0) || (atex && atex->getNumImages() > 0)) {
+                const osg::Image* rimg = rtex ? rtex->getImage(0) : nullptr;
+                const osg::Image* mimg = mtex ? mtex->getImage(0) : nullptr;
+                const osg::Image* aimg = atex ? atex->getImage(0) : nullptr;
+                int rw = rimg ? rimg->s() : 0, rh = rimg ? rimg->t() : 0;
+                int mw = mimg ? mimg->s() : 0, mh = mimg ? mimg->t() : 0;
+                int aw = aimg ? aimg->s() : 0, ah = aimg ? aimg->t() : 0;
+                int tw = std::max({rw, mw, aw});
+                int th = std::max({rh, mh, ah});
+                if (tw == 0 || th == 0) {
+                    // Fallback: use 1x1 texture from factors
+                    tw = 1; th = 1;
+                }
+                auto extract_channel = [](const osg::Image* img, int& w, int& h) -> std::vector<unsigned char> {
+                    std::vector<unsigned char> out;
+                    if (!img || !img->data()) { w = 0; h = 0; return out; }
+                    w = img->s(); h = img->t();
+                    out.assign(w * h, 0);
+                    int channels = 4;
+                    GLenum pf = img->getPixelFormat();
+                    if (pf == GL_LUMINANCE) channels = 1;
+                    else if (pf == GL_LUMINANCE_ALPHA) channels = 2;
+                    else if (pf == GL_RGB) channels = 3;
+                    else if (pf == GL_RGBA) channels = 4;
+                    const unsigned char* p = img->data();
+                    for (int i = 0; i < w * h; ++i) out[i] = p[i * channels];
+                    return out;
+                };
+                auto bilinear = [](const std::vector<unsigned char>& src, int sw, int sh, int tw, int th) -> std::vector<unsigned char> {
+                    if (sw == tw && sh == th) return src;
+                    std::vector<unsigned char> dst(tw * th, 0);
+                    const float sx = sw > 1 ? (float)(sw - 1) / (float)(tw - 1) : 0.0f;
+                    const float sy = sh > 1 ? (float)(sh - 1) / (float)(th - 1) : 0.0f;
+                    for (int y = 0; y < th; ++y) {
+                        float fy = y * sy;
+                        int y0 = (int)floorf(fy);
+                        int y1 = std::min(y0 + 1, sh - 1);
+                        float ty = fy - y0;
+                        for (int x = 0; x < tw; ++x) {
+                            float fx = x * sx;
+                            int x0 = (int)floorf(fx);
+                            int x1 = std::min(x0 + 1, sw - 1);
+                            float tx = fx - x0;
+                            int i00 = y0 * sw + x0;
+                            int i10 = y0 * sw + x1;
+                            int i01 = y1 * sw + x0;
+                            int i11 = y1 * sw + x1;
+                            float v0 = src.empty() ? 0.0f : (float)src[i00] * (1.0f - tx) + (float)src[i10] * tx;
+                            float v1 = src.empty() ? 0.0f : (float)src[i01] * (1.0f - tx) + (float)src[i11] * tx;
+                            float v = v0 * (1.0f - ty) + v1 * ty;
+                            dst[y * tw + x] = (unsigned char)std::round(std::min(std::max(v, 0.0f), 255.0f));
+                        }
+                    }
+                    return dst;
+                };
+                int rw0 = 0, rh0 = 0, mw0 = 0, mh0 = 0, aw0 = 0, ah0 = 0;
+                std::vector<unsigned char> rch = extract_channel(rimg, rw0, rh0);
+                std::vector<unsigned char> mch = extract_channel(mimg, mw0, mh0);
+                std::vector<unsigned char> aoch = extract_channel(aimg, aw0, ah0);
+                if (!rch.empty()) rch = bilinear(rch, rw0, rh0, tw, th);
+                if (!mch.empty()) mch = bilinear(mch, mw0, mh0, tw, th);
+                if (!aoch.empty()) aoch = bilinear(aoch, aw0, ah0, tw, th);
+                std::vector<unsigned char> mr(tw * th * 3, 0xff);
+                for (int i = 0; i < tw * th; ++i) {
+                    mr[i * 3 + 0] = atex && !aoch.empty() ? aoch[i] : 0xff;
+                    mr[i * 3 + 1] = rtex && !rch.empty() ? rch[i] : (unsigned char)std::round(roughnessFactor * 255.0f);
+                    mr[i * 3 + 2] = mtex && !mch.empty() ? mch[i] : (unsigned char)std::round(metallicFactor * 255.0f);
+                }
+                osg::ref_ptr<osg::Image> outImg = new osg::Image();
+                outImg->allocateImage(tw, th, 1, GL_RGB, GL_UNSIGNED_BYTE);
+                memcpy(outImg->data(), mr.data(), mr.size());
+                osgDB::ReaderWriter* writer = osgDB::Registry::instance()->getReaderWriterForExtension("png");
+                if (writer) {
+                    std::stringstream ss;
+                    osgDB::ReaderWriter::WriteResult wr = writer->writeImage(*outImg, ss);
+                    if (wr.success()) {
+                        std::string s = ss.str();
+                        size_t currentSize = buffer.data.size();
+                        size_t padding = (4 - (currentSize % 4)) % 4;
+                        if (padding > 0) {
+                            buffer.data.resize(currentSize + padding);
+                            memset(buffer.data.data() + currentSize, 0, padding);
+                        }
+                        size_t imgOffset = buffer.data.size();
+                        size_t imgLen = s.size();
+                        buffer.data.resize(imgOffset + imgLen);
+                        memcpy(buffer.data.data() + imgOffset, s.data(), imgLen);
+                        tinygltf::BufferView bvImg;
+                        bvImg.buffer = 0;
+                        bvImg.byteOffset = imgOffset;
+                        bvImg.byteLength = imgLen;
+                        int bvImgIdx = (int)model.bufferViews.size();
+                        model.bufferViews.push_back(bvImg);
+                        tinygltf::Image gltfImg;
+                        gltfImg.mimeType = "image/png";
+                        gltfImg.bufferView = bvImgIdx;
+                        int imgIdx = (int)model.images.size();
+                        model.images.push_back(gltfImg);
+                        tinygltf::Texture gltfTex;
+                        gltfTex.source = imgIdx;
+                        int texIdx = (int)model.textures.size();
+                        model.textures.push_back(gltfTex);
+                        mat.pbrMetallicRoughness.metallicRoughnessTexture.index = texIdx;
+                        mat.occlusionTexture.index = texIdx;
+                        float aoStrengthOut = (atex && aimg && !aoch.empty()) ? aoStrength : 1.0f;
+                        mat.occlusionTexture.strength = aoStrengthOut;
+                        size_t endSize = buffer.data.size();
+                        size_t endPadding = (4 - (endSize % 4)) % 4;
+                        if (endPadding > 0) {
+                            buffer.data.resize(endSize + endPadding);
+                            memset(buffer.data.data() + endSize, 0, endPadding);
+                        }
+                    }
+                }
+            }
         }
 
-        mat.pbrMetallicRoughness.metallicFactor = 0.0;
-        mat.pbrMetallicRoughness.roughnessFactor = 1.0;
+        mat.pbrMetallicRoughness.baseColorFactor = baseColor;
+        if (mat.alphaMode.empty()) {
+            if (baseColor[3] < 0.99) mat.alphaMode = "BLEND";
+            else mat.alphaMode = "OPAQUE";
+        }
+
+        mat.pbrMetallicRoughness.metallicFactor = metallicFactor;
+        mat.pbrMetallicRoughness.roughnessFactor = roughnessFactor;
+        mat.emissiveFactor = {emissiveColor[0], emissiveColor[1], emissiveColor[2]};
         int matIdx = (int)model.materials.size();
         model.materials.push_back(mat);
 
@@ -1179,6 +1677,21 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, i
 
         diagonal = std::sqrt(extentX*extentX*4 + extentY*extentY*4 + extentZ*extentZ*4);
 
+        // Collect Tile Stats
+        double dimX = extentX * 2.0;
+        double dimY = extentY * 2.0;
+        double dimZ = extentZ * 2.0;
+        double vol = dimX * dimY * dimZ;
+        std::string tName = "Node_d" + std::to_string(node->depth) + "_i" + std::to_string(childIndexAtParent);
+        if (!node->content.empty()) tName += "_Content";
+
+        tileStats.push_back({
+            tName, node->depth, vol, dimX, dimY, dimZ,
+            osg::Vec3d(cx, cy, cz),
+            osg::Vec3d(cx - extentX, cy - extentY, cz - extentZ),
+            osg::Vec3d(cx + extentX, cy + extentY, cz + extentZ)
+        });
+
         nodeJson["boundingVolume"] = {
             {"box", {
                 cx, -cz, cy,           // Center transformed
@@ -1190,7 +1703,7 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, i
     }
 
     // Geometric error = scale * diagonal (no clamp). Ensure > 0 by epsilon if degenerate.
-    double geOut = settings.geScale * (diagonal > 0.0 ? diagonal : 1e-3);
+    double geOut = std::max(1e-3, settings.geScale * diagonal);
     nodeJson["geometricError"] = geOut;
     std::string refineMode = "REPLACE";
     nodeJson["refine"] = refineMode;
@@ -1202,13 +1715,42 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, i
         acc.sumGe += geOut;
         if (hasTightBox) acc.tightCount += 1; else acc.fallbackCount += 1;
         if (refineMode == "ADD") acc.refineAdd += 1; else acc.refineReplace += 1;
+
+        // Log contained nodes
+        if (!node->content.empty()) {
+            std::string tName = "Node_d" + std::to_string(node->depth) + "_i" + std::to_string(childIndexAtParent);
+            if (!node->content.empty()) tName += "_Content";
+
+            for (const auto& ref : node->content) {
+                std::string nName = (ref.transformIndex < ref.meshInfo->nodeNames.size()) ? ref.meshInfo->nodeNames[ref.transformIndex] : "unknown";
+                LOG_I("Tile: %s contains Node: %s", tName.c_str(), nName.c_str());
+            }
+        }
     }
 
     return nodeJson;
 }
 
 std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vector<InstanceRef>& instances, const std::string& tilePath, const std::string& tileName, const SimplificationParams& simParams) {
-    // 1. Create GLB (TinyGLTF)
+    // 1. Calculate RTC Offset (Center of all instances in Target Z-Up Coordinates)
+    osg::BoundingBox totalBox;
+    size_t validBoxes = 0;
+    for (const auto& inst : instances) {
+        if (!inst.meshInfo || !inst.meshInfo->geometry) continue;
+        const osg::BoundingBox& bbox = inst.meshInfo->geometry->getBoundingBox();
+        if (!bbox.valid()) continue;
+
+        validBoxes++;
+        const osg::Matrixd& mat = inst.meshInfo->transforms[inst.transformIndex];
+
+        // Transform the 8 corners of bbox and expand totalBox
+        for(int i=0; i<8; ++i) {
+            osg::Vec3d corner = osg::Vec3d(bbox.corner(i)) * mat;
+            totalBox.expandBy(corner);
+        }
+    }
+
+    // 2. Create GLB (TinyGLTF)
     tinygltf::Model model;
     tinygltf::Asset asset;
     asset.version = "2.0";
@@ -1220,8 +1762,51 @@ std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vect
     osg::BoundingBox contentBox;
 
     TileStats tileStats;
-    appendGeometryToModel(model, instances, settings, &batchTableJson, &batchIdCounter, simParams, &contentBox, &tileStats, tileName.c_str());
+    // Pass zero offset
+    appendGeometryToModel(model, instances, settings, &batchTableJson, &batchIdCounter, simParams, &contentBox, &tileStats, tileName.c_str(), osg::Vec3d(0,0,0));
     LOG_I("Tile %s: nodes=%zu triangles=%zu vertices=%zu materials=%zu", tileName.c_str(), tileStats.node_count, tileStats.triangle_count, tileStats.vertex_count, tileStats.material_count);
+
+    // Populate Batch Table with node names and attributes
+    std::vector<std::string> batchNames;
+    std::vector<std::unordered_map<std::string, std::string>> allAttrs;
+    std::set<std::string> attrKeys;
+
+    for (const auto& ref : instances) {
+        if (!ref.meshInfo || !ref.meshInfo->geometry) continue;
+        std::string nName = "unknown";
+        std::unordered_map<std::string, std::string> attrs;
+
+        if (ref.transformIndex < ref.meshInfo->nodeNames.size()) {
+             nName = ref.meshInfo->nodeNames[ref.transformIndex];
+        }
+        if (ref.transformIndex < ref.meshInfo->nodeAttrs.size()) {
+             attrs = ref.meshInfo->nodeAttrs[ref.transformIndex];
+             for (const auto& kv : attrs) attrKeys.insert(kv.first);
+        }
+        batchNames.push_back(nName);
+        allAttrs.push_back(attrs);
+    }
+
+    if (!batchNames.empty()) {
+        batchTableJson["name"] = batchNames;
+    }
+
+    // Add other attributes
+    for (const std::string& key : attrKeys) {
+        // Skip "name" as it is already handled
+        if (key == "name") continue;
+
+        std::vector<std::string> values;
+        for (const auto& attrs : allAttrs) {
+            auto it = attrs.find(key);
+            if (it != attrs.end()) {
+                values.push_back(it->second);
+            } else {
+                values.push_back(""); // Default empty string
+            }
+        }
+        batchTableJson[key] = values;
+    }
 
     // Skip writing B3DM if no mesh content was generated
     if (tileStats.triangle_count == 0 || model.meshes.empty()) {
@@ -1252,7 +1837,7 @@ std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vect
     // we can simplify by setting BATCH_LENGTH to 0, which implies no batching.
     // This avoids issues with _BATCHID attribute requirement if BATCH_LENGTH > 0.
     // However, if we do have multiple batches, we set it.
-    if (batchIdCounter <= 1) {
+    if (batchIdCounter == 0) {
         featureTable["BATCH_LENGTH"] = 0;
     } else {
         featureTable["BATCH_LENGTH"] = batchIdCounter;
@@ -1269,6 +1854,16 @@ std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vect
     size_t padding = (8 - (jsonLen % 8)) % 8;
     for(size_t i=0; i<padding; ++i) {
         featureTableString += " ";
+    }
+
+    // Serialize Batch Table
+    std::string batchTableString = "";
+    if (!batchTableJson.empty()) {
+        batchTableString = batchTableJson.dump();
+        size_t batchPadding = (8 - (batchTableString.size() % 8)) % 8;
+        for(size_t i=0; i<batchPadding; ++i) {
+            batchTableString += " ";
+        }
     }
 
     // Now featureTableString.size() is multiple of 8.
@@ -1290,12 +1885,15 @@ std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vect
     header.version = 1;
     header.featureTableJSONByteLength = (uint32_t)featureTableString.size();
     header.featureTableBinaryByteLength = 0;
-    header.batchTableJSONByteLength = 0;
+    header.batchTableJSONByteLength = (uint32_t)batchTableString.size();
     header.batchTableBinaryByteLength = 0;
-    header.byteLength = (uint32_t)(sizeof(B3dmHeader) + featureTableString.size() + glbData.size());
+    header.byteLength = (uint32_t)(sizeof(B3dmHeader) + featureTableString.size() + batchTableString.size() + glbData.size());
 
     outfile.write(reinterpret_cast<const char*>(&header), sizeof(B3dmHeader));
     outfile.write(featureTableString.c_str(), featureTableString.size());
+    if (!batchTableString.empty()) {
+        outfile.write(batchTableString.c_str(), batchTableString.size());
+    }
     outfile.write(glbData.data(), glbData.size());
     outfile.close();
 
@@ -1321,7 +1919,8 @@ void FBXPipeline::writeTilesetJson(const std::string& basePath, const osg::Bound
         double dx = globalBounds.xMax() - globalBounds.xMin();
         double dy = globalBounds.yMax() - globalBounds.yMin();
         double dz = globalBounds.zMax() - globalBounds.zMin();
-        geometricError = std::sqrt(dx*dx + dy*dy + dz*dz);
+        double diag = std::sqrt(dx*dx + dy*dy + dz*dz);
+        geometricError = std::max(1e-3, settings.geScale * diag);
     }
     tileset["geometricError"] = geometricError;
     LOG_I("Tileset top-level geometricError=%.3f", geometricError);
@@ -1456,11 +2055,25 @@ nlohmann::json FBXPipeline::buildAverageTiles(const osg::BoundingBox& globalBoun
         double cx = cb.center().x();
         double cy = cb.center().y();
         double cz = cb.center().z();
-        double hx = std::max((cb.xMax() - cb.xMin()) / 2.0 * 1.25, 1e-6);
-        double hy = std::max((cb.yMax() - cb.yMin()) / 2.0 * 1.25, 1e-6);
-        double hz = std::max((cb.zMax() - cb.zMin()) / 2.0 * 1.25, 1e-6);
+        double hx = std::max((cb.xMax() - cb.xMin()) / 2.0, 1e-6);
+        double hy = std::max((cb.yMax() - cb.yMin()) / 2.0, 1e-6);
+        double hz = std::max((cb.zMax() - cb.zMin()) / 2.0, 1e-6);
+
+        // Collect Tile Stats
+        double dimX = hx * 2.0;
+        double dimY = hy * 2.0;
+        double dimZ = hz * 2.0;
+        double vol = dimX * dimY * dimZ;
+
+        tileStats.push_back({
+            tileName, 1, vol, dimX, dimY, dimZ,
+            osg::Vec3d(cx, cy, cz),
+            osg::Vec3d(cb.xMin(), cb.yMin(), cb.zMin()),
+            osg::Vec3d(cb.xMax(), cb.yMax(), cb.zMax())
+        });
+
         double diag = 2.0 * std::sqrt(hx*hx + hy*hy + hz*hz);
-        double geOut = settings.geScale * diag;
+        double geOut = std::max(1e-3, settings.geScale * diag);
 
         nlohmann::json child;
         child["boundingVolume"]["box"] = { cx, cy, cz, hx, 0, 0, 0, hy, 0, 0, 0, hz };
@@ -1476,6 +2089,12 @@ nlohmann::json FBXPipeline::buildAverageTiles(const osg::BoundingBox& globalBoun
         acc.tightCount += 1;
         acc.refineReplace += 1;
         LOG_I("AvgSplit tile=%s count=%zu diag=%.3f ge=%.3f", tileName.c_str(), chunk.size(), diag, geOut);
+
+        // Log contained nodes
+        for (const auto& ref : chunk) {
+            std::string nName = (ref.transformIndex < ref.meshInfo->nodeNames.size()) ? ref.meshInfo->nodeNames[ref.transformIndex] : "unknown";
+            LOG_I("Tile: %s contains Node: %s", tileName.c_str(), nName.c_str());
+        }
     }
 
     // Compute root bounding volume from union of children (ENU space, consistent with root.transform)
@@ -1487,7 +2106,7 @@ nlohmann::json FBXPipeline::buildAverageTiles(const osg::BoundingBox& globalBoun
         double halfY = std::max((enuGlobal.yMax() - enuGlobal.yMin()) / 2.0 * 1.25, 1e-6);
         double halfZ = std::max((enuGlobal.zMax() - enuGlobal.zMin()) / 2.0 * 1.25, 1e-6);
         double gdiag = 2.0 * std::sqrt(halfX*halfX + halfY*halfY + halfZ*halfZ);
-        double gge = settings.geScale * gdiag;
+        double gge = std::max(1e-3, settings.geScale * gdiag);
         rootJson["boundingVolume"]["box"] = { gcx, gcy, gcz, halfX, 0, 0, 0, halfY, 0, 0, 0, halfZ };
         rootJson["geometricError"] = gge;
         auto& acc = levelStats[0];

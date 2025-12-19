@@ -34,11 +34,11 @@ struct PipelineSettings {
     double height = 0.0;
 
     // Geometric error scale (multiplier applied to boundingVolume diagonal)
-    double geScale = 30.0;
+    double geScale = 0.5; // Adjusted for better LOD switching with SSE=16
 
     // Split strategy: when true, split by average count using maxItemsPerTile; when false, use octree
     bool splitAverageByCount = true;
-};
+} ;
 
 struct InstanceRef {
     MeshInstanceInfo* meshInfo;
@@ -57,6 +57,17 @@ private:
     FBXLoader* loader = nullptr;
     struct LevelAccum { size_t count = 0; double sumDiag = 0.0; double sumGe = 0.0; size_t tightCount = 0; size_t fallbackCount = 0; size_t refineAdd = 0; size_t refineReplace = 0; };
     std::unordered_map<int, LevelAccum> levelStats;
+
+    struct TileInfo {
+        std::string name;
+        int depth;
+        double volume;
+        double dx, dy, dz;
+        osg::Vec3d center;
+        osg::Vec3d minPt, maxPt;
+    };
+    std::vector<TileInfo> tileStats;
+
     void logLevelStats();
     nlohmann::json buildAverageTiles(const osg::BoundingBox& globalBounds, const std::string& parentPath);
 

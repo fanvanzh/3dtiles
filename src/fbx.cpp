@@ -13,6 +13,7 @@
 #include <osg/Node>
 #include <osg/StateSet>
 #include <osg/Texture2D>
+#include <osg/Uniform>
 #include <osg/UserDataContainer>
 #include <osgDB/ReadFile>
 
@@ -290,6 +291,200 @@ osg::StateSet* FBXLoader::getOrCreateStateSet(const ufbx_material* mat) {
             stateSet->setTextureAttributeAndModes(0, texture);
         }
     }
+    const ufbx_texture* ntex = NULL;
+    if (mat->pbr.normal_map.texture) ntex = mat->pbr.normal_map.texture;
+    else if (mat->fbx.bump.texture) ntex = mat->fbx.bump.texture;
+    if (ntex) {
+        osg::ref_ptr<osg::Image> image;
+        if (ntex->content.data && ntex->content.size > 0) {
+            std::string filename = ufbx_string_to_std(ntex->filename);
+            int width, height, channels;
+            unsigned char* imgData = stbi_load_from_memory(
+                (const unsigned char*)ntex->content.data,
+                (int)ntex->content.size,
+                &width, &height, &channels, 0);
+            if (imgData) {
+                image = createImageFromSTB(imgData, width, height, channels, filename.empty() ? "embedded.png" : filename);
+            }
+        }
+        if (!image) {
+            std::filesystem::path filename = resolve_texture_path(source_filename, ntex);
+            if (!filename.empty()) {
+                int width, height, channels;
+                std::string pathStr = filename.string();
+                unsigned char* imgData = stbi_load(pathStr.c_str(), &width, &height, &channels, 0);
+                if (imgData) {
+                    image = createImageFromSTB(imgData, width, height, channels, pathStr);
+                } else {
+                    image = osgDB::readImageFile(pathStr);
+                }
+            }
+        }
+        if (image) {
+            osg::Texture2D* texture = new osg::Texture2D(image);
+            texture->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
+            texture->setWrap(osg::Texture::WRAP_T, osg::Texture::REPEAT);
+            stateSet->setTextureAttributeAndModes(1, texture);
+        }
+    }
+    const ufbx_texture* etex = NULL;
+    if (mat->pbr.emission_color.texture) etex = mat->pbr.emission_color.texture;
+    else if (mat->fbx.emission_color.texture) etex = mat->fbx.emission_color.texture;
+    if (etex) {
+        osg::ref_ptr<osg::Image> image;
+        if (etex->content.data && etex->content.size > 0) {
+            std::string filename = ufbx_string_to_std(etex->filename);
+            int width, height, channels;
+            unsigned char* imgData = stbi_load_from_memory(
+                (const unsigned char*)etex->content.data,
+                (int)etex->content.size,
+                &width, &height, &channels, 0);
+            if (imgData) {
+                image = createImageFromSTB(imgData, width, height, channels, filename.empty() ? "embedded.png" : filename);
+            }
+        }
+        if (!image) {
+            std::filesystem::path filename = resolve_texture_path(source_filename, etex);
+            if (!filename.empty()) {
+                int width, height, channels;
+                std::string pathStr = filename.string();
+                unsigned char* imgData = stbi_load(pathStr.c_str(), &width, &height, &channels, 0);
+                if (imgData) {
+                    image = createImageFromSTB(imgData, width, height, channels, pathStr);
+                } else {
+                    image = osgDB::readImageFile(pathStr);
+                }
+            }
+        }
+        if (image) {
+            osg::Texture2D* texture = new osg::Texture2D(image);
+            texture->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
+            texture->setWrap(osg::Texture::WRAP_T, osg::Texture::REPEAT);
+            stateSet->setTextureAttributeAndModes(4, texture);
+        }
+    }
+    const ufbx_texture* rtex = NULL;
+    if (mat->pbr.roughness.texture) rtex = mat->pbr.roughness.texture;
+    if (rtex) {
+        osg::ref_ptr<osg::Image> image;
+        if (rtex->content.data && rtex->content.size > 0) {
+            std::string filename = ufbx_string_to_std(rtex->filename);
+            int width, height, channels;
+            unsigned char* imgData = stbi_load_from_memory(
+                (const unsigned char*)rtex->content.data,
+                (int)rtex->content.size,
+                &width, &height, &channels, 0);
+            if (imgData) {
+                image = createImageFromSTB(imgData, width, height, channels, filename.empty() ? "embedded.png" : filename);
+            }
+        }
+        if (!image) {
+            std::filesystem::path filename = resolve_texture_path(source_filename, rtex);
+            if (!filename.empty()) {
+                int width, height, channels;
+                std::string pathStr = filename.string();
+                unsigned char* imgData = stbi_load(pathStr.c_str(), &width, &height, &channels, 0);
+                if (imgData) {
+                    image = createImageFromSTB(imgData, width, height, channels, pathStr);
+                } else {
+                    image = osgDB::readImageFile(pathStr);
+                }
+            }
+        }
+        if (image) {
+            osg::Texture2D* texture = new osg::Texture2D(image);
+            texture->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
+            texture->setWrap(osg::Texture::WRAP_T, osg::Texture::REPEAT);
+            stateSet->setTextureAttributeAndModes(2, texture);
+        }
+    }
+    const ufbx_texture* mtex = NULL;
+    if (mat->pbr.metalness.texture) mtex = mat->pbr.metalness.texture;
+    if (mtex) {
+        osg::ref_ptr<osg::Image> image;
+        if (mtex->content.data && mtex->content.size > 0) {
+            std::string filename = ufbx_string_to_std(mtex->filename);
+            int width, height, channels;
+            unsigned char* imgData = stbi_load_from_memory(
+                (const unsigned char*)mtex->content.data,
+                (int)mtex->content.size,
+                &width, &height, &channels, 0);
+            if (imgData) {
+                image = createImageFromSTB(imgData, width, height, channels, filename.empty() ? "embedded.png" : filename);
+            }
+        }
+        if (!image) {
+            std::filesystem::path filename = resolve_texture_path(source_filename, mtex);
+            if (!filename.empty()) {
+                int width, height, channels;
+                std::string pathStr = filename.string();
+                unsigned char* imgData = stbi_load(pathStr.c_str(), &width, &height, &channels, 0);
+                if (imgData) {
+                    image = createImageFromSTB(imgData, width, height, channels, pathStr);
+                } else {
+                    image = osgDB::readImageFile(pathStr);
+                }
+            }
+        }
+        if (image) {
+            osg::Texture2D* texture = new osg::Texture2D(image);
+            texture->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
+            texture->setWrap(osg::Texture::WRAP_T, osg::Texture::REPEAT);
+            stateSet->setTextureAttributeAndModes(3, texture);
+        }
+    }
+    const ufbx_texture* aotex = NULL;
+    if (mat->pbr.ambient_occlusion.texture) aotex = mat->pbr.ambient_occlusion.texture;
+    if (aotex) {
+        osg::ref_ptr<osg::Image> image;
+        if (aotex->content.data && aotex->content.size > 0) {
+            std::string filename = ufbx_string_to_std(aotex->filename);
+            int width, height, channels;
+            unsigned char* imgData = stbi_load_from_memory(
+                (const unsigned char*)aotex->content.data,
+                (int)aotex->content.size,
+                &width, &height, &channels, 0);
+            if (imgData) {
+                image = createImageFromSTB(imgData, width, height, channels, filename.empty() ? "embedded.png" : filename);
+            }
+        }
+        if (!image) {
+            std::filesystem::path filename = resolve_texture_path(source_filename, aotex);
+            if (!filename.empty()) {
+                int width, height, channels;
+                std::string pathStr = filename.string();
+                unsigned char* imgData = stbi_load(pathStr.c_str(), &width, &height, &channels, 0);
+                if (imgData) {
+                    image = createImageFromSTB(imgData, width, height, channels, pathStr);
+                } else {
+                    image = osgDB::readImageFile(pathStr);
+                }
+            }
+        }
+        if (image) {
+            osg::Texture2D* texture = new osg::Texture2D(image);
+            texture->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
+            texture->setWrap(osg::Texture::WRAP_T, osg::Texture::REPEAT);
+            stateSet->setTextureAttributeAndModes(5, texture);
+        }
+    }
+    float ao_strength = 1.0f;
+    if (mat->pbr.ambient_occlusion.has_value) {
+        ao_strength = (float)mat->pbr.ambient_occlusion.value_real;
+    }
+    stateSet->addUniform(new osg::Uniform("aoStrength", ao_strength));
+    float roughness = 1.0f;
+    if (mat->pbr.roughness.has_value) roughness = (float)mat->pbr.roughness.value_real;
+    else if (mat->fbx.specular_exponent.has_value) {
+        float s = (float)mat->fbx.specular_exponent.value_real;
+        if (s < 0.0f) s = 0.0f;
+        if (s > 128.0f) s = 128.0f;
+        roughness = 1.0f - sqrtf(s / 128.0f);
+    }
+    float metallic = 0.0f;
+    if (mat->pbr.metalness.has_value) metallic = (float)mat->pbr.metalness.value_real;
+    stateSet->addUniform(new osg::Uniform("roughnessFactor", roughness));
+    stateSet->addUniform(new osg::Uniform("metallicFactor", metallic));
 
     materialCache[mat] = stateSet;
     materialHashCache[matHash] = stateSet;
@@ -424,8 +619,9 @@ std::unordered_map<std::string, std::string> FBXLoader::collectNodeAttrs(const u
 void FBXLoader::load() {
     ufbx_load_opts opts = {};
     opts.target_axes = ufbx_axes_right_handed_y_up; // Convert to glTF/OpenGL standard (Y-up)
-    opts.target_unit_meters = 1.0f;
+    opts.target_unit_meters = 1.0f; // Enable automatic unit conversion to Meters
     opts.clean_skin_weights = true;
+    opts.allow_missing_vertex_position = false; // Handle models with missing positions
 
     // Ensure we handle triangulation if needed (though ufbx does this well by default)
     // opts.generate_indices is NOT a field in ufbx_load_opts. We must call ufbx_generate_indices manually per mesh.
@@ -453,7 +649,7 @@ void FBXLoader::load() {
     else if (scene->settings.axes.front == UFBX_COORDINATE_AXIS_POSITIVE_Z) LOG_I("FBX File Front-Axis: +Z");
     else if (scene->settings.axes.front == UFBX_COORDINATE_AXIS_NEGATIVE_Z) LOG_I("FBX File Front-Axis: -Z");
 
-    LOG_I("FBX File Unit Meters: %f", scene->settings.unit_meters);
+    LOG_I("FBX File Original Unit Meters: %f", scene->settings.unit_meters);
 
     displayLayerHiddenNodes.clear();
     for (size_t i = 0; i < scene->display_layers.count; i++) {
@@ -478,6 +674,15 @@ void FBXLoader::load() {
 
 osg::ref_ptr<osg::Node> FBXLoader::loadNode(ufbx_node *node, const osg::Matrixd &parentXform) {
     if (!node) return nullptr;
+
+    if (ufbx_string_to_std(node->name) == "实体") {
+      LOG_I("Skipping node: %s", node->name.data);
+      for (size_t i = 0; i < node->props.props.count; ++i) {
+        const ufbx_prop &p = node->props.props.data[i];
+        LOG_I("%s: %s = %s", node->name.data, p.name.data, p.value_str.data);
+      }
+    return nullptr;
+    }
 
     // Check visibility
     if (!node->visible) {
