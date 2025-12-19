@@ -121,17 +121,20 @@ static std::string calc_part_geom_hash(
 }
 
 static osg::Matrixd ufbx_matrix_to_osg(const ufbx_matrix &m) {
-  // ufbx_matrix stores an affine 4x3 in column form; map to OSG 4x4.
-  // ufbx: cols[0] = (m00, m10, m20) -> X axis
-  //       cols[1] = (m01, m11, m21) -> Y axis
-  //       cols[2] = (m02, m12, m22) -> Z axis
-  //       cols[3] = (m03, m13, m23) -> Translation
-  // OSG (row-major v*M): Row 0 = X axis, Row 3 = Translation
-  return osg::Matrixd(
-      m.m00, m.m10, m.m20, 0.0,
-      m.m01, m.m11, m.m21, 0.0,
-      m.m02, m.m12, m.m22, 0.0,
-      m.m03, m.m13, m.m23, 1.0);
+    ufbx_transform t = ufbx_matrix_to_transform(&m);
+    osg::Matrixd S; S.makeScale(t.scale.x, t.scale.y, t.scale.z);
+    osg::Matrixd R; R.makeRotate(osg::Quat(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w));
+    osg::Matrixd T; T.makeTranslate(t.translation.x, t.translation.y, t.translation.z);
+    osg::Matrixd L3(
+        m.m00, m.m01, m.m02, 0.0,
+        m.m10, m.m11, m.m12, 0.0,
+        m.m20, m.m21, m.m22, 0.0,
+        0.0,   0.0,   0.0,   1.0
+    );
+    osg::Matrixd Ltrs = S * R;
+    osg::Matrixd LtrsInv; LtrsInv.invert(Ltrs);
+    osg::Matrixd H = L3 * LtrsInv;
+    return H * Ltrs * T;
 }
 
 static std::string ufbx_string_to_std(const ufbx_string &s) {
