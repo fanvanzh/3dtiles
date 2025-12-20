@@ -26,6 +26,7 @@ struct PipelineSettings {
     bool enableDraco = false;
     bool enableTextureCompress = false; // KTX2
     bool enableLOD = false; // Enable Hierarchical LOD generation
+    bool enableUnlit = false; // Enable KHR_materials_unlit
     std::vector<float> lodRatios = {1.0f, 0.5f, 0.25f}; // Default LOD ratios (Fine to Coarse)
 
     // Geolocation (Origin)

@@ -1124,6 +1124,13 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
         mat.name = "Default";
         mat.doubleSided = true; // Fix for potential backface culling issues
 
+        if (settings.enableUnlit) {
+            mat.extensions["KHR_materials_unlit"] = tinygltf::Value(tinygltf::Value::Object());
+            if (std::find(model.extensionsUsed.begin(), model.extensionsUsed.end(), "KHR_materials_unlit") == model.extensionsUsed.end()) {
+                model.extensionsUsed.push_back("KHR_materials_unlit");
+            }
+        }
+
         const osg::StateSet* stateSet = pair.first;
         std::vector<double> baseColor = {1.0, 1.0, 1.0, 1.0};
         double emissiveColor[3] = {0.0, 0.0, 0.0};
@@ -2385,6 +2392,7 @@ extern "C" void* fbx23dtile(
     bool enable_texture_compress,
     bool enable_meshopt,
     bool enable_draco,
+    bool enable_unlit,
     double longitude,
     double latitude,
     double height
@@ -2400,6 +2408,7 @@ extern "C" void* fbx23dtile(
     settings.enableDraco = enable_draco;
     settings.enableSimplify = enable_meshopt;
     settings.enableLOD = false; // HLOD not yet implemented
+    settings.enableUnlit = enable_unlit;
     settings.longitude = longitude;
     settings.latitude = latitude;
     settings.height = height;

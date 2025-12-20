@@ -178,6 +178,12 @@ fn main() {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("enable-unlit")
+                .long("enable-unlit")
+                .help("Enable KHR_materials_unlit extension (useful for baked lighting)")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
            Arg::new("lon")
             .long("lon")
             .help("Set the longitude")
@@ -233,6 +239,7 @@ fn main() {
     let enable_simplify = matches.get_flag("enable-simplify");
     let enable_texture_compress = matches.get_flag("enable-texture-compress");
     let enable_lod = matches.get_flag("enable-lod");
+    let enable_unlit = matches.get_flag("enable-unlit");
 
     if matches.get_flag("verbose") {
         info!("set program versose on");
@@ -287,6 +294,7 @@ fn main() {
                 enable_texture_compress,
                 enable_simplify,
                 enable_draco,
+                enable_unlit,
                 enable_lod,
                 lat_val,
                 lon_val,
@@ -306,6 +314,7 @@ fn convert_fbx_cmd(
     enable_texture_compress: bool,
     enable_simplify: bool,
     enable_draco: bool,
+    enable_unlit: bool,
     enable_lod: bool,
     lat: Option<f64>,
     lon: Option<f64>,
@@ -360,6 +369,7 @@ fn convert_fbx_cmd(
         enable_texture_compress,
         enable_simplify,
         enable_draco,
+        enable_unlit,
         longitude,
         latitude,
         height_f,
