@@ -346,6 +346,17 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 --enable-simplify --enable-draco
 ```
 
+## ④ Preview
+
+A simple `index.html` viewer is provided in the project root to visualize the exported 3D Tiles.
+
+1.  Start a local HTTP server in the project root:
+    ```bash
+    python3 -m http.server 3000
+    ```
+2.  Open your browser and navigate to: [http://localhost:3000](http://localhost:3000)
+3.  The viewer will automatically load the 3D Tiles from the `output` directory.
+
 ## Development
 
 ### Generate compile_commands.json for IDE support

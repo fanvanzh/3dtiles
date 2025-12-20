@@ -446,7 +446,16 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 --enable-simplify --enable-draco
 ```
 
+## ④ 预览
 
+项目根目录提供了一个简单的 `index.html` 查看器，用于预览导出的 3D Tiles 数据。
+
+1.  在项目根目录启动一个本地 HTTP 服务器：
+    ```bash
+    python3 -m http.server 3000
+    ```
+2.  打开浏览器访问：[http://localhost:3000](http://localhost:3000)
+3.  查看器将自动加载 `output` 目录中的 3D Tiles 数据。
 
 # 数据要求及说明
 
