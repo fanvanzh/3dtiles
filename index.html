@@ -150,6 +150,17 @@
               <span>Selected: <b id="stat-selected">--</b></span>
               <span>Triangles: <b id="stat-tris">--</b></span>
           </div>
+
+          <!-- Tileset Info Section -->
+          <div style="margin-top:8px; border-top:1px solid #555; padding-top:5px; font-size:11px;">
+              <div style="font-weight:bold; color:#88ccff; margin-bottom:3px;">Tileset Info</div>
+              <div>Version: <span id="tileset-version" style="color:#ddd;">Loading...</span></div>
+              <div>GLB Used: <span id="glb-extensions-used" style="color:#ddd; word-break: break-all;">Loading...</span></div>
+               <div>GLB Req: <span id="glb-extensions-req" style="color:#ddd; word-break: break-all;">Loading...</span></div>
+               <div>Tex Exts: <span id="glb-tex-extensions" style="color:#ddd; word-break: break-all;">Loading...</span></div>
+               <div>Textures: <span id="glb-textures" style="color:#ddd;">Loading...</span></div>
+           </div>
+
           <div style="margin-top:8px; border-top:1px solid #555; padding-top:5px; font-size:11px;">
               <label style="display:block; margin-bottom:3px; cursor:pointer;" title="Directly toggles debugShowBoundingVolume">
                    <input type="checkbox" id="chk-debug-bounds"> Show Bounding Volume (Box)
@@ -196,6 +207,13 @@
       infoBox: false, // Disable default info box as we use custom panel
       selectionIndicator: true
     });
+
+    // Set fixed time to 10:00 AM (UTC+8) to ensure good lighting
+    // 10:00 AM China Standard Time is 02:00 UTC
+    const date = new Date();
+    date.setUTCHours(2, 0, 0, 0);
+    viewer.clock.currentTime = Cesium.JulianDate.fromDate(date);
+    viewer.clock.shouldAnimate = false;
 
     // 1. Optimize for Indoor Navigation
     viewer.scene.screenSpaceCameraController.enableCollisionDetection = false;
@@ -565,6 +583,135 @@
             console.log("Tileset moved to origin. If 'Triangular Lines' or Jitter disappears, the issue is Floating Point Precision (missing RTC).");
         }
     };
+
+    // ==========================================
+    // TILESET INFO & GLB EXTENSIONS FETCHER
+    // ==========================================
+    async function fetchTilesetInfo() {
+        try {
+            // 1. Fetch tileset.json
+            const response = await fetch('./output/tileset.json');
+            if (!response.ok) throw new Error('Failed to fetch tileset.json');
+            const tilesetJson = await response.json();
+
+            // Display Version
+            const version = tilesetJson.asset && tilesetJson.asset.version ? tilesetJson.asset.version : 'Unknown';
+            document.getElementById('tileset-version').innerText = version;
+
+            // 2. Find a B3DM file
+            let b3dmUrl = null;
+
+            // Simple traversal to find first content uri
+            function findContent(node) {
+                if (node.content && node.content.uri) {
+                    if (node.content.uri.endsWith('.b3dm')) return node.content.uri;
+                }
+                if (node.children) {
+                    for (const child of node.children) {
+                        const res = findContent(child);
+                        if (res) return res;
+                    }
+                }
+                return null;
+            }
+
+            b3dmUrl = findContent(tilesetJson.root);
+
+            if (b3dmUrl) {
+                 // Resolve path relative to tileset.json
+                 // Assuming tileset.json is at ./output/tileset.json and uris are relative to it
+                 const fullUrl = './output/' + b3dmUrl;
+
+                 const b3dmResp = await fetch(fullUrl);
+                 if (!b3dmResp.ok) throw new Error('Failed to fetch B3DM');
+                 const buffer = await b3dmResp.arrayBuffer();
+
+                 // Parse B3DM
+                 // Header: magic(4), version(4), byteLength(4), featureTableJSONByteLength(4), featureTableBinaryByteLength(4), batchTableJSONByteLength(4), batchTableBinaryByteLength(4)
+                 // Total header = 28 bytes
+                 const dataView = new DataView(buffer);
+                 const magic = String.fromCharCode(dataView.getUint8(0), dataView.getUint8(1), dataView.getUint8(2), dataView.getUint8(3));
+
+                 if (magic !== 'b3dm') {
+                     document.getElementById('glb-extensions-used').innerText = 'Not a valid b3dm';
+                     return;
+                 }
+
+                 const version = dataView.getUint32(4, true);
+                 const featureTableJsonLen = dataView.getUint32(12, true);
+                 const featureTableBinLen = dataView.getUint32(16, true);
+                 const batchTableJsonLen = dataView.getUint32(20, true);
+                 const batchTableBinLen = dataView.getUint32(24, true);
+
+                 const glbStart = 28 + featureTableJsonLen + featureTableBinLen + batchTableJsonLen + batchTableBinLen;
+
+                 // GLB Header: magic(4), version(4), length(4)
+                 // Check if we have enough data
+                 if (buffer.byteLength < glbStart + 12) {
+                    document.getElementById('glb-extensions-used').innerText = 'Incomplete B3DM';
+                    return;
+                 }
+
+                 const glbMagic = String.fromCharCode(dataView.getUint8(glbStart), dataView.getUint8(glbStart+1), dataView.getUint8(glbStart+2), dataView.getUint8(glbStart+3));
+
+                 if (glbMagic !== 'glTF') {
+                      document.getElementById('glb-extensions-used').innerText = 'No GLB found';
+                      return;
+                 }
+
+                 // Chunk 0: JSON
+                 // Chunk Header: length(4), type(4)
+                 const chunk0Len = dataView.getUint32(glbStart + 12, true);
+                 const chunk0Type = dataView.getUint32(glbStart + 16, true); // 0x4E4F534A for JSON
+
+                 if (chunk0Type !== 0x4E4F534A) {
+                     document.getElementById('glb-extensions-used').innerText = 'First chunk not JSON';
+                     return;
+                 }
+
+                 const jsonStart = glbStart + 20;
+                 const jsonBytes = new Uint8Array(buffer, jsonStart, chunk0Len);
+                 const jsonStr = new TextDecoder().decode(jsonBytes);
+                 const gltfJson = JSON.parse(jsonStr);
+
+                 const extensionsUsed = gltfJson.extensionsUsed || [];
+                  const extensionsRequired = gltfJson.extensionsRequired || [];
+                  const textureCount = gltfJson.textures ? gltfJson.textures.length : 0;
+
+                  // Scan texture extensions
+                  const texExtensions = new Set();
+                  if (gltfJson.textures) {
+                      for (const tex of gltfJson.textures) {
+                          if (tex.extensions) {
+                              for (const extName of Object.keys(tex.extensions)) {
+                                  texExtensions.add(extName);
+                              }
+                          }
+                      }
+                  }
+                  const texExtArray = Array.from(texExtensions);
+
+                  document.getElementById('glb-extensions-used').innerText = extensionsUsed.length > 0 ? extensionsUsed.join(', ') : 'None';
+                  document.getElementById('glb-extensions-req').innerText = extensionsRequired.length > 0 ? extensionsRequired.join(', ') : 'None';
+                  document.getElementById('glb-tex-extensions').innerText = texExtArray.length > 0 ? texExtArray.join(', ') : 'None';
+                  document.getElementById('glb-textures').innerText = textureCount;
+
+             } else {
+                 document.getElementById('glb-extensions-used').innerText = 'No B3DM found';
+             }
+
+        } catch (e) {
+            console.error(e);
+            document.getElementById('tileset-version').innerText = 'Error';
+            document.getElementById('glb-extensions-used').innerText = 'Error';
+            document.getElementById('glb-extensions-req').innerText = 'Error';
+            document.getElementById('glb-tex-extensions').innerText = 'Error';
+            document.getElementById('glb-textures').innerText = 'Error';
+        }
+    }
+
+    // Call it
+    fetchTilesetInfo();
 
   </script>
 </body>
