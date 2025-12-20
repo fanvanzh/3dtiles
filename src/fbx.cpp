@@ -127,9 +127,9 @@ static osg::Matrixd ufbx_matrix_to_osg(const ufbx_matrix &m) {
     osg::Matrixd R; R.makeRotate(osg::Quat(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w));
     osg::Matrixd T; T.makeTranslate(t.translation.x, t.translation.y, t.translation.z);
     osg::Matrixd L3(
-        m.m00, m.m01, m.m02, 0.0,
-        m.m10, m.m11, m.m12, 0.0,
-        m.m20, m.m21, m.m22, 0.0,
+        m.m00, m.m10, m.m20, 0.0,
+        m.m01, m.m11, m.m21, 0.0,
+        m.m02, m.m12, m.m22, 0.0,
         0.0,   0.0,   0.0,   1.0
     );
     osg::Matrixd Ltrs = S * R;
@@ -728,15 +728,30 @@ osg::ref_ptr<osg::Node> FBXLoader::loadNode(ufbx_node *node, const osg::Matrixd 
         // Apply Geometry Transform (Pivot/Offset specific to the mesh attachment)
         // ufbx provides geometry_to_node which transforms mesh to node local space.
         // Or geometry_to_world directly.
-        // Let's check if geometry_to_world is available or compute it.
-        // geometry_to_world = geometry_to_node * node_to_world
+        // We use geometry_to_world to ensure the mesh is placed exactly where ufbx calculates it to be,
+        // accounting for all pivot offsets, scaling, and inheritance modes.
+        osg::Matrixd geomToWorld = ufbx_matrix_to_osg(node->geometry_to_world);
 
-        osg::Matrixd geomToNode = ufbx_matrix_to_osg(node->geometry_to_node);
-        osg::Matrixd meshGlobalMatrix = geomToNode * globalMatrix;
+        // Calculate the effective local transform for the mesh relative to the node
+        // node_to_world * geom_to_node = geometry_to_world
+        // geom_to_node = geometry_to_world * inverse(node_to_world)
+        osg::Matrixd globalInv;
+        globalInv.invert(globalMatrix);
+        osg::Matrixd geomToNode = geomToWorld * globalInv;
+
+        // Use geomToWorld for mesh processing (MeshPool needs global positions)
+        osg::Matrixd meshGlobalMatrix = geomToWorld;
 
         osg::ref_ptr<osg::Geode> geode = processMesh(node, mesh, meshGlobalMatrix);
         if (geode) {
-            group->addChild(geode);
+            // Apply Geometry Transform (important for pivot offsets)
+            if (!geomToNode.isIdentity()) {
+                osg::MatrixTransform* geomTransform = new osg::MatrixTransform(geomToNode);
+                geomTransform->addChild(geode);
+                group->addChild(geomTransform);
+            } else {
+                group->addChild(geode);
+            }
         }
     }
 
