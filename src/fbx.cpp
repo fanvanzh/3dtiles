@@ -875,7 +875,7 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
     }
 
     // Copy to OSG arrays (only the unique vertices)
-    osg::ref_ptr<osg::Vec3Array> osgPos = new osg::Vec3Array;
+    osg::ref_ptr<osg::Vec3dArray> osgPos = new osg::Vec3dArray;
     osg::ref_ptr<osg::Vec3Array> osgNorm = new osg::Vec3Array;
     osg::ref_ptr<osg::Vec2Array> osgUV = new osg::Vec2Array;
     osg::ref_ptr<osg::Vec4Array> osgColor = new osg::Vec4Array;
@@ -886,7 +886,7 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
     if (!tempColor.empty()) osgColor->reserve(num_vertices);
 
     for(size_t i=0; i<num_vertices; ++i) {
-        if (!tempPos.empty()) osgPos->push_back(osg::Vec3(tempPos[i].x, tempPos[i].y, tempPos[i].z));
+        if (!tempPos.empty()) osgPos->push_back(osg::Vec3d(tempPos[i].x, tempPos[i].y, tempPos[i].z));
         if (!tempNorm.empty()) osgNorm->push_back(osg::Vec3(tempNorm[i].x, tempNorm[i].y, tempNorm[i].z));
         if (!tempUV.empty()) osgUV->push_back(osg::Vec2(tempUV[i].x, tempUV[i].y));
         if (!tempColor.empty()) osgColor->push_back(osg::Vec4(tempColor[i].x, tempColor[i].y, tempColor[i].z, tempColor[i].w));
