@@ -44,7 +44,11 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
         params.m_source_images[0].init(rgba_data.data(), width, height, 4);
 
         // Settings
-        params.m_etc1s_quality_level = 64;
+        // Switch to UASTC for better quality, especially for normal maps and PBR textures
+        params.m_uastc = true;
+        params.m_pack_uastc_ldr_4x4_flags = basisu::cPackUASTCLevelDefault;
+
+        // params.m_etc1s_quality_level = 64; // Ignored when using UASTC
         params.m_compression_level = 2;
         params.m_create_ktx2_file = true;
         params.m_mip_gen = false;
