@@ -1,7 +1,9 @@
 #include "mesh_processor.h"
+#include <basisu/encoder/basisu_enc.h>
 #include <osg/Texture>
 #include <osg/Image>
 #include <osg/Array>
+#include <thread>
 #include <vector>
 #include <cstdlib>
 
@@ -18,6 +20,8 @@
 #include "draco/mesh/mesh.h"
 
 #include "stb_image_write.h"
+
+static basisu::job_pool job_pool(std::thread::hardware_concurrency());
 
 // Function to compress image data to KTX2 using Basis Universal
 bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, int height,
@@ -40,9 +44,11 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
         params.m_source_images[0].init(rgba_data.data(), width, height, 4);
 
         // Settings
-        params.m_compression_level = 2; // Balanced
+        params.m_etc1s_quality_level = 64;
+        params.m_compression_level = 2;
         params.m_create_ktx2_file = true;
-        params.m_mip_gen = true;
+        params.m_mip_gen = false;
+        params.m_pJob_pool = &job_pool;
 
         basisu::basis_compressor compressor;
         if (!compressor.init(params)) return false;
