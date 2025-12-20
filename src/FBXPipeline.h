@@ -37,7 +37,7 @@ struct PipelineSettings {
     double geScale = 0.5; // Adjusted for better LOD switching with SSE=16
 
     // Split strategy: when true, split by average count using maxItemsPerTile; when false, use octree
-    bool splitAverageByCount = true;
+    bool splitAverageByCount = false;
 } ;
 
 struct InstanceRef {
@@ -89,7 +89,8 @@ private:
 
     // Process Octree to generate Tiles
     // Returns the JSON object representing this node and its children (if any)
-    nlohmann::json processNode(OctreeNode* node, const std::string& parentPath, int parentDepth, int childIndexAtParent);
+    // treePath: A string representing the path in the tree (e.g., "0_1_4") for naming
+    nlohmann::json processNode(OctreeNode* node, const std::string& parentPath, int parentDepth, int childIndexAtParent, const std::string& treePath);
 
     // Converters
     // Returns filename created and the tight bounding box of the content (in ENU)

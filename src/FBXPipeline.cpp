@@ -296,7 +296,7 @@ void FBXPipeline::run() {
         LOG_I("Building Octree...");
         buildOctree(rootNode);
         LOG_I("Processing Nodes and Generating Tiles...");
-        rootJson = processNode(rootNode, settings.outputPath, -1, -1);
+        rootJson = processNode(rootNode, settings.outputPath, -1, -1, "0");
     }
 
     LOG_I("--- Generated Tile Bounding Boxes (Sorted by Volume) ---");
@@ -1570,7 +1570,7 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
     model.defaultScene = 0;
 }
 
-json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, int parentDepth, int childIndexAtParent) {
+json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, int parentDepth, int childIndexAtParent, const std::string& treePath) {
     json nodeJson;
     nodeJson["refine"] = "REPLACE";
 
@@ -1579,7 +1579,8 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, i
 
     // 2. Content
     if (!node->content.empty()) {
-        std::string tileName = "tile_" + std::to_string(node->depth) + "_" + std::to_string((uintptr_t)node); // Unique name
+        // Naming convention: tile_{treePath}
+        std::string tileName = "tile_" + treePath;
 
         // Create content
         // For B3DM
@@ -1605,7 +1606,7 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, i
         nodeJson["children"] = json::array();
         for (size_t i = 0; i < node->children.size(); ++i) {
             auto child = node->children[i];
-            json childJson = processNode(child, parentPath, node->depth, (int)i);
+            json childJson = processNode(child, parentPath, node->depth, (int)i, treePath + "_" + std::to_string(i));
             bool isEmptyChild = (!childJson.contains("content")) && (!childJson.contains("children") || childJson["children"].empty());
             if (!isEmptyChild) {
                 nodeJson["children"].push_back(childJson);
