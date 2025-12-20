@@ -268,7 +268,7 @@ fn main() {
 
     match format {
         "osgb" => {
-            convert_osgb(input, output, tile_config, enable_simplify, enable_texture_compress, enable_draco);
+            convert_osgb(input, output, tile_config, enable_simplify, enable_texture_compress, enable_draco, enable_unlit);
         }
         "shape" => {
             convert_shapefile(
@@ -455,7 +455,7 @@ struct ModelMetadata {
     pub SRSOrigin: String,
 }
 
-fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enable_texture_compress: bool, enable_draco: bool) {
+fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enable_texture_compress: bool, enable_draco: bool, enable_unlit: bool) {
     use serde_json::Value;
     use std::fs::File;
     use std::io::prelude::*;
@@ -695,7 +695,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enab
     if let Err(e) = osgb::osgb_batch_convert(
         &dir, &dir_dest, max_lvl,
         center_x, center_y, trans_region,
-        enu_offset, origin_height, enable_texture_compress, enable_simplify, enable_draco)
+        enu_offset, origin_height, enable_texture_compress, enable_simplify, enable_draco, enable_unlit)
     {
         error!("{}", e);
         return;

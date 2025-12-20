@@ -23,6 +23,7 @@ extern "C" {
         enable_texture_compress: bool,
         enable_meshopt: bool,
         enable_draco: bool,
+        enable_unlit: bool,
     ) -> *mut libc::c_void;
 
     pub fn osgb2glb(name_in: *const u8, name_out: *const u8) -> bool;
@@ -94,6 +95,7 @@ pub fn osgb_batch_convert(
     enable_texture_compress: bool,
     enable_meshopt: bool,
     enable_draco_compress: bool,
+    enable_unlit: bool,
 ) -> Result<(), Box<dyn Error>> {
     use std::fs::File;
     use std::io::prelude::*;
@@ -156,6 +158,7 @@ pub fn osgb_batch_convert(
                 enable_texture_compress,
                 enable_meshopt,
                 enable_draco_compress,
+                enable_unlit,
             );
             if out_ptr.is_null() {
                 error!("failed: {}", info.in_dir);
