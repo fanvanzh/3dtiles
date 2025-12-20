@@ -942,77 +942,143 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
             stats->triangle_count += indices.size() / 3;
         }
 
-        // Write to buffer
-        size_t posOffset = buffer.data.size();
-        size_t posLen = positions.size() * sizeof(float);
-        buffer.data.resize(posOffset + posLen);
-        memcpy(buffer.data.data() + posOffset, positions.data(), posLen);
+        // Prepare Draco compression if enabled
+        bool dracoCompressed = false;
+        int dracoBufferViewIdx = -1;
+        int dracoPosId = -1, dracoNormId = -1, dracoTexId = -1, dracoBatchId = -1;
 
-        size_t normOffset = buffer.data.size();
-        size_t normLen = normals.size() * sizeof(float);
-        buffer.data.resize(normOffset + normLen);
-        memcpy(buffer.data.data() + normOffset, normals.data(), normLen);
+        if (settings.enableDraco) {
+            osg::ref_ptr<osg::Geometry> tempGeom = new osg::Geometry;
+            osg::ref_ptr<osg::Vec3Array> va = new osg::Vec3Array;
+            for(size_t i=0; i<positions.size(); i+=3) va->push_back(osg::Vec3(positions[i], positions[i+1], positions[i+2]));
+            tempGeom->setVertexArray(va);
 
-        size_t texOffset = buffer.data.size();
-        size_t texLen = texcoords.size() * sizeof(float);
-        buffer.data.resize(texOffset + texLen);
-        memcpy(buffer.data.data() + texOffset, texcoords.data(), texLen);
+            if(!normals.empty()) {
+                osg::ref_ptr<osg::Vec3Array> na = new osg::Vec3Array;
+                for(size_t i=0; i<normals.size(); i+=3) na->push_back(osg::Vec3(normals[i], normals[i+1], normals[i+2]));
+                tempGeom->setNormalArray(na);
+                tempGeom->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
+            }
 
-        size_t indOffset = buffer.data.size();
-        size_t indLen = indices.size() * sizeof(unsigned int);
-        buffer.data.resize(indOffset + indLen);
-        memcpy(buffer.data.data() + indOffset, indices.data(), indLen);
+            if(!texcoords.empty()) {
+                osg::ref_ptr<osg::Vec2Array> ta = new osg::Vec2Array;
+                for(size_t i=0; i<texcoords.size(); i+=2) ta->push_back(osg::Vec2(texcoords[i], texcoords[i+1]));
+                tempGeom->setTexCoordArray(0, ta);
+            }
 
-        // Batch IDs
-        size_t batchOffset = buffer.data.size();
-        size_t batchLen = batchIds.size() * sizeof(float);
-        buffer.data.resize(batchOffset + batchLen);
-        memcpy(buffer.data.data() + batchOffset, batchIds.data(), batchLen);
+            osg::ref_ptr<osg::DrawElementsUInt> de = new osg::DrawElementsUInt(osg::PrimitiveSet::TRIANGLES);
+            for(unsigned int idx : indices) de->push_back(idx);
+            tempGeom->addPrimitiveSet(de);
 
-        // BufferViews
-        tinygltf::BufferView bvPos;
-        bvPos.buffer = 0;
-        bvPos.byteOffset = posOffset;
-        bvPos.byteLength = posLen;
-        bvPos.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-        int bvPosIdx = (int)model.bufferViews.size();
-        model.bufferViews.push_back(bvPos);
+            DracoCompressionParams dracoParams;
+            dracoParams.enable_compression = true;
+            std::vector<unsigned char> compressedData;
+            size_t compressedSize = 0;
 
-        tinygltf::BufferView bvNorm;
-        bvNorm.buffer = 0;
-        bvNorm.byteOffset = normOffset;
-        bvNorm.byteLength = normLen;
-        bvNorm.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-        int bvNormIdx = (int)model.bufferViews.size();
-        model.bufferViews.push_back(bvNorm);
+            if (compress_mesh_geometry(tempGeom.get(), dracoParams, compressedData, compressedSize, &dracoPosId, &dracoNormId, &dracoTexId, &dracoBatchId, &batchIds)) {
+                 size_t bufOffset = buffer.data.size();
+                 size_t padding = (4 - (bufOffset % 4)) % 4;
+                 if (padding > 0) {
+                     buffer.data.resize(bufOffset + padding);
+                     memset(buffer.data.data() + bufOffset, 0, padding);
+                     bufOffset += padding;
+                 }
 
-        tinygltf::BufferView bvTex;
-        bvTex.buffer = 0;
-        bvTex.byteOffset = texOffset;
-        bvTex.byteLength = texLen;
-        bvTex.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-        int bvTexIdx = (int)model.bufferViews.size();
-        model.bufferViews.push_back(bvTex);
+                 buffer.data.resize(bufOffset + compressedSize);
+                 memcpy(buffer.data.data() + bufOffset, compressedData.data(), compressedSize);
 
-        tinygltf::BufferView bvInd;
-        bvInd.buffer = 0;
-        bvInd.byteOffset = indOffset;
-        bvInd.byteLength = indLen;
-        bvInd.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
-        int bvIndIdx = (int)model.bufferViews.size();
-        model.bufferViews.push_back(bvInd);
+                 tinygltf::BufferView bv;
+                 bv.buffer = 0;
+                 bv.byteOffset = bufOffset;
+                 bv.byteLength = compressedSize;
+                 dracoBufferViewIdx = (int)model.bufferViews.size();
+                 model.bufferViews.push_back(bv);
 
-        tinygltf::BufferView bvBatch;
-        bvBatch.buffer = 0;
-        bvBatch.byteOffset = batchOffset;
-        bvBatch.byteLength = batchLen;
-        bvBatch.target = TINYGLTF_TARGET_ARRAY_BUFFER;
-        int bvBatchIdx = (int)model.bufferViews.size();
-        model.bufferViews.push_back(bvBatch);
+                 dracoCompressed = true;
+
+                 // Register extension
+                 if (std::find(model.extensionsUsed.begin(), model.extensionsUsed.end(), "KHR_draco_mesh_compression") == model.extensionsUsed.end()) {
+                     model.extensionsUsed.push_back("KHR_draco_mesh_compression");
+                     model.extensionsRequired.push_back("KHR_draco_mesh_compression");
+                 }
+            }
+        }
+
+        int bvPosIdx = -1, bvNormIdx = -1, bvTexIdx = -1, bvIndIdx = -1, bvBatchIdx = -1;
+
+        if (!dracoCompressed) {
+            // Write to buffer
+            size_t posOffset = buffer.data.size();
+            size_t posLen = positions.size() * sizeof(float);
+            buffer.data.resize(posOffset + posLen);
+            memcpy(buffer.data.data() + posOffset, positions.data(), posLen);
+
+            size_t normOffset = buffer.data.size();
+            size_t normLen = normals.size() * sizeof(float);
+            buffer.data.resize(normOffset + normLen);
+            memcpy(buffer.data.data() + normOffset, normals.data(), normLen);
+
+            size_t texOffset = buffer.data.size();
+            size_t texLen = texcoords.size() * sizeof(float);
+            buffer.data.resize(texOffset + texLen);
+            memcpy(buffer.data.data() + texOffset, texcoords.data(), texLen);
+
+            size_t indOffset = buffer.data.size();
+            size_t indLen = indices.size() * sizeof(unsigned int);
+            buffer.data.resize(indOffset + indLen);
+            memcpy(buffer.data.data() + indOffset, indices.data(), indLen);
+
+            // Batch IDs
+            size_t batchOffset = buffer.data.size();
+            size_t batchLen = batchIds.size() * sizeof(float);
+            buffer.data.resize(batchOffset + batchLen);
+            memcpy(buffer.data.data() + batchOffset, batchIds.data(), batchLen);
+
+            // BufferViews
+            tinygltf::BufferView bvPos;
+            bvPos.buffer = 0;
+            bvPos.byteOffset = posOffset;
+            bvPos.byteLength = posLen;
+            bvPos.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+            bvPosIdx = (int)model.bufferViews.size();
+            model.bufferViews.push_back(bvPos);
+
+            tinygltf::BufferView bvNorm;
+            bvNorm.buffer = 0;
+            bvNorm.byteOffset = normOffset;
+            bvNorm.byteLength = normLen;
+            bvNorm.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+            bvNormIdx = (int)model.bufferViews.size();
+            model.bufferViews.push_back(bvNorm);
+
+            tinygltf::BufferView bvTex;
+            bvTex.buffer = 0;
+            bvTex.byteOffset = texOffset;
+            bvTex.byteLength = texLen;
+            bvTex.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+            bvTexIdx = (int)model.bufferViews.size();
+            model.bufferViews.push_back(bvTex);
+
+            tinygltf::BufferView bvInd;
+            bvInd.buffer = 0;
+            bvInd.byteOffset = indOffset;
+            bvInd.byteLength = indLen;
+            bvInd.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
+            bvIndIdx = (int)model.bufferViews.size();
+            model.bufferViews.push_back(bvInd);
+
+            tinygltf::BufferView bvBatch;
+            bvBatch.buffer = 0;
+            bvBatch.byteOffset = batchOffset;
+            bvBatch.byteLength = batchLen;
+            bvBatch.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+            bvBatchIdx = (int)model.bufferViews.size();
+            model.bufferViews.push_back(bvBatch);
+        }
 
         // Accessors
         tinygltf::Accessor accPos;
-        accPos.bufferView = bvPosIdx;
+        accPos.bufferView = dracoCompressed ? -1 : bvPosIdx;
         accPos.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
         accPos.count = positions.size() / 3;
         accPos.type = TINYGLTF_TYPE_VEC3;
@@ -1022,7 +1088,7 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
         model.accessors.push_back(accPos);
 
         tinygltf::Accessor accNorm;
-        accNorm.bufferView = bvNormIdx;
+        accNorm.bufferView = dracoCompressed ? -1 : bvNormIdx;
         accNorm.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
         accNorm.count = normals.size() / 3;
         accNorm.type = TINYGLTF_TYPE_VEC3;
@@ -1030,7 +1096,7 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
         model.accessors.push_back(accNorm);
 
         tinygltf::Accessor accTex;
-        accTex.bufferView = bvTexIdx;
+        accTex.bufferView = dracoCompressed ? -1 : bvTexIdx;
         accTex.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
         accTex.count = texcoords.size() / 2;
         accTex.type = TINYGLTF_TYPE_VEC2;
@@ -1038,7 +1104,7 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
         model.accessors.push_back(accTex);
 
         tinygltf::Accessor accInd;
-        accInd.bufferView = bvIndIdx;
+        accInd.bufferView = dracoCompressed ? -1 : bvIndIdx;
         accInd.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
         accInd.count = indices.size();
         accInd.type = TINYGLTF_TYPE_SCALAR;
@@ -1046,7 +1112,7 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
         model.accessors.push_back(accInd);
 
         tinygltf::Accessor accBatch;
-        accBatch.bufferView = bvBatchIdx;
+        accBatch.bufferView = dracoCompressed ? -1 : bvBatchIdx;
         accBatch.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
         accBatch.count = batchIds.size();
         accBatch.type = TINYGLTF_TYPE_SCALAR;
@@ -1092,6 +1158,26 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     std::vector<unsigned char> imgData;
                     std::string mimeType = "image/png"; // default
                     bool hasData = false;
+
+                    // Try KTX2 compression if enabled
+                    if (settings.enableTextureCompress) {
+                        std::vector<unsigned char> compressedData;
+                        std::string compressedMime;
+                        if (process_texture(const_cast<osg::Texture*>(tex), compressedData, compressedMime, true)) {
+                            if (compressedMime == "image/ktx2") {
+                                imgData = compressedData;
+                                mimeType = compressedMime;
+                                hasData = true;
+
+                                // Register extension
+                                if (std::find(model.extensionsUsed.begin(), model.extensionsUsed.end(), "KHR_texture_basisu") == model.extensionsUsed.end()) {
+                                    model.extensionsUsed.push_back("KHR_texture_basisu");
+                                    model.extensionsRequired.push_back("KHR_texture_basisu");
+                                }
+                            }
+                        }
+                    }
+
                     bool hasAlphaTransparency = false;
                     {
                         GLenum pf = img->getPixelFormat();
@@ -1115,7 +1201,7 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                             }
                         }
                     }
-                    if (!imgPath.empty() && fs::exists(imgPath)) {
+                    if (!hasData && !imgPath.empty() && fs::exists(imgPath)) {
                         std::ifstream file(imgPath, std::ios::binary | std::ios::ate);
                         if (file) {
                             size_t size = file.tellg();
@@ -1204,7 +1290,13 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
 
                           // Add Texture
                           tinygltf::Texture gltfTex;
-                          gltfTex.source = imgIdx;
+                          if (mimeType == "image/ktx2") {
+                              tinygltf::Value::Object ktxExt;
+                              ktxExt["source"] = tinygltf::Value(imgIdx);
+                              gltfTex.extensions["KHR_texture_basisu"] = tinygltf::Value(ktxExt);
+                          } else {
+                              gltfTex.source = imgIdx;
+                          }
                           int texIdx = (int)model.textures.size();
                           model.textures.push_back(gltfTex);
 
@@ -1232,7 +1324,27 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     std::vector<unsigned char> imgData;
                     std::string mimeType = "image/png";
                     bool hasData = false;
-                    if (!imgPath.empty() && fs::exists(imgPath)) {
+
+                    // Try KTX2 compression if enabled
+                    if (settings.enableTextureCompress) {
+                        std::vector<unsigned char> compressedData;
+                        std::string compressedMime;
+                        if (process_texture(const_cast<osg::Texture*>(ntex), compressedData, compressedMime, true)) {
+                            if (compressedMime == "image/ktx2") {
+                                imgData = compressedData;
+                                mimeType = compressedMime;
+                                hasData = true;
+
+                                // Register extension
+                                if (std::find(model.extensionsUsed.begin(), model.extensionsUsed.end(), "KHR_texture_basisu") == model.extensionsUsed.end()) {
+                                    model.extensionsUsed.push_back("KHR_texture_basisu");
+                                    model.extensionsRequired.push_back("KHR_texture_basisu");
+                                }
+                            }
+                        }
+                    }
+
+                    if (!hasData && !imgPath.empty() && fs::exists(imgPath)) {
                         std::ifstream file(imgPath, std::ios::binary | std::ios::ate);
                         if (file) {
                             size_t size = file.tellg();
@@ -1303,7 +1415,13 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                         int imgIdx = (int)model.images.size();
                         model.images.push_back(gltfImg);
                         tinygltf::Texture gltfTex;
-                        gltfTex.source = imgIdx;
+                        if (mimeType == "image/ktx2") {
+                            tinygltf::Value::Object ktxExt;
+                            ktxExt["source"] = tinygltf::Value(imgIdx);
+                            gltfTex.extensions["KHR_texture_basisu"] = tinygltf::Value(ktxExt);
+                        } else {
+                            gltfTex.source = imgIdx;
+                        }
                         int texIdx = (int)model.textures.size();
                         model.textures.push_back(gltfTex);
                         mat.normalTexture.index = texIdx;
@@ -1324,7 +1442,27 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     std::vector<unsigned char> imgData;
                     std::string mimeType = "image/png";
                     bool hasData = false;
-                    if (!imgPath.empty() && fs::exists(imgPath)) {
+
+                    // Try KTX2 compression if enabled
+                    if (settings.enableTextureCompress) {
+                        std::vector<unsigned char> compressedData;
+                        std::string compressedMime;
+                        if (process_texture(const_cast<osg::Texture*>(etex), compressedData, compressedMime, true)) {
+                            if (compressedMime == "image/ktx2") {
+                                imgData = compressedData;
+                                mimeType = compressedMime;
+                                hasData = true;
+
+                                // Register extension
+                                if (std::find(model.extensionsUsed.begin(), model.extensionsUsed.end(), "KHR_texture_basisu") == model.extensionsUsed.end()) {
+                                    model.extensionsUsed.push_back("KHR_texture_basisu");
+                                    model.extensionsRequired.push_back("KHR_texture_basisu");
+                                }
+                            }
+                        }
+                    }
+
+                    if (!hasData && !imgPath.empty() && fs::exists(imgPath)) {
                         std::ifstream file(imgPath, std::ios::binary | std::ios::ate);
                         if (file) {
                             size_t size = file.tellg();
@@ -1395,7 +1533,13 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                         int imgIdx = (int)model.images.size();
                         model.images.push_back(gltfImg);
                         tinygltf::Texture gltfTex;
-                        gltfTex.source = imgIdx;
+                        if (mimeType == "image/ktx2") {
+                            tinygltf::Value::Object ktxExt;
+                            ktxExt["source"] = tinygltf::Value(imgIdx);
+                            gltfTex.extensions["KHR_texture_basisu"] = tinygltf::Value(ktxExt);
+                        } else {
+                            gltfTex.source = imgIdx;
+                        }
                         int texIdx = (int)model.textures.size();
                         model.textures.push_back(gltfTex);
                         mat.emissiveTexture.index = texIdx;
@@ -1479,15 +1623,44 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     mr[i * 3 + 1] = rtex && !rch.empty() ? rch[i] : (unsigned char)std::round(roughnessFactor * 255.0f);
                     mr[i * 3 + 2] = mtex && !mch.empty() ? mch[i] : (unsigned char)std::round(metallicFactor * 255.0f);
                 }
-                osg::ref_ptr<osg::Image> outImg = new osg::Image();
-                outImg->allocateImage(tw, th, 1, GL_RGB, GL_UNSIGNED_BYTE);
-                memcpy(outImg->data(), mr.data(), mr.size());
-                osgDB::ReaderWriter* writer = osgDB::Registry::instance()->getReaderWriterForExtension("png");
-                if (writer) {
-                    std::stringstream ss;
-                    osgDB::ReaderWriter::WriteResult wr = writer->writeImage(*outImg, ss);
-                    if (wr.success()) {
-                        std::string s = ss.str();
+                std::string finalMimeType = "image/png";
+                std::vector<unsigned char> finalData;
+
+                if (settings.enableTextureCompress) {
+                     std::vector<unsigned char> mr_rgba(tw * th * 4);
+                     for (int i = 0; i < tw * th; ++i) {
+                         mr_rgba[i * 4 + 0] = mr[i * 3 + 0];
+                         mr_rgba[i * 4 + 1] = mr[i * 3 + 1];
+                         mr_rgba[i * 4 + 2] = mr[i * 3 + 2];
+                         mr_rgba[i * 4 + 3] = 255;
+                     }
+                     if (compress_to_ktx2(mr_rgba, tw, th, finalData)) {
+                         finalMimeType = "image/ktx2";
+
+                         // Register extension if not already
+                         if (std::find(model.extensionsUsed.begin(), model.extensionsUsed.end(), "KHR_texture_basisu") == model.extensionsUsed.end()) {
+                             model.extensionsUsed.push_back("KHR_texture_basisu");
+                             model.extensionsRequired.push_back("KHR_texture_basisu");
+                         }
+                     }
+                }
+
+                if (finalData.empty()) {
+                    osg::ref_ptr<osg::Image> outImg = new osg::Image();
+                    outImg->allocateImage(tw, th, 1, GL_RGB, GL_UNSIGNED_BYTE);
+                    memcpy(outImg->data(), mr.data(), mr.size());
+                    osgDB::ReaderWriter* writer = osgDB::Registry::instance()->getReaderWriterForExtension("png");
+                    if (writer) {
+                        std::stringstream ss;
+                        osgDB::ReaderWriter::WriteResult wr = writer->writeImage(*outImg, ss);
+                        if (wr.success()) {
+                            std::string s = ss.str();
+                            finalData.assign(s.begin(), s.end());
+                        }
+                    }
+                }
+
+                if (!finalData.empty()) {
                         size_t currentSize = buffer.data.size();
                         size_t padding = (4 - (currentSize % 4)) % 4;
                         if (padding > 0) {
@@ -1495,9 +1668,9 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                             memset(buffer.data.data() + currentSize, 0, padding);
                         }
                         size_t imgOffset = buffer.data.size();
-                        size_t imgLen = s.size();
+                        size_t imgLen = finalData.size();
                         buffer.data.resize(imgOffset + imgLen);
-                        memcpy(buffer.data.data() + imgOffset, s.data(), imgLen);
+                        memcpy(buffer.data.data() + imgOffset, finalData.data(), imgLen);
                         tinygltf::BufferView bvImg;
                         bvImg.buffer = 0;
                         bvImg.byteOffset = imgOffset;
@@ -1505,12 +1678,20 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                         int bvImgIdx = (int)model.bufferViews.size();
                         model.bufferViews.push_back(bvImg);
                         tinygltf::Image gltfImg;
-                        gltfImg.mimeType = "image/png";
+                        gltfImg.mimeType = finalMimeType;
                         gltfImg.bufferView = bvImgIdx;
                         int imgIdx = (int)model.images.size();
                         model.images.push_back(gltfImg);
                         tinygltf::Texture gltfTex;
-                        gltfTex.source = imgIdx;
+
+                        if (finalMimeType == "image/ktx2") {
+                            tinygltf::Value::Object ktxExt;
+                            ktxExt["source"] = tinygltf::Value(imgIdx);
+                            gltfTex.extensions["KHR_texture_basisu"] = tinygltf::Value(ktxExt);
+                        } else {
+                            gltfTex.source = imgIdx;
+                        }
+
                         int texIdx = (int)model.textures.size();
                         model.textures.push_back(gltfTex);
                         mat.pbrMetallicRoughness.metallicRoughnessTexture.index = texIdx;
@@ -1523,7 +1704,6 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                             buffer.data.resize(endSize + endPadding);
                             memset(buffer.data.data() + endSize, 0, endPadding);
                         }
-                    }
                 }
             }
         }
@@ -1550,6 +1730,22 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
         prim.attributes["TEXCOORD_0"] = accTexIdx;
         prim.attributes["_BATCHID"] = accBatchIdx;
         prim.material = matIdx;
+
+        if (dracoCompressed) {
+            tinygltf::Value::Object dracoExt;
+            dracoExt["bufferView"] = tinygltf::Value(dracoBufferViewIdx);
+
+            tinygltf::Value::Object dracoAttribs;
+            if (dracoPosId != -1) dracoAttribs["POSITION"] = tinygltf::Value(dracoPosId);
+            if (dracoNormId != -1) dracoAttribs["NORMAL"] = tinygltf::Value(dracoNormId);
+            if (dracoTexId != -1) dracoAttribs["TEXCOORD_0"] = tinygltf::Value(dracoTexId);
+            if (dracoBatchId != -1) dracoAttribs["_BATCHID"] = tinygltf::Value(dracoBatchId);
+
+            dracoExt["attributes"] = tinygltf::Value(dracoAttribs);
+
+            prim.extensions["KHR_draco_mesh_compression"] = tinygltf::Value(dracoExt);
+        }
+
         mesh.primitives.push_back(prim);
         int meshIdx = (int)model.meshes.size();
         model.meshes.push_back(mesh);

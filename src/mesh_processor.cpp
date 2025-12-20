@@ -19,9 +19,6 @@
 
 #include "stb_image_write.h"
 
-// KTX2 compression flag
-static bool b_use_ktx2_compression = true;
-
 // Function to compress image data to KTX2 using Basis Universal
 bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, int height,
                       std::vector<unsigned char>& ktx2_data) {
