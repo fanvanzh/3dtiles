@@ -141,14 +141,15 @@
       </div>
       <!-- Custom Stats & Debug Panel -->
       <div id="custom-stats" style="padding: 10px; border-bottom: 1px solid #555; background: rgba(30,30,30,0.5); display:block;">
-          <div style="margin-bottom:5px; font-weight:bold; color:#88ccff; font-size: 12px;">Real-time Metrics</div>
+          <div style="margin-bottom:5px; font-weight:bold; color:#88ccff; font-size: 12px;">Real-time Metrics (Visible | Loaded)</div>
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
               <span>FPS: <b id="stat-fps">--</b></span>
-              <span>Mem: <b id="stat-mem">--</b> MB</span>
-              <span>Loaded: <b id="stat-loaded">--</b></span>
-              <span>Visited: <b id="stat-visited">--</b></span>
-              <span>Selected: <b id="stat-selected">--</b></span>
+              <span>Draw Calls: <b id="stat-draws">--</b></span>
               <span>Triangles: <b id="stat-tris">--</b></span>
+              <span>Vertices: <b id="stat-verts">--</b></span>
+              <span>Materials: <b id="stat-mats">--</b></span>
+              <span>Mem: <b id="stat-mem">--</b> MB</span>
+              <span>Tiles: <b id="stat-tiles">--</b></span>
           </div>
 
           <!-- Tileset Info Section -->
@@ -455,6 +456,146 @@
     let frameCount = 0;
     let fps = 0;
 
+    // Helper to format numbers with K/M
+    function formatNum(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return num.toString();
+    }
+
+    // Traversal for All Loaded Stats
+    // We only traverse once per second to avoid performance hit
+    let lastTraverseTime = 0;
+    let cachedLoadedStats = { tiles: 0, triangles: 0, vertices: 0, materials: 0, draws: 0 };
+
+    // Helper to extract stats from a Model (supports both Legacy and New Cesium Model architectures)
+    function getModelStats(model) {
+        const stats = { triangles: 0, vertices: 0, materials: 0 };
+        if (!model) return stats;
+
+        // 1. Legacy Model (Cesium < 1.97)
+        if (typeof model._trianglesLength === 'number' && model._trianglesLength > 0) {
+            stats.triangles = model._trianglesLength;
+            stats.vertices = model._verticesLength || (stats.triangles * 3);
+            if (model._runtime && model._runtime.materials) {
+                stats.materials = model._runtime.materials.length;
+            } else if (model.materials) {
+                 stats.materials = model.materials.length;
+            }
+            return stats;
+        }
+
+        // 2. New Model Architecture (Cesium 1.97+) via SceneGraph
+        if (model.sceneGraph && model.sceneGraph._runtimeNodes) {
+             const nodes = model.sceneGraph._runtimeNodes;
+             for (let i = 0; i < nodes.length; i++) {
+                 const node = nodes[i];
+                 if (node.runtimePrimitives) {
+                     for (let j = 0; j < node.runtimePrimitives.length; j++) {
+                         const runPrim = node.runtimePrimitives[j];
+                         const primitive = runPrim.primitive;
+
+                         if (primitive) {
+                             // Triangles
+                             if (primitive.indices) {
+                                 stats.triangles += (primitive.indices.count / 3);
+                             } else if (primitive.attributes && primitive.attributes.length > 0) {
+                                 stats.triangles += (primitive.attributes[0].count / 3);
+                             }
+
+                             // Vertices
+                             if (primitive.attributes) {
+                                 // attributes is array in new architecture
+                                 let posAttr = null;
+                                 if (Array.isArray(primitive.attributes)) {
+                                     posAttr = primitive.attributes.find(a => a.semantic === 'POSITION');
+                                     if (!posAttr && primitive.attributes.length > 0) posAttr = primitive.attributes[0];
+                                 }
+
+                                 if (posAttr) {
+                                     stats.vertices += posAttr.count;
+                                 }
+                             }
+                         }
+                     }
+                 }
+             }
+
+             // Materials
+             // Strategy A: Check SceneGraph Components (Standard for new architecture)
+             if (model.sceneGraph.components && model.sceneGraph.components.materials && model.sceneGraph.components.materials.length > 0) {
+                 stats.materials = model.sceneGraph.components.materials.length;
+             }
+             // Strategy B: Check internal Loader (If accessible)
+             else if (model._loader && model._loader._gltf && model._loader._gltf.materials) {
+                  stats.materials = model._loader._gltf.materials.length;
+             }
+             // Strategy C: Count unique materials used by primitives
+             else {
+                 const uniqueMaterials = new Set();
+                 for (let i = 0; i < nodes.length; i++) {
+                     const node = nodes[i];
+                     if (node.runtimePrimitives) {
+                         for (let j = 0; j < node.runtimePrimitives.length; j++) {
+                             const runPrim = node.runtimePrimitives[j];
+                             // In new architecture, primitive.material is the runtime material
+                             if (runPrim.primitive && runPrim.primitive.material) {
+                                 uniqueMaterials.add(runPrim.primitive.material);
+                             }
+                         }
+                     }
+                 }
+                 if (uniqueMaterials.size > 0) {
+                     stats.materials = uniqueMaterials.size;
+                 }
+             }
+             return stats;
+        }
+
+        return stats;
+    }
+
+    function getLoadedStats(root) {
+        const now = performance.now();
+        if (now - lastTraverseTime < 1000) return cachedLoadedStats;
+
+        lastTraverseTime = now;
+        const stats = { tiles: 0, triangles: 0, vertices: 0, materials: 0, draws: 0 };
+
+        function traverse(tile) {
+            // Count if content is ready (loaded in memory)
+            if (tile.contentReady) {
+                stats.tiles++;
+
+                const content = tile.content;
+                if (content && content._model) {
+                     const model = content._model;
+                     const mStats = getModelStats(model);
+
+                     stats.triangles += mStats.triangles;
+                     stats.vertices += mStats.vertices;
+                     stats.materials += mStats.materials;
+
+                     // Draw Calls (Potential)
+                     if (model._drawCommands) {
+                         stats.draws += model._drawCommands.length;
+                     }
+                }
+            }
+
+            // Recurse
+            if (tile.children) {
+                for (let i = 0; i < tile.children.length; i++) {
+                    traverse(tile.children[i]);
+                }
+            }
+        }
+
+        if (root) traverse(root);
+        cachedLoadedStats = stats;
+        return stats;
+    }
+
     function updateCustomStats() {
         // Calculate FPS
         const now = performance.now();
@@ -468,48 +609,57 @@
 
         if (tileset) {
             // Memory
-            const memMB = (tileset.totalMemoryUsageInBytes / (1024 * 1024)).toFixed(2);
+            const memMB = (tileset.totalMemoryUsageInBytes / (1024 * 1024)).toFixed(0);
             document.getElementById('stat-mem').innerText = memMB;
 
-            // Tile Stats (Check if statistics are enabled/available)
-            // Note: Cesium 3D Tiles statistics might need to be enabled or accessed differently depending on version
-            // In 1.113, tileset has a 'statistics' property if we traverse or it might be internal.
-            // Let's try to access public stats.
-
-            // Actually, tileset.statistics is often not fully exposed in public API in recent versions without traversal.
-            // But we can check `tileset._statistics` (internal) or standard properties.
-            // Let's rely on what's available.
-
-            // Safe access to statistics if available
-            // Note: In newer Cesium, some stats are in `tileset.statistics` object.
-
-            // Loaded
-            // There isn't a direct "loaded count" public property always, but we can approximate or use internal
-            // For now, let's use what we can find or placeholders.
-            // A common way is checking `tileset._selectedTiles.length` (internal) or similar.
-
-            // Let's use `tileset.statistics` if it exists.
-            /*
-            if (tileset.statistics) {
-                document.getElementById('stat-visited').innerText = tileset.statistics.visited;
-                document.getElementById('stat-loaded').innerText = tileset.statistics.numberOfTilesWithContentReady;
-                document.getElementById('stat-selected').innerText = tileset.statistics.selected;
+            // --- VISIBLE STATS ---
+            // Draw Calls (Visible)
+            let drawsVisible = 0;
+            if (viewer.scene._frameState && viewer.scene._frameState.commandList) {
+                drawsVisible = viewer.scene._frameState.commandList.length;
             }
-            */
 
-           // Using internal properties for debugging if public ones are missing (use with caution)
-           // This is for a "Developer/Debug" tool so it's acceptable.
-           if (tileset._selectedTiles) {
-               document.getElementById('stat-selected').innerText = tileset._selectedTiles.length;
-           }
-           // Visited is hard to get without stats
+            // Selected Tiles (Visible)
+            const selectedTiles = tileset._selectedTiles || [];
 
-           // Triangles
-           // viewer.scene.frameState.creditDisplay ... no
-           // primitives count
-           // document.getElementById('stat-tris').innerText = 'N/A';
-        }
-    }
+            // Geometry & Materials Stats (Visible)
+            let trisVisible = 0;
+            let vertsVisible = 0;
+            let matsVisible = 0;
+
+            for (let i = 0; i < selectedTiles.length; i++) {
+                const tile = selectedTiles[i];
+                const content = tile.content;
+                if (content && content._model) {
+                    const model = content._model;
+                    const mStats = getModelStats(model);
+
+                    trisVisible += mStats.triangles;
+                    vertsVisible += mStats.vertices;
+                    matsVisible += mStats.materials;
+                }
+            }
+
+            // --- LOADED STATS (ALL IN MEMORY) ---
+             const loadedStats = getLoadedStats(tileset.root);
+
+             // Helper to set text and tooltip
+             const setStat = (id, visible, loaded) => {
+                 const el = document.getElementById(id);
+                 el.innerText = `${formatNum(visible)} | ${formatNum(loaded)}`;
+                 el.title = `Visible: ${visible.toLocaleString()}\nLoaded: ${loaded.toLocaleString()}`;
+                 el.style.cursor = 'help'; // Visual cue
+                 el.style.borderBottom = '1px dotted #888'; // Visual cue
+             };
+
+             // Update DOM with "Visible | Loaded" format
+             setStat('stat-draws', drawsVisible, loadedStats.draws);
+             setStat('stat-tris', trisVisible, loadedStats.triangles);
+             setStat('stat-verts', vertsVisible, loadedStats.vertices);
+             setStat('stat-mats', matsVisible, loadedStats.materials);
+             setStat('stat-tiles', selectedTiles.length, loadedStats.tiles);
+         }
+     }
 
     viewer.scene.postRender.addEventListener(updateCustomStats);
 

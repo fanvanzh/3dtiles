@@ -20,6 +20,7 @@
 #include <ufbx.h>
 #include <cstdint>
 #include <cstdio>
+#include <cmath>
 #include <filesystem>
 #include <sstream>
 #include <string>
@@ -122,20 +123,12 @@ static std::string calc_part_geom_hash(
 }
 
 static osg::Matrixd ufbx_matrix_to_osg(const ufbx_matrix &m) {
-    ufbx_transform t = ufbx_matrix_to_transform(&m);
-    osg::Matrixd S; S.makeScale(t.scale.x, t.scale.y, t.scale.z);
-    osg::Matrixd R; R.makeRotate(osg::Quat(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w));
-    osg::Matrixd T; T.makeTranslate(t.translation.x, t.translation.y, t.translation.z);
-    osg::Matrixd L3(
+    return osg::Matrixd(
         m.m00, m.m10, m.m20, 0.0,
         m.m01, m.m11, m.m21, 0.0,
         m.m02, m.m12, m.m22, 0.0,
-        0.0,   0.0,   0.0,   1.0
+        m.m03, m.m13, m.m23, 1.0
     );
-    osg::Matrixd Ltrs = S * R;
-    osg::Matrixd LtrsInv; LtrsInv.invert(Ltrs);
-    osg::Matrixd H = L3 * LtrsInv;
-    return H * Ltrs * T;
 }
 
 static std::string ufbx_string_to_std(const ufbx_string &s) {
@@ -619,7 +612,7 @@ std::unordered_map<std::string, std::string> FBXLoader::collectNodeAttrs(const u
 void FBXLoader::load() {
     ufbx_load_opts opts = {};
     opts.target_axes = ufbx_axes_right_handed_y_up; // Convert to glTF/OpenGL standard (Y-up)
-    opts.target_unit_meters = 1.0f; // Enable automatic unit conversion to Meters
+    opts.target_unit_meters = 1.0f; // Force output unit to be Meters (Cesium standard)
     opts.clean_skin_weights = true;
     opts.allow_missing_vertex_position = false; // Handle models with missing positions
     opts.generate_missing_normals = true; // Automatically generate normals if missing
@@ -676,15 +669,6 @@ void FBXLoader::load() {
 osg::ref_ptr<osg::Node> FBXLoader::loadNode(ufbx_node *node, const osg::Matrixd &parentXform) {
     if (!node) return nullptr;
 
-    if (ufbx_string_to_std(node->name) == "实体") {
-      LOG_I("Skipping node: %s", node->name.data);
-      for (size_t i = 0; i < node->props.props.count; ++i) {
-        const ufbx_prop &p = node->props.props.data[i];
-        LOG_I("%s: %s = %s", node->name.data, p.name.data, p.value_str.data);
-      }
-    return nullptr;
-    }
-
     // Check visibility
     if (!node->visible) {
         return nullptr;
@@ -693,20 +677,14 @@ osg::ref_ptr<osg::Node> FBXLoader::loadNode(ufbx_node *node, const osg::Matrixd 
         return nullptr;
     }
 
-    // Use ufbx's precomputed node_to_world if available, or accumulate node_to_parent.
-    // ufbx computes node_to_world considering all inheritance rules.
-    // However, since we are building an OSG scene graph which is hierarchical,
-    // we normally use local transforms (node_to_parent) for the OSG nodes (MatrixTransform).
-    // BUT, for flattening meshes into world space for 3D Tiles (B3DM), we need the absolute world transform.
-
-    // For OSG scene graph structure (visualizing locally):
-    osg::Matrixd localMatrix = ufbx_matrix_to_osg(node->node_to_parent);
-
-    // For Mesh processing (flattening to world):
-    // ufbx provides node_to_world which handles complex inheritance.
-    // It is safer to use node_to_world directly for geometry processing than accumulating local matrices manually
-    // if there are complex inheritance flags (which ufbx handles).
     osg::Matrixd globalMatrix = ufbx_matrix_to_osg(node->node_to_world);
+
+    osg::Matrixd parentInv;
+    if (!parentInv.invert(parentXform)) {
+        parentInv.makeIdentity();
+    }
+
+    osg::Matrixd localMatrix = globalMatrix * parentInv;
 
     osg::ref_ptr<osg::Group> group;
     osg::ref_ptr<osg::MatrixTransform> transform;
@@ -851,6 +829,8 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
             tempColor[i] = ufbx_get_vertex_vec4(&mesh->vertex_color, i);
         }
     }
+
+    const osg::Matrixd finalXform = globalXform;
 
     // Check for missing or bad normals
     if (mesh->vertex_normal.exists) {
@@ -1075,12 +1055,12 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
         info.key.geomHash = cpart.geomHash;
         info.key.matHash = cpart.matHash;
         info.geometry = geometry;
-        info.transforms.push_back(globalXform);
+        info.transforms.push_back(finalXform);
         info.nodeNames.push_back(ufbx_string_to_std(node->name));
         info.nodeAttrs.push_back(collectNodeAttrs(node));
 
         if (meshPool.find(info.key) != meshPool.end()) {
-             meshPool[info.key].transforms.push_back(globalXform);
+             meshPool[info.key].transforms.push_back(finalXform);
              meshPool[info.key].nodeNames.push_back(ufbx_string_to_std(node->name));
              meshPool[info.key].nodeAttrs.push_back(collectNodeAttrs(node));
         } else {

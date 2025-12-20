@@ -88,7 +88,7 @@ void FBXPipeline::run() {
 
         SimplificationParams simTemplate;
         simTemplate.enable_simplification = true;
-        simTemplate.target_error = 0.01f; // Base error
+        simTemplate.target_error = 0.0001f; // Base error
 
         DracoCompressionParams dracoTemplate;
         dracoTemplate.enable_compression = cfg.enableDraco;
@@ -112,7 +112,7 @@ void FBXPipeline::run() {
         SimplificationParams simParams;
         simParams.enable_simplification = true;
         simParams.target_ratio = 0.5f; // Default ratio
-        simParams.target_error = 1e-2f;
+        simParams.target_error = 0.0001f; // Base error
 
         for (auto& pair : loader->meshPool) {
             if (pair.second.geometry) {
@@ -196,7 +196,7 @@ void FBXPipeline::run() {
 
         // Log
         for(const auto& v : volumeStats) {
-            LOG_I("Node: '%s' Vol=%.3f Dim=(%.2f, %.2f, %.2f) Center=(%.2f, %.2f, %.2f) Min=(%.2f, %.2f, %.2f) Max=(%.2f, %.2f, %.2f)",
+            LOG_I("Nodu: '%s' Vol=%.3f Dim=(%.2f, %.2f, %.2f) Center=(%.2f, %.2f, %.2f) Min=(%.2f, %.2f, %.2f) Max=(%.2f, %.2f, %.2f)",
                   v.name.c_str(), v.volume, v.dx, v.dy, v.dz,
                   v.center.x(), v.center.y(), v.center.z(),
                   v.minPt.x(), v.minPt.y(), v.minPt.z(),
@@ -1790,7 +1790,7 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, i
         SimplificationParams simParams;
         simParams.enable_simplification = settings.enableSimplify;
         simParams.target_ratio = 0.5f;
-        simParams.target_error = 1e-2f;
+        simParams.target_error = 0.0001f; // Base error
         auto result = createB3DM(node->content, parentPath, tileName, simParams);
         std::string contentUrl = result.first;
         osg::BoundingBoxd cBox = result.second;
