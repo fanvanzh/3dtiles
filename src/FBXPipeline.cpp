@@ -406,7 +406,7 @@ void FBXPipeline::buildOctree(OctreeNode* node) {
 }
 
 struct TileStats { size_t node_count = 0; size_t vertex_count = 0; size_t triangle_count = 0; size_t material_count = 0; };
-void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef>& instances, const PipelineSettings& settings, json* batchTableJson, int* batchIdCounter, const SimplificationParams& simParams, osg::BoundingBox* outBox = nullptr, TileStats* stats = nullptr, const char* dbgTileName = nullptr, osg::Vec3d rtcOffset = osg::Vec3d(0,0,0)) {
+void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef>& instances, const PipelineSettings& settings, json* batchTableJson, int* batchIdCounter, const SimplificationParams& simParams, osg::BoundingBoxd* outBox = nullptr, TileStats* stats = nullptr, const char* dbgTileName = nullptr, osg::Vec3d rtcOffset = osg::Vec3d(0,0,0)) {
     if (instances.empty()) return;
 
     // Ensure model has at least one buffer
@@ -486,10 +486,10 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                                 for (unsigned int i = 0; i < cnt; ++i) {
                                     osg::Vec3d p((double)ptr[i*comps+0], (double)ptr[i*comps+1], (double)ptr[i*comps+2]);
                                     p = p * inst.matrix;
+                                    p = p - rtcOffset;
                                     float px = (float)p.x();
                                     float py = (float)-p.z();
                                     float pz = (float)p.y();
-                                    // RTC disabled: No offset subtraction
                                     positions.push_back(px); positions.push_back(py); positions.push_back(pz);
                                     if (px < minPos[0]) minPos[0] = px;
                                     if (py < minPos[1]) minPos[1] = py;
@@ -568,10 +568,10 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                                 for (unsigned int i = 0; i < cnt; ++i) {
                                     osg::Vec3d p(ptr[i*comps+0], ptr[i*comps+1], ptr[i*comps+2]);
                                     p = p * inst.matrix;
+                                    p = p - rtcOffset;
                                     float px = (float)p.x();
                                     float py = (float)-p.z();
                                     float pz = (float)p.y();
-                                    // RTC disabled: No offset subtraction
                                     positions.push_back(px); positions.push_back(py); positions.push_back(pz);
                                     if (px < minPos[0]) minPos[0] = px;
                                     if (py < minPos[1]) minPos[1] = py;
@@ -670,10 +670,10 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     osg::Vec3 vf = (*v)[i];
                     osg::Vec3d p(vf.x(), vf.y(), vf.z());
                     p = p * inst.matrix;
+                    p = p - rtcOffset;
                     float px = (float)p.x();
                     float py = (float)-p.z();
                     float pz = (float)p.y();
-                    // RTC disabled
                     positions.push_back(px); positions.push_back(py); positions.push_back(pz);
                     if (px < minPos[0]) minPos[0] = px;
                     if (py < minPos[1]) minPos[1] = py;
@@ -709,10 +709,10 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                 for (unsigned int i = 0; i < v3d->size(); ++i) {
                     osg::Vec3d p = (*v3d)[i];
                     p = p * inst.matrix;
+                    p = p - rtcOffset;
                     float px = (float)p.x();
                     float py = (float)-p.z();
                     float pz = (float)p.y();
-                    // RTC disabled
                     positions.push_back(px); positions.push_back(py); positions.push_back(pz);
                     if (px < minPos[0]) minPos[0] = px;
                     if (py < minPos[1]) minPos[1] = py;
@@ -749,10 +749,10 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     osg::Vec4 vf = (*v4)[i];
                     osg::Vec3d p(vf.x(), vf.y(), vf.z());
                     p = p * inst.matrix;
+                    p = p - rtcOffset;
                     double gx = p.x();
                     double gy = -p.z();
                     double gz = p.y();
-                    // RTC disabled
                     float px = (float)gx;
                     float py = (float)gy;
                     float pz = (float)gz;
@@ -792,10 +792,10 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
                     osg::Vec4d vd = (*v4d)[i];
                     osg::Vec3d p(vd.x(), vd.y(), vd.z());
                     p = p * inst.matrix;
+                    p = p - rtcOffset;
                     double gx = p.x();
                     double gy = -p.z();
                     double gz = p.y();
-                    // RTC disabled
                     float px = (float)gx;
                     float py = (float)gy;
                     float pz = (float)gz;
@@ -1574,7 +1574,7 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, i
     json nodeJson;
     nodeJson["refine"] = "REPLACE";
 
-    osg::BoundingBox tightBox;
+    osg::BoundingBoxd tightBox;
     bool hasTightBox = false;
 
     // 2. Content
@@ -1589,7 +1589,7 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, i
         simParams.target_error = 1e-2f;
         auto result = createB3DM(node->content, parentPath, tileName, simParams);
         std::string contentUrl = result.first;
-        osg::BoundingBox cBox = result.second;
+        osg::BoundingBoxd cBox = result.second;
 
         if (!contentUrl.empty()) {
             nodeJson["content"] = {{"uri", contentUrl}};
@@ -1669,11 +1669,11 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, i
         double extentY = (node->bbox.yMax() - node->bbox.yMin()) / 2.0;
         double extentZ = (node->bbox.zMax() - node->bbox.zMin()) / 2.0;
 
-        extentX = std::max(extentX * 1.25, 1e-6);
-        extentY = std::max(extentY * 1.25, 1e-6);
-        extentZ = std::max(extentZ * 1.25, 1e-6);
+        extentX = std::max(extentX, 1e-6);
+        extentY = std::max(extentY, 1e-6);
+        extentZ = std::max(extentZ, 1e-6);
         diagonal = 2.0 * std::sqrt(extentX*extentX + extentY*extentY + extentZ*extentZ);
-        LOG_I("Node depth=%d fallbackBox center=(%.3f,%.3f,%.3f) halfAxes=(%.3f,%.3f,%.3f) diagInflated=%.3f inflate=1.25", node->depth, cx, -cz, cy, extentX, extentZ, extentY, diagonal);
+        LOG_I("Node depth=%d fallbackBox center=(%.3f,%.3f,%.3f) halfAxes=(%.3f,%.3f,%.3f) diag=%.3f", node->depth, cx, -cz, cy, extentX, extentZ, extentY, diagonal);
 
         diagonal = std::sqrt(extentX*extentX*4 + extentY*extentY*4 + extentZ*extentZ*4);
 
@@ -1731,9 +1731,9 @@ json FBXPipeline::processNode(OctreeNode* node, const std::string& parentPath, i
     return nodeJson;
 }
 
-std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vector<InstanceRef>& instances, const std::string& tilePath, const std::string& tileName, const SimplificationParams& simParams) {
+std::pair<std::string, osg::BoundingBoxd> FBXPipeline::createB3DM(const std::vector<InstanceRef>& instances, const std::string& tilePath, const std::string& tileName, const SimplificationParams& simParams) {
     // 1. Calculate RTC Offset (Center of all instances in Target Z-Up Coordinates)
-    osg::BoundingBox totalBox;
+    osg::BoundingBoxd totalBox;
     size_t validBoxes = 0;
     for (const auto& inst : instances) {
         if (!inst.meshInfo || !inst.meshInfo->geometry) continue;
@@ -1759,12 +1759,19 @@ std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vect
 
     json batchTableJson;
     int batchIdCounter = 0;
-    osg::BoundingBox contentBox;
+    osg::BoundingBoxd contentBox;
 
     TileStats tileStats;
-    // Pass zero offset
-    appendGeometryToModel(model, instances, settings, &batchTableJson, &batchIdCounter, simParams, &contentBox, &tileStats, tileName.c_str(), osg::Vec3d(0,0,0));
+    osg::Vec3d rtcCenter = totalBox.valid() ? osg::Vec3d(totalBox.center()) : osg::Vec3d(0,0,0);
+    appendGeometryToModel(model, instances, settings, &batchTableJson, &batchIdCounter, simParams, &contentBox, &tileStats, tileName.c_str(), rtcCenter);
     LOG_I("Tile %s: nodes=%zu triangles=%zu vertices=%zu materials=%zu", tileName.c_str(), tileStats.node_count, tileStats.triangle_count, tileStats.vertex_count, tileStats.material_count);
+
+    // Shift contentBox back to World Z-up space so tileset.json gets correct bounding volume
+    if (contentBox.valid()) {
+        osg::Vec3d rtcZUp(rtcCenter.x(), -rtcCenter.z(), rtcCenter.y());
+        contentBox._min += rtcZUp;
+        contentBox._max += rtcZUp;
+    }
 
     // Populate Batch Table with node names and attributes
     std::vector<std::string> batchNames;
@@ -1842,6 +1849,13 @@ std::pair<std::string, osg::BoundingBox> FBXPipeline::createB3DM(const std::vect
     } else {
         featureTable["BATCH_LENGTH"] = batchIdCounter;
     }
+
+    // RTC_CENTER (Z-up)
+    featureTable["RTC_CENTER"] = {
+        rtcCenter.x(),
+        -rtcCenter.z(),
+        rtcCenter.y()
+    };
 
     std::string featureTableString = featureTable.dump();
 
@@ -1977,6 +1991,30 @@ void FBXPipeline::writeTilesetJson(const std::string& basePath, const osg::Bound
     // Always add Transform to anchor local ENU coordinates to ECEF
     if (settings.longitude != 0.0 || settings.latitude != 0.0 || settings.height != 0.0) {
         glm::dmat4 enuToEcef = GeoTransform::CalcEnuToEcefMatrix(settings.longitude, settings.latitude, settings.height);
+
+        // Calculate center of the model (in original local coordinates)
+        double cx = (globalBounds.xMin() + globalBounds.xMax()) * 0.5;
+        double cy = (globalBounds.yMin() + globalBounds.yMax()) * 0.5;
+        double cz = (globalBounds.zMin() + globalBounds.zMax()) * 0.5;
+
+        // Apply centering offset: Move model center to (0,0,0) before applying ENU->ECEF
+        // This ensures the model is placed AT the target longitude/latitude, not offset by its original coordinates.
+        // glm is column-major
+        // NOTE: The geometry is converted from Y-Up (FBX) to Z-Up (B3DM) during writing (x, -z, y).
+        // So we must swap the center coordinates to match:
+        // Center_B3DM = (cx, -cz, cy)
+        // Offset = -Center_B3DM = (-cx, cz, -cy)
+        glm::dmat4 centerOffset(1.0);
+        centerOffset[3][0] = -cx;
+        centerOffset[3][1] = cz;
+        centerOffset[3][2] = -cy;
+
+        // Combine: Final = ENU_to_ECEF * CenterOffset
+        // Vertex_Final = ENU_to_ECEF * (Vertex_Local - Center)
+        enuToEcef = enuToEcef * centerOffset;
+
+        LOG_I("Applied centering offset: (%.2f, %.2f, %.2f) to move model center to origin.", cx, cy, cz);
+
         const double* m = (const double*)&enuToEcef;
         tileset["root"]["transform"] = {
             m[0], m[1], m[2], m[3],

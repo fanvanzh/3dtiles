@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Tiles Indoor Viewer</title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.113/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.113/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <style>
+    html, body, #cesiumContainer {
+      width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif;
+    }
+
+    /* Left Panel: Inspector */
+    #inspector-wrapper {
+      position: absolute;
+      top: 10px; left: 10px;
+      width: 360px; /* Increased from 300px to fit content */
+      z-index: 100;
+      background: rgba(42, 42, 42, 0.9);
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #eee;
+    }
+    #inspector-header {
+        padding: 8px;
+        background: rgba(60, 60, 60, 0.9);
+        cursor: move; /* Changed to move cursor */
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #555;
+        font-weight: bold;
+        user-select: none; /* Prevent text selection while dragging */
+    }
+    #inspector-container {
+      max-height: 500px;
+      overflow-y: auto;
+      overflow-x: hidden; /* Disable horizontal scroll */
+      padding: 5px;
+      display: block; /* Toggled via JS */
+    }
+
+    /* Cesium Inspector internal styling overrides */
+    .cesium-cesium3DTilesInspector {
+        display: block !important;
+        border: none;
+        background: transparent;
+        color: white;
+    }
+    .cesium-cesium3DTilesInspector-sectionHeader {
+        background: rgba(60, 60, 60, 0.8);
+        padding: 5px;
+        margin-top: 5px;
+        cursor: pointer;
+    }
+
+    /* Right Panel: Properties */
+    #properties-panel {
+      position: absolute;
+      top: 50px; /* Moved down to avoid Cesium Toolbar */
+      right: 10px;
+      width: 320px;
+      max-height: 80%;
+      overflow-y: auto;
+      background: rgba(42, 42, 42, 0.95);
+      border: 1px solid #555;
+      border-radius: 4px;
+      color: #eee;
+      z-index: 100;
+      padding: 15px;
+      display: none; /* Hidden by default */
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    #properties-panel h3 {
+        margin-top: 0;
+        border-bottom: 1px solid #666;
+        padding-bottom: 10px;
+        font-size: 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: move; /* Allow dragging from header */
+        user-select: none;
+    }
+    #properties-panel table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin-top: 10px;
+    }
+    #properties-panel th, #properties-panel td {
+        text-align: left;
+        padding: 6px;
+        border-bottom: 1px solid #555;
+        word-break: break-word;
+    }
+    #properties-panel th {
+        color: #aaa;
+        width: 40%;
+    }
+    .close-btn {
+        cursor: pointer;
+        font-weight: bold;
+        color: #aaa;
+        font-size: 18px;
+    }
+    .close-btn:hover {
+        color: white;
+    }
+
+    /* Bottom Panel: Status Bar */
+    #status-bar {
+      position: absolute;
+      bottom: 0; left: 0;
+      width: 100%;
+      height: 30px;
+      background: rgba(30, 30, 30, 0.9);
+      color: #ccc;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      font-size: 12px;
+      box-sizing: border-box;
+      border-top: 1px solid #555;
+    }
+    #status-bar span {
+        margin-right: 30px;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <!-- Left: 3D Tiles Inspector -->
+  <div id="inspector-wrapper">
+      <div id="inspector-header">
+          <span style="flex-grow: 1;" onclick="toggleInspector()">3D Tiles Inspector</span>
+          <span id="inspector-toggle" style="cursor: pointer;" onclick="toggleInspector()">▼</span>
+      </div>
+      <!-- Custom Stats & Debug Panel -->
+      <div id="custom-stats" style="padding: 10px; border-bottom: 1px solid #555; background: rgba(30,30,30,0.5); display:block;">
+          <div style="margin-bottom:5px; font-weight:bold; color:#88ccff; font-size: 12px;">Real-time Metrics</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px;">
+              <span>FPS: <b id="stat-fps">--</b></span>
+              <span>Mem: <b id="stat-mem">--</b> MB</span>
+              <span>Loaded: <b id="stat-loaded">--</b></span>
+              <span>Visited: <b id="stat-visited">--</b></span>
+              <span>Selected: <b id="stat-selected">--</b></span>
+              <span>Triangles: <b id="stat-tris">--</b></span>
+          </div>
+          <div style="margin-top:8px; border-top:1px solid #555; padding-top:5px; font-size:11px;">
+              <label style="display:block; margin-bottom:3px; cursor:pointer;" title="Directly toggles debugShowBoundingVolume">
+                   <input type="checkbox" id="chk-debug-bounds"> Show Bounding Volume (Box)
+               </label>
+                <label style="display:block; margin-bottom:3px; cursor:pointer;" title="Directly toggles debugWireframe">
+                   <input type="checkbox" id="chk-debug-wire"> Show Content Wireframe
+               </label>
+               <label style="display:block; margin-bottom:3px; cursor:pointer;" title="Show Geometric Error Heatmap">
+                   <input type="checkbox" id="chk-debug-colorize"> Colorize Levels
+               </label>
+               <button onclick="flyToRoot()" style="margin-top:5px; width:100%;">Fly to Root Tile</button>
+               <button onclick="debugMoveToOrigin()" style="margin-top:5px; width:100%; color: orange;">Debug: Move to Origin (Check Jitter)</button>
+           </div>
+       </div>
+       <div id="inspector-container"></div>
+  </div>
+
+  <!-- Right: Properties Panel -->
+  <div id="properties-panel">
+      <h3 id="properties-header">
+          <span style="flex-grow: 1;">Feature Properties</span>
+          <span class="close-btn" onclick="document.getElementById('properties-panel').style.display='none'">&times;</span>
+      </h3>
+      <div id="properties-content">
+          <p>Click on a 3D Tile feature to view properties.</p>
+      </div>
+  </div>
+
+  <!-- Bottom: Status Bar -->
+  <div id="status-bar">
+      <span id="coords">Lon: - Lat: - Height: -</span>
+      <span id="zoom">Camera Height: -</span>
+  </div>
+
+  <script>
+    // Initialize Viewer
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      terrainProvider: undefined,
+      baseLayerPicker: false,
+      geocoder: false,
+      animation: false,
+      timeline: false,
+      fullscreenButton: false,
+      infoBox: false, // Disable default info box as we use custom panel
+      selectionIndicator: true
+    });
+
+    // 1. Optimize for Indoor Navigation
+    viewer.scene.screenSpaceCameraController.enableCollisionDetection = false;
+    viewer.scene.logarithmicDepthBuffer = true; // Better depth precision
+    viewer.camera.frustum.near = 0.1; // 10cm near plane
+    viewer.scene.globe.depthTestAgainstTerrain = false;
+
+    // Configure Mouse Inputs per user request:
+    // 1. Left Click: Pick (Handled in handler below)
+    // 2. Left Drag: Rotate (Orbit)
+    // 3. Middle Drag: Pan (Move)
+    // 4. Right Drag: Zoom
+    viewer.scene.screenSpaceCameraController.rotateEventTypes = Cesium.CameraEventType.LEFT_DRAG;
+    viewer.scene.screenSpaceCameraController.zoomEventTypes = [
+        Cesium.CameraEventType.RIGHT_DRAG,
+        Cesium.CameraEventType.WHEEL,
+        Cesium.CameraEventType.PINCH
+    ];
+    // Re-map Tilt to Ctrl + Drag to free up Middle Button for Pan
+    viewer.scene.screenSpaceCameraController.tiltEventTypes = [
+        { eventType: Cesium.CameraEventType.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.CTRL },
+        { eventType: Cesium.CameraEventType.RIGHT_DRAG, modifier: Cesium.KeyboardEventModifier.CTRL }
+    ];
+    // Map Middle Drag to Pan (Translate)
+    viewer.scene.screenSpaceCameraController.translateEventTypes = Cesium.CameraEventType.MIDDLE_DRAG;
+
+    // Toolbar functions
+    function toggleInspector() {
+        const container = document.getElementById('inspector-container');
+        const toggle = document.getElementById('inspector-toggle');
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+            toggle.innerText = '▼';
+        } else {
+            container.style.display = 'none';
+            toggle.innerText = '▶';
+        }
+    }
+
+    // 2. Initialize 3D Tiles Inspector on the left
+    try {
+        const inspectorContainer = document.getElementById('inspector-container');
+        const inspector = new Cesium.Cesium3DTilesInspector(inspectorContainer, viewer.scene);
+        console.log("Inspector initialized");
+    } catch (e) {
+        console.error("Failed to initialize inspector", e);
+    }
+
+    // 3. Load Tileset
+    let tileset;
+    async function loadTileset() {
+      try {
+        tileset = await Cesium.Cesium3DTileset.fromUrl('./output/tileset.json', {
+          maximumScreenSpaceError: 16,
+          skipLevelOfDetail: true,
+          baseScreenSpaceError: 1024,
+          skipScreenSpaceErrorFactor: 16,
+          skipLevels: 1,
+          immediatelyLoadDesiredLevelOfDetail: false,
+          loadSiblings: false,
+          cullWithChildrenBounds: true
+        });
+
+        viewer.scene.primitives.add(tileset);
+
+        // 4. Auto-Correction: Check if model is at Earth's Center (Local Coordinates)
+        // If the bounding sphere is near (0,0,0), it means the data lacks a geolocation transform.
+        // We move it to a default surface location to allow proper rotation/navigation.
+        const center = tileset.boundingSphere.center;
+        if (Cesium.Cartesian3.magnitude(center) < 6000000) { // Earth radius is ~6,371km
+             console.warn("⚠️ Model detected at Earth's Center (Local Coordinates). Moving to surface (0,0) for viewing.");
+
+             // Move to Null Island (0,0) at height 0
+             const position = Cesium.Cartesian3.fromDegrees(121.5, 31.2, 0.0); // Default to Shanghai for better context than (0,0)
+             const modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(position);
+             tileset.modelMatrix = modelMatrix;
+        }
+
+        // Fly to tileset
+        await viewer.flyTo(tileset, {
+            duration: 1.5,
+            offset: new Cesium.HeadingPitchRange(0, -0.5, 0)
+        });
+
+        console.log('Tileset loaded');
+
+      } catch (error) {
+        console.error('Error loading tileset:', error);
+      }
+    }
+
+    loadTileset();
+
+    // 4. Feature Picking & Property Window (Right Side)
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+    // Highlight logic
+    let selectedFeature;
+    const selectedOriginalColor = new Cesium.Color();
+
+    handler.setInputAction(function(movement) {
+        const pickedFeature = viewer.scene.pick(movement.position);
+        const propPanel = document.getElementById('properties-panel');
+        const propContent = document.getElementById('properties-content');
+
+        // Restore previous highlight
+        if (Cesium.defined(selectedFeature)) {
+            try {
+                selectedFeature.color = selectedOriginalColor;
+            } catch(e) {
+                // Feature might be destroyed if tileset reloaded
+            }
+            selectedFeature = undefined;
+        }
+
+        if (Cesium.defined(pickedFeature) && pickedFeature instanceof Cesium.Cesium3DTileFeature) {
+            // Apply Highlight
+            selectedFeature = pickedFeature;
+            Cesium.Color.clone(pickedFeature.color, selectedOriginalColor);
+            pickedFeature.color = Cesium.Color.YELLOW.withAlpha(0.8);
+
+            propPanel.style.display = 'block';
+            let html = '<table>';
+            const propertyIds = pickedFeature.getPropertyIds();
+            const length = propertyIds.length;
+
+            if (length === 0) {
+                html += '<tr><td colspan="2">No properties found</td></tr>';
+            } else {
+                for (let i = 0; i < length; ++i) {
+                    const propertyId = propertyIds[i];
+                    const value = pickedFeature.getProperty(propertyId);
+                    html += `<tr><th>${propertyId}</th><td>${value}</td></tr>`;
+                }
+            }
+            html += '</table>';
+            propContent.innerHTML = html;
+        } else {
+            // Clicked on nothing or non-feature
+            // Optionally hide or clear
+            // propPanel.style.display = 'none';
+        }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    // 5. Status Bar (Coordinates & Zoom/Height)
+    const coordsDiv = document.getElementById('coords');
+    const zoomDiv = document.getElementById('zoom');
+
+    // Mouse Move to update coordinates
+    handler.setInputAction(function(movement) {
+        // Try picking position on 3D tiles or other objects first
+        let position = viewer.scene.pickPosition(movement.endPosition);
+
+        // If no 3D object picked, pick on ellipsoid
+        if (!position) {
+             position = viewer.camera.pickEllipsoid(movement.endPosition, viewer.scene.globe.ellipsoid);
+        }
+
+        if (position) {
+            const cartographic = Cesium.Cartographic.fromCartesian(position);
+            const longitude = Cesium.Math.toDegrees(cartographic.longitude).toFixed(6);
+            const latitude = Cesium.Math.toDegrees(cartographic.latitude).toFixed(6);
+            const height = cartographic.height.toFixed(2);
+
+            coordsDiv.textContent = `Lon: ${longitude}°  Lat: ${latitude}°  Height: ${height}m`;
+        } else {
+            coordsDiv.textContent = `Lon: -  Lat: -  Height: -`;
+        }
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    // Camera Move End to update "Zoom" (Camera Height)
+    function updateCameraStatus() {
+        const height = Math.ceil(viewer.camera.positionCartographic.height);
+        // Heading/Pitch could also be useful
+        const heading = Cesium.Math.toDegrees(viewer.camera.heading).toFixed(1);
+        const pitch = Cesium.Math.toDegrees(viewer.camera.pitch).toFixed(1);
+
+        zoomDiv.textContent = `Camera Height: ${height}m  (H: ${heading}°, P: ${pitch}°)`;
+    }
+
+    viewer.camera.moveEnd.addEventListener(updateCameraStatus);
+    // Also update on tick or moveStart if smoother updates needed, but moveEnd is efficient
+    viewer.scene.postRender.addEventListener(updateCameraStatus); // Update constantly for smoothness
+
+    // 6. Make Panels Draggable
+    function makeDraggable(elementId, headerId) {
+        const element = document.getElementById(elementId);
+        const header = document.getElementById(headerId);
+
+        let isDragging = false;
+        let startX, startY, initialLeft, initialTop;
+
+        header.onmousedown = function(e) {
+            e.preventDefault();
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+
+            // Get computed style to handle percentage or auto values correctly
+            const style = window.getComputedStyle(element);
+            initialLeft = parseInt(style.left, 10) || 0;
+            initialTop = parseInt(style.top, 10) || 0;
+
+            // If right is set and left is auto, we need to convert to left-based positioning
+            if (style.left === 'auto' && style.right !== 'auto') {
+                const rect = element.getBoundingClientRect();
+                initialLeft = rect.left;
+                element.style.right = 'auto'; // Clear right
+                element.style.left = initialLeft + 'px'; // Set left
+            }
+
+            document.onmousemove = function(e) {
+                if (!isDragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                element.style.top = (initialTop + dy) + "px";
+                element.style.left = (initialLeft + dx) + "px";
+            };
+
+            document.onmouseup = function() {
+                isDragging = false;
+                document.onmousemove = null;
+                document.onmouseup = null;
+            };
+        };
+    }
+
+    // Initialize draggable panels
+    makeDraggable("inspector-wrapper", "inspector-header");
+    makeDraggable("properties-panel", "properties-header");
+
+    // ==========================================
+    // CUSTOM METRICS & DEBUG LOGIC
+    // ==========================================
+    viewer.scene.debugShowFramesPerSecond = true; // Enable standard Cesium FPS overlay
+
+    // FPS Calculation for custom panel
+    let lastFrameTime = performance.now();
+    let frameCount = 0;
+    let fps = 0;
+
+    function updateCustomStats() {
+        // Calculate FPS
+        const now = performance.now();
+        frameCount++;
+        if (now - lastFrameTime >= 1000) {
+            fps = frameCount;
+            frameCount = 0;
+            lastFrameTime = now;
+            document.getElementById('stat-fps').innerText = fps;
+        }
+
+        if (tileset) {
+            // Memory
+            const memMB = (tileset.totalMemoryUsageInBytes / (1024 * 1024)).toFixed(2);
+            document.getElementById('stat-mem').innerText = memMB;
+
+            // Tile Stats (Check if statistics are enabled/available)
+            // Note: Cesium 3D Tiles statistics might need to be enabled or accessed differently depending on version
+            // In 1.113, tileset has a 'statistics' property if we traverse or it might be internal.
+            // Let's try to access public stats.
+
+            // Actually, tileset.statistics is often not fully exposed in public API in recent versions without traversal.
+            // But we can check `tileset._statistics` (internal) or standard properties.
+            // Let's rely on what's available.
+
+            // Safe access to statistics if available
+            // Note: In newer Cesium, some stats are in `tileset.statistics` object.
+
+            // Loaded
+            // There isn't a direct "loaded count" public property always, but we can approximate or use internal
+            // For now, let's use what we can find or placeholders.
+            // A common way is checking `tileset._selectedTiles.length` (internal) or similar.
+
+            // Let's use `tileset.statistics` if it exists.
+            /*
+            if (tileset.statistics) {
+                document.getElementById('stat-visited').innerText = tileset.statistics.visited;
+                document.getElementById('stat-loaded').innerText = tileset.statistics.numberOfTilesWithContentReady;
+                document.getElementById('stat-selected').innerText = tileset.statistics.selected;
+            }
+            */
+
+           // Using internal properties for debugging if public ones are missing (use with caution)
+           // This is for a "Developer/Debug" tool so it's acceptable.
+           if (tileset._selectedTiles) {
+               document.getElementById('stat-selected').innerText = tileset._selectedTiles.length;
+           }
+           // Visited is hard to get without stats
+
+           // Triangles
+           // viewer.scene.frameState.creditDisplay ... no
+           // primitives count
+           // document.getElementById('stat-tris').innerText = 'N/A';
+        }
+    }
+
+    viewer.scene.postRender.addEventListener(updateCustomStats);
+
+    // Bind Checkboxes
+    document.getElementById('chk-debug-bounds').addEventListener('change', function(e) {
+        if (tileset) {
+            tileset.debugShowBoundingVolume = e.target.checked;
+            // Also force update to ensure render happens
+            viewer.scene.requestRender();
+
+            if (e.target.checked) {
+                console.log("Enabled Bounding Volume Debugging");
+                console.log("Root BV:", tileset.root.boundingVolume);
+                console.log("Root BV jsonstr", JSON.stringify(tileset.root.boundingVolume))
+                // Fix for 'Triangular Lines' if caused by wireframe confusion
+                // We ensure wireframe is NOT implicitly on, but we don't force it off unless requested.
+            }
+        }
+    });
+
+    document.getElementById('chk-debug-wire').addEventListener('change', function(e) {
+        if (tileset) {
+            tileset.debugWireframe = e.target.checked;
+            viewer.scene.requestRender();
+        }
+    });
+
+    document.getElementById('chk-debug-colorize').addEventListener('change', function(e) {
+        if (tileset) {
+            tileset.debugColorizeTiles = e.target.checked;
+            viewer.scene.requestRender();
+        }
+    });
+
+    // Fly to Root helper
+    window.flyToRoot = function() {
+        if (tileset) {
+             console.log("Flying to tileset root...");
+             // Log transform details
+             console.log("Tileset ModelMatrix:", tileset.modelMatrix);
+             console.log("Root Transform:", tileset.root.transform);
+
+             // Check for RTC in content (internal access)
+             if (tileset.root.content && tileset.root.content._rtcCenter) {
+                 console.log("Root Content RTC Center:", tileset.root.content._rtcCenter);
+             } else {
+                 console.log("Root Content RTC Center: Not found (might be undefined or 0)");
+             }
+
+             viewer.flyTo(tileset, {
+                duration: 1.5
+             });
+        }
+    };
+
+    // Debug: Move to Origin
+    window.debugMoveToOrigin = function() {
+        if (tileset) {
+            console.log("Moving tileset to origin (0,0,0) to check for precision issues...");
+            // Save original transform if needed (omitted for simple debug)
+
+            // Clear model matrix
+            tileset.modelMatrix = Cesium.Matrix4.IDENTITY;
+
+            // Clear root transform if it exists
+            if (tileset.root && tileset.root.transform) {
+                 tileset.root.transform = Cesium.Matrix4.IDENTITY;
+            }
+
+            viewer.zoomTo(tileset);
+            console.log("Tileset moved to origin. If 'Triangular Lines' or Jitter disappears, the issue is Floating Point Precision (missing RTC).");
+        }
+    };
+
+  </script>
+</body>
+</html>
