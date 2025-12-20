@@ -622,6 +622,7 @@ void FBXLoader::load() {
     opts.target_unit_meters = 1.0f; // Enable automatic unit conversion to Meters
     opts.clean_skin_weights = true;
     opts.allow_missing_vertex_position = false; // Handle models with missing positions
+    opts.generate_missing_normals = true; // Automatically generate normals if missing
 
     // Ensure we handle triangulation if needed (though ufbx does this well by default)
     // opts.generate_indices is NOT a field in ufbx_load_opts. We must call ufbx_generate_indices manually per mesh.
@@ -851,6 +852,31 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
         }
     }
 
+    // Check for missing or bad normals
+    if (mesh->vertex_normal.exists) {
+        if (mesh->generated_normals) {
+             std::string nodeName = ufbx_string_to_std(node->name);
+             LOG_W("Mesh node '%s' had no normals, they were automatically generated.", nodeName.c_str());
+        }
+    } else {
+        std::string nodeName = ufbx_string_to_std(node->name);
+        LOG_W("Mesh node '%s' has no normals. Lighting may be incorrect.", nodeName.c_str());
+    }
+
+    // Check for zero-length normals
+    if (mesh->vertex_normal.exists) {
+        size_t zero_normal_count = 0;
+        for (const auto& n : tempNorm) {
+            if (n.x*n.x + n.y*n.y + n.z*n.z < 1e-6) {
+                zero_normal_count++;
+            }
+        }
+        if (zero_normal_count > 0) {
+            std::string nodeName = ufbx_string_to_std(node->name);
+            LOG_W("Mesh node '%s' has %zu zero-length normals (out of %zu). Lighting may be incorrect.", nodeName.c_str(), zero_normal_count, tempNorm.size());
+        }
+    }
+
     // Prepare streams for ufbx_generate_indices
     std::vector<ufbx_vertex_stream> streams;
     ufbx_vertex_stream s;
@@ -979,6 +1005,29 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
             continue;
         }
 
+        // Generate Normals if missing
+        if (!mesh->vertex_normal.exists && osgPos->size() > 0) {
+             for(size_t i=0; i<partIndices.size(); i+=3) {
+                 uint32_t i0 = partIndices[i];
+                 uint32_t i1 = partIndices[i+1];
+                 uint32_t i2 = partIndices[i+2];
+
+                 osg::Vec3d p0 = (*osgPos)[i0];
+                 osg::Vec3d p1 = (*osgPos)[i1];
+                 osg::Vec3d p2 = (*osgPos)[i2];
+
+                 osg::Vec3d edge1 = p1 - p0;
+                 osg::Vec3d edge2 = p2 - p0;
+                 osg::Vec3d normal = edge1 ^ edge2; // Cross product
+                 normal.normalize();
+
+                 osg::Vec3 n(normal.x(), normal.y(), normal.z());
+                 (*osgNorm)[i0] += n;
+                 (*osgNorm)[i1] += n;
+                 (*osgNorm)[i2] += n;
+             }
+        }
+
         std::string geomHash = calc_part_geom_hash(num_vertices, tempPos, tempNorm, tempUV, tempColor, partIndices);
         osg::ref_ptr<osg::Geometry> geometry;
         auto ghit = geometryHashCache.find(geomHash);
@@ -986,6 +1035,13 @@ osg::ref_ptr<osg::Geode> FBXLoader::processMesh(ufbx_node *node, ufbx_mesh *mesh
             geometry = ghit->second;
             geometry_reused_hash_count++;
         } else {
+            // Finalize generated normals
+            if (!mesh->vertex_normal.exists && osgNorm->size() > 0) {
+                for(size_t i=0; i<osgNorm->size(); ++i) {
+                    (*osgNorm)[i].normalize();
+                }
+            }
+
             geometry = new osg::Geometry;
             geometry->setVertexArray(osgPos);
             if (osgNorm->size() > 0) geometry->setNormalArray(osgNorm, osg::Array::BIND_PER_VERTEX);
