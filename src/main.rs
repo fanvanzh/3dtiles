@@ -14,9 +14,9 @@ pub mod fun_c;
 mod osgb;
 mod shape;
 
- use chrono::prelude::*;
-use clap::{App, Arg};
-use log::{Level, LevelFilter};
+use chrono::prelude::*;
+use clap::{Arg, ArgAction, Command};
+use log::LevelFilter;
 use serde::Deserialize;
 use std::io::Write;
 
@@ -81,16 +81,10 @@ fn main() {
     builder
         .format(|buf, record| {
             let dt = Local::now();
-            let mut style = buf.style();
-            if record.level() <= Level::Error {
-                style.set_color(env_logger::Color::Red);
-            } else {
-                style.set_color(env_logger::Color::Green);
-            }
             writeln!(
                 buf,
                 "{}: {} - {}",
-                style.value(record.level()),
+                record.level(),
                 dt.format("%Y-%m-%d %H:%M:%S").to_string(),
                 record.args()
             )
@@ -98,41 +92,42 @@ fn main() {
         .filter(None, LevelFilter::Info)
         .init();
     //env_logger::init();
-    let matches = App::new("Make 3dtile program")
+    let matches = Command::new("Make 3dtile program")
         .version("1.0")
         .author("fanvanzh <fanvanzh@sina.com>")
         .about("a very fast 3dtile tool")
         .arg(
-            Arg::with_name("input")
-                .short("i")
+            Arg::new("input")
+                .short('i')
                 .long("input")
                 .value_name("FILE")
                 .help("Set the input file")
                 .required(true)
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
-            Arg::with_name("output")
-                .short("o")
+            Arg::new("output")
+                .short('o')
                 .long("output")
                 .value_name("FILE")
                 .help("Set the out file")
                 .required(true)
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
-            Arg::with_name("format")
-                .short("f")
+            Arg::new("format")
+                .short('f')
                 .long("format")
                 .value_name("osgb,shape,gltf,b3dm")
                 .help("Set input format")
                 .required(true)
-                .takes_value(true),
+                .value_parser(["osgb", "shape", "gltf", "b3dm"])
+                .num_args(1),
         )
         .arg(
-            Arg::with_name("config")
-                .short("c")
-                .long("tile config json")
+            Arg::new("config")
+                .short('c')
+                .long("config")
                 .help(
                     "Set the tile config:
 {
@@ -143,60 +138,75 @@ fn main() {
     \"pbr\" : false,
 }",
                 )
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
-            Arg::with_name("height")
+            Arg::new("height")
                 .long("height")
                 .help("Set the shapefile height field")
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
-            Arg::with_name("verbose")
-                .short("v")
+            Arg::new("verbose")
+                .short('v')
                 .long("verbose")
                 .help("Set output verbose ")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name("enable-draco")
+            Arg::new("enable-draco")
                 .long("enable-draco")
                 .help("Enable Draco mesh compression")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name("enable-simplify")
+            Arg::new("enable-simplify")
                 .long("enable-simplify")
                 .help("Enable mesh simplification")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name("enable-texture-compress")
+            Arg::new("enable-texture-compress")
                 .long("enable-texture-compress")
                 .help("Enable texture compression (KTX2)")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name("enable-lod")
+            Arg::new("enable-lod")
                 .long("enable-lod")
                 .help("Enable LOD (Level of Detail) with default configuration")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .get_matches();
 
-    let input = matches.value_of("input").unwrap();
-    let output = matches.value_of("output").unwrap();
-    let format = matches.value_of("format").unwrap();
-    let tile_config = matches.value_of("config").unwrap_or("");
-    let height_field = matches.value_of("height").unwrap_or("");
+    let input = matches
+        .get_one::<String>("input")
+        .expect("input is required")
+        .as_str();
+    let output = matches
+        .get_one::<String>("output")
+        .expect("output is required")
+        .as_str();
+    let format = matches
+        .get_one::<String>("format")
+        .expect("format is required")
+        .as_str();
+    let tile_config = matches
+        .get_one::<String>("config")
+        .map(|s| s.as_str())
+        .unwrap_or("");
+    let height_field = matches
+        .get_one::<String>("height")
+        .map(|s| s.as_str())
+        .unwrap_or("");
 
     // Parse feature flags
-    let enable_draco = matches.is_present("enable-draco");
-    let enable_simplify = matches.is_present("enable-simplify");
-    let enable_texture_compress = matches.is_present("enable-texture-compress");
-    let enable_lod = matches.is_present("enable-lod");
+    let enable_draco = matches.get_flag("enable-draco");
+    let enable_simplify = matches.get_flag("enable-simplify");
+    let enable_texture_compress = matches.get_flag("enable-texture-compress");
+    let enable_lod = matches.get_flag("enable-lod");
 
-    if matches.is_present("verbose") {
+    if matches.get_flag("verbose") {
         info!("set program versose on");
     }
     if enable_draco {

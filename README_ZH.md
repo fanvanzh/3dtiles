@@ -192,11 +192,14 @@ $env:VCPKG_TRIPLET="x64-windows"
 
 ### 生成 compile_commands.json 用于 IDE 支持
 
+`cargo build` 会驱动 CMake，并自动在 `build/compile_commands.json` 下导出编译数据库（由 `build.rs` 复制好路径）。VSCode 的 C/C++/clangd 统一指向该文件即可。
+
+手动刷新（可选）：
 ```bash
 cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cargo build -vv
 ```
-
-这帮助 VSCode 等 IDE 正确索引 C++ 头文件。
+若需要在仓库根暴露软链，执行：`ln -sf build/compile_commands.json compile_commands.json`
 
 ### 使用严格警告检查进行构建（匹配 CI）
 

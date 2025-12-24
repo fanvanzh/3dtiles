@@ -46,12 +46,3 @@ pub extern "C" fn mkdirs(path: *const libc::c_char) -> bool {
         }
     }
 }
-
-#[no_mangle]
-pub extern "C" fn log_error(msg: *const libc::c_char) {
-    use std::ffi::CStr;
-    unsafe {
-        let input = CStr::from_ptr(msg);
-        error!("{}", input.to_string_lossy());
-    }
-}

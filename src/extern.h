@@ -1,23 +1,45 @@
+#pragma once
+#include <cstdarg>
+#include <cstdio>
+#include <fmt/printf.h>
+#include <spdlog/spdlog.h>
+
 /////////////////////////
 // extern function impl by rust
 extern "C" bool mkdirs(const char* path);
 extern "C" bool write_file(const char* filename, const char* buf, unsigned long buf_len);
-extern "C" void log_error(const char* msg);
 
+// NOTE: `format` is a printf-style format string for the variadic arguments.
+inline void log_printf_impl(spdlog::level::level_enum lvl, const char* format, ...) {
+	char buf[1024];
+	va_list args;
+	va_start(args, format);
+	std::vsnprintf(buf, sizeof(buf), format, args);
+	va_end(args);
+	spdlog::log(lvl, "{}", buf);
+}
 
-#if defined(WIN32) && defined(_MSC_VER)
-#define LOG_E(fmt,...) \
-			char buf[512];\
-			sprintf(buf,fmt,__VA_ARGS__);\
-			log_error(buf);
-#else
-#define LOG_E(fmt,...) \
-			char buf[512];\
-			sprintf(buf,fmt,##__VA_ARGS__);\
-			log_error(buf);
-#endif
+#define LOG_D(format, ...) \
+	do { \
+		log_printf_impl(spdlog::level::debug, format __VA_OPT__(,) __VA_ARGS__); \
+	} while (0)
 
-//// -- others 
+#define LOG_I(format, ...) \
+	do { \
+		log_printf_impl(spdlog::level::info, format __VA_OPT__(,) __VA_ARGS__); \
+	} while (0)
+
+#define LOG_W(format, ...) \
+	do { \
+		log_printf_impl(spdlog::level::warn, format __VA_OPT__(,) __VA_ARGS__); \
+	} while (0)
+
+#define LOG_E(format, ...) \
+	do { \
+		log_printf_impl(spdlog::level::err, format __VA_OPT__(,) __VA_ARGS__); \
+	} while (0)
+
+//// -- others
 struct Transform
 {
 	double radian_x;
@@ -41,21 +63,21 @@ struct Region
 };
 
 bool write_tileset_region(
-	Transform* trans, 
+	Transform* trans,
 	Region& region,
 	double geometricError,
 	const char* b3dm_file,
 	const char* json_file);
 
-bool write_tileset_box( 
-	Transform* trans, Box& box,  	
+bool write_tileset_box(
+	Transform* trans, Box& box,
 	double geometricError,
 	const char* b3dm_file,
 	const char* json_file);
 
 bool write_tileset(
-	double longti, double lati, 
-	double tile_w, double tile_h, 
+	double longti, double lati,
+	double tile_w, double tile_h,
 	double height_min, double height_max,
 	double geometricError,
 	const char* filename, const char* full_path

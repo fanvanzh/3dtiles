@@ -350,11 +350,14 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 
 ### Generate compile_commands.json for IDE support
 
+`cargo build` drives CMake and auto-exports the compile database to `build/compile_commands.json` (handled in `build.rs`). Point VS Code C/C++/clangd to that file.
+
+Manual refresh (optional):
 ```bash
 cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cargo build -vv
 ```
-
-This helps IDEs like VSCode to properly index C++ header files.
+If you also want a root-level symlink: `ln -sf build/compile_commands.json compile_commands.json`
 
 ### Build with strict warning checks (matching CI)
 

@@ -2,10 +2,13 @@
   "name": "3dtiles",
   "version-string": "1.0.0",
   "description": "A 3D Tiles generation library",
-  "builtin-baseline": "d5182f703b51d7b258f83f94d936ac03488dcdbe",
+  "builtin-baseline": "84bab45d415d22042bd0b9081aea57f362da3f35",
   "dependencies": [
     "basisu",
     "draco",
+    "earcut-hpp",
+    "eigen3",
+    "fmt",
     {
       "name": "gdal",
       "default-features": false,
@@ -24,25 +27,13 @@
         "zstd"
       ]
     },
+    "glm",
     "meshoptimizer",
-    {
-      "name": "osg",
-      "default-features": false,
-      "features": [
-        "plugins"
-      ],
-      "platform": "osx"
-    },
-    {
-      "name": "osg",
-      "platform": "!osx"
-    },
-    "sqlite3"
-  ],
-  "overrides": [
-    {
-      "name": "gdal",
-      "version": "3.8.4"
-    }
+    "nlohmann-json",
+    "osg",
+    "spdlog",
+    "sqlite3",
+    "stb",
+    "tinygltf"
   ]
 }

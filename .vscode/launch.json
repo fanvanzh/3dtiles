@@ -30,7 +30,7 @@
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/target/debug/_3dtile",
-      "args": ["-f", "osgb", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir", "--enable-draco", "--enable-texture-compress", "--enable-simplify"],
+      "args": ["-f", "osgb", "-i", "/Users/wallance/Developer/cim/thirdparty/3dtiles-test-data/OSGBny", "-o", "/Users/wallance/Developer/vite-cesium-echarts/test-output-osgb", "--enable-simplify", "--enable-draco", "--enable-texture-compress"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "cargo build",
       "sourceLanguages": ["rust", "cpp"]
@@ -40,7 +40,7 @@
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/target/debug/_3dtile",
-      "args": ["-f", "shape", "-i", "/path/to/shp", "-o", "/path/to/output/dir", "--height", "HEIGHT", "--enable-simplify"],
+      "args": ["-f", "shape", "-i", "/Users/wallance/Developer/cim/data/南京SHP数据/南京市_百度建筑.shp", "-o", "/Users/wallance/Developer/vite-cesium-echarts/test-output-shapefile", "--height", "HEIGHT", "--enable-simplify", "--lod-levels", "0.1,0.02,0.005", "--lod-base-error", "0.2"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "cargo build",
       "sourceLanguages": ["rust", "cpp"]

@@ -1,6 +1,6 @@
 extern "C"
 {
-	bool mkdirs(const char* path) 
+	bool mkdirs(const char* path)
 	{
 		return false;
 	}
@@ -10,8 +10,4 @@ extern "C"
 		return false;
 	}
 
-	void log_error(const char* msg)
-	{
-
-	}
 }

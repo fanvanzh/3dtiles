@@ -3,6 +3,32 @@ use std::{env, fs, io, path::Path};
 
 use cmake::Config;
 
+// Copy CMake's compile_commands.json into a stable workspace path for editors.
+fn export_compile_commands(out_dir: &Path) {
+    let cmake_build_dir = out_dir.join("build");
+    let src = cmake_build_dir.join("compile_commands.json");
+    if !src.exists() {
+        println!("cargo:warning=compile_commands.json not found at {}", src.display());
+        return;
+    }
+
+    let dst_dir = Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap()).join("build");
+    if let Err(err) = fs::create_dir_all(&dst_dir) {
+        println!("cargo:warning=failed to create build dir {}: {}", dst_dir.display(), err);
+        return;
+    }
+
+    let dst = dst_dir.join("compile_commands.json");
+    match fs::copy(&src, &dst) {
+        Ok(_) => println!("cargo:warning=exported compile_commands.json to {}", dst.display()),
+        Err(err) => println!(
+            "cargo:warning=failed to copy compile_commands.json to {}: {}",
+            dst.display(),
+            err
+        ),
+    }
+}
+
 fn build_win_msvc() {
     // Get VCPKG_ROOT environment variable
     let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
@@ -13,6 +39,7 @@ fn build_win_msvc() {
     let mut config = Config::new(".");
     config
         .define("CMAKE_TOOLCHAIN_FILE", format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
+        .define("CMAKE_EXPORT_COMPILE_COMMANDS", "ON")
         .very_verbose(true);
 
     if enable_strict {
@@ -35,6 +62,7 @@ fn build_win_msvc() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
     println!("cargo:warning=out_dir = {}", &out_dir);
+    export_compile_commands(Path::new(&out_dir));
     print_vcpkg_tree(Path::new(&out_dir)).unwrap();
     // vcpkg_installed path
     let vcpkg_installed_dir = Path::new(&out_dir)
@@ -63,6 +91,8 @@ fn build_win_msvc() {
     println!("cargo:rustc-link-lib=gdal");
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
+    // zstd is required by gdal/basisu when building KTX2 (supercompression) and some GDAL drivers
+    println!("cargo:rustc-link-lib=zstd");
 
     // 5. sqlite
     println!("cargo:rustc-link-lib=sqlite3");
@@ -97,6 +127,7 @@ fn build_linux_unknown() {
         .define("CMAKE_C_COMPILER", "/usr/bin/gcc")
         .define("CMAKE_CXX_COMPILER", "/usr/bin/g++")
         .define("CMAKE_MAKE_PROGRAM", "/usr/bin/make")
+        .define("CMAKE_EXPORT_COMPILE_COMMANDS", "ON")
         .very_verbose(true);
 
     if enable_strict {
@@ -117,6 +148,7 @@ fn build_linux_unknown() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
     println!("cargo:warning=out_dir = {}", &out_dir);
+    export_compile_commands(Path::new(&out_dir));
     // print_vcpkg_tree(Path::new(&out_dir)).unwrap();
     // vcpkg_installed path
     let vcpkg_installed_dir = Path::new(&out_dir)
@@ -197,6 +229,8 @@ fn build_linux_unknown() {
     println!("cargo:rustc-link-lib=freexl");
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
+    // zstd is required by gdal/basisu when building KTX2 (supercompression) and some GDAL drivers
+    println!("cargo:rustc-link-lib=zstd");
 
     let vcpkg_share_dir = vcpkg_installed_dir.join("share");
     copy_gdal_data(vcpkg_share_dir.to_str().unwrap());
@@ -221,6 +255,7 @@ fn build_macos() {
         .define("CMAKE_C_COMPILER", "/usr/bin/clang")
         .define("CMAKE_CXX_COMPILER", "/usr/bin/clang++")
         .define("CMAKE_MAKE_PROGRAM", "/usr/bin/make")
+        .define("CMAKE_EXPORT_COMPILE_COMMANDS", "ON")
         .very_verbose(true);
 
     if enable_strict {
@@ -240,6 +275,7 @@ fn build_macos() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
     println!("cargo:warning=out_dir = {}", &out_dir);
+    export_compile_commands(Path::new(&out_dir));
     // print_vcpkg_tree(Path::new(&out_dir)).unwrap();
     // vcpkg_installed path
     let vcpkg_installed_dir = Path::new(&out_dir)
@@ -279,6 +315,8 @@ fn build_macos() {
     println!("cargo:rustc-link-lib=sqlite3");
     println!("cargo:rustc-link-lib=expat");
     println!("cargo:rustc-link-lib=curl");
+    println!("cargo:rustc-link-lib=ssl");
+    println!("cargo:rustc-link-lib=crypto");
     println!("cargo:rustc-link-lib=kmlbase");
     println!("cargo:rustc-link-lib=kmlengine");
     println!("cargo:rustc-link-lib=kmldom");
@@ -309,6 +347,8 @@ fn build_macos() {
     println!("cargo:rustc-link-lib=freexl");
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
+    // zstd is required by gdal/basisu when building KTX2 (supercompression) and some GDAL drivers
+    println!("cargo:rustc-link-lib=zstd");
 
     // 7. System libraries / frameworks
     println!("cargo:rustc-link-lib=c++");
@@ -348,6 +388,7 @@ fn build_macos_x86_64() {
         .define("CMAKE_C_COMPILER", "/usr/bin/clang")
         .define("CMAKE_CXX_COMPILER", "/usr/bin/clang++")
         .define("CMAKE_MAKE_PROGRAM", "/usr/bin/make")
+        .define("CMAKE_EXPORT_COMPILE_COMMANDS", "ON")
         .very_verbose(true);
 
     if enable_strict {
@@ -368,6 +409,7 @@ fn build_macos_x86_64() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
     println!("cargo:warning=out_dir = {}", &out_dir);
+    export_compile_commands(Path::new(&out_dir));
     // print_vcpkg_tree(Path::new(&out_dir)).unwrap();
     // vcpkg_installed path
     let vcpkg_installed_dir = Path::new(&out_dir)
@@ -407,6 +449,8 @@ fn build_macos_x86_64() {
     println!("cargo:rustc-link-lib=sqlite3");
     println!("cargo:rustc-link-lib=expat");
     println!("cargo:rustc-link-lib=curl");
+    println!("cargo:rustc-link-lib=ssl");
+    println!("cargo:rustc-link-lib=crypto");
     println!("cargo:rustc-link-lib=kmlbase");
     println!("cargo:rustc-link-lib=kmlengine");
     println!("cargo:rustc-link-lib=kmldom");
@@ -437,6 +481,8 @@ fn build_macos_x86_64() {
     println!("cargo:rustc-link-lib=freexl");
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
+    // zstd is required by gdal/basisu when building KTX2 (supercompression) and some GDAL drivers
+    println!("cargo:rustc-link-lib=zstd");
 
     // 7. System libraries / frameworks
     println!("cargo:rustc-link-lib=c++");
