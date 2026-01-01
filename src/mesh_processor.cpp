@@ -3,7 +3,6 @@
 #include <osg/Texture>
 #include <osg/Image>
 #include <osg/Array>
-#include <thread>
 #include <vector>
 #include <cstdlib>
 
@@ -21,8 +20,6 @@
 
 #include "stb_image_write.h"
 
-static basisu::job_pool job_pool(std::thread::hardware_concurrency());
-
 // Function to compress image data to KTX2 using Basis Universal
 bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, int height,
                       std::vector<unsigned char>& ktx2_data) {
@@ -39,28 +36,18 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
             basisu_initialized = true;
         }
 
-        basisu::basis_compressor_params params;
-        params.m_source_images.resize(1);
-        params.m_source_images[0].init(rgba_data.data(), width, height, 4);
+        basisu::vector<basisu::image> source_images;
+        source_images.push_back(basisu::image(rgba_data.data(), width, height, 4));
+        int quality_level = 64;
+        unsigned long file_size = 0;
 
-        // Settings
-        // Switch to UASTC for better quality, especially for normal maps and PBR textures
-        params.m_uastc = true;
-        params.m_pack_uastc_ldr_4x4_flags = basisu::cPackUASTCLevelDefault;
+        void* pKTX2_data = basisu::basis_compress(basist::basis_tex_format::cUASTC4x4, source_images,
+        quality_level | basisu::cFlagKTX2 | basisu::cFlagKTX2UASTCSuperCompression | basisu::cFlagPrintStatus | basisu::cFlagDebug | basisu::cFlagThreaded,
+        2.0f, &file_size, nullptr);
 
-        // params.m_etc1s_quality_level = 64; // Ignored when using UASTC
-        params.m_compression_level = 2;
-        params.m_create_ktx2_file = true;
-        params.m_mip_gen = false;
-        params.m_pJob_pool = &job_pool;
+        ktx2_data.assign((unsigned char*)pKTX2_data, (unsigned char*)pKTX2_data + file_size);
 
-        basisu::basis_compressor compressor;
-        if (!compressor.init(params)) return false;
-
-        if (compressor.process() != basisu::basis_compressor::cECSuccess) return false;
-
-        const auto& output = compressor.get_output_ktx2_file();
-        ktx2_data.assign(output.begin(), output.end());
+        basisu::basis_free_data(pKTX2_data);
 
         return true;
     } catch (...) {
