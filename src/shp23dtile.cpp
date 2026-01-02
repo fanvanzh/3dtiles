@@ -168,10 +168,10 @@ public:
             }
             for (int i = 0; i < 4; i++) {
                 subnode[i]->add(id, box);
-		//when box is added to a node, stop the loop
-		if (box.isAdd) {
-		    break;
-		}
+                //when box is added to a node, stop the loop
+                if (box.isAdd) {
+                    break;
+                }
             }
         }
     }
@@ -866,15 +866,10 @@ shp23dtile(const ShapeConversionParams* params)
         return false;
     }
 
-    // Store feature attributes to SQLite database using RAII wrapper
-    char sqlite_path[512];
-#ifdef _WIN32
-    sprintf(sqlite_path, "%s\\attributes.db", dest);
-#else
-    sprintf(sqlite_path, "%s/attributes.db", dest);
-#endif
 
     {
+        // Store feature attributes to SQLite database using RAII wrapper
+        const std::string sqlite_path = std::filesystem::path(dest) / "attributes.db";
         // RAII: AttributeStorage will auto-commit and close on scope exit
         AttributeStorage attr_storage(sqlite_path);
 
