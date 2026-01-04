@@ -709,134 +709,220 @@ struct PrimitiveState
     int textcdAccessor;
 };
 
-void
-write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgBuildState* osgState, PrimitiveState* pmtState)
-{
-    tinygltf::Primitive primits;
-    // indecis
-    primits.indices = osgState->model->accessors.size();
-    // reset draw_array state
-    osgState->draw_array_first = -1;
-    osg::PrimitiveSet::Type t = ps->getType();
-    switch (t)
-    {
-        case(osg::PrimitiveSet::DrawElementsUBytePrimitiveType):
-        {
-            const osg::DrawElementsUByte* drawElements = static_cast<const osg::DrawElementsUByte*>(ps);
-            write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE);
-            break;
-        }
-        case(osg::PrimitiveSet::DrawElementsUShortPrimitiveType):
-        {
-            const osg::DrawElementsUShort* drawElements = static_cast<const osg::DrawElementsUShort*>(ps);
-            write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT);
-            break;
-        }
-        case(osg::PrimitiveSet::DrawElementsUIntPrimitiveType):
-        {
-            const osg::DrawElementsUInt* drawElements = static_cast<const osg::DrawElementsUInt*>(ps);
-            write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT);
-            break;
-        }
-        case osg::PrimitiveSet::DrawArraysPrimitiveType:
-        {
-            primits.indices = -1;
-            osg::DrawArrays* da = dynamic_cast<osg::DrawArrays*>(ps);
-            osgState->draw_array_first = da->getFirst();
-            osgState->draw_array_count = da->getCount();
-            break;
-        }
-        default:
-        {
-            LOG_E("unsupport osg::PrimitiveSet::Type [%d]", t);
-            exit(1);
-            break;
-        }
+struct DracoState {
+  bool compressed;
+  int bufferView;
+  int posId;
+  int normId;
+  int texId;
+  int batchId;
+};
+
+void write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgBuildState* osgState,
+                                   PrimitiveState* pmtState, DracoState* dracoState) {
+  tinygltf::Primitive primits;
+  primits.indices = osgState->model->accessors.size();
+  // reset draw_array state
+  osgState->draw_array_first = -1;
+  osg::PrimitiveSet::Type t = ps->getType();
+  switch (t) {
+    case (osg::PrimitiveSet::DrawElementsUBytePrimitiveType): {
+      const osg::DrawElementsUByte* drawElements = static_cast<const osg::DrawElementsUByte*>(ps);
+      if (dracoState && dracoState->compressed) {
+        tinygltf::Accessor acc;
+        acc.bufferView = -1;
+        acc.type = TINYGLTF_TYPE_SCALAR;
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
+        acc.count = drawElements->getNumIndices();
+        int accIdx = (int)osgState->model->accessors.size();
+        osgState->model->accessors.push_back(acc);
+        primits.indices = accIdx;
+      } else {
+        write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE);
+      }
+      break;
     }
-    // vertex: full vertex and part indecis
-    if (pmtState->vertexAccessor > -1 && osgState->draw_array_first == -1)
-    {
-        primits.attributes["POSITION"] = pmtState->vertexAccessor;
+    case (osg::PrimitiveSet::DrawElementsUShortPrimitiveType): {
+      const osg::DrawElementsUShort* drawElements = static_cast<const osg::DrawElementsUShort*>(ps);
+      if (dracoState && dracoState->compressed) {
+        tinygltf::Accessor acc;
+        acc.bufferView = -1;
+        acc.type = TINYGLTF_TYPE_SCALAR;
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+        acc.count = drawElements->getNumIndices();
+        int accIdx = (int)osgState->model->accessors.size();
+        osgState->model->accessors.push_back(acc);
+        primits.indices = accIdx;
+      } else {
+        write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT);
+      }
+      break;
     }
-    else
-    {
+    case (osg::PrimitiveSet::DrawElementsUIntPrimitiveType): {
+      const osg::DrawElementsUInt* drawElements = static_cast<const osg::DrawElementsUInt*>(ps);
+      if (dracoState && dracoState->compressed) {
+        tinygltf::Accessor acc;
+        acc.bufferView = -1;
+        acc.type = TINYGLTF_TYPE_SCALAR;
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
+        acc.count = drawElements->getNumIndices();
+        int accIdx = (int)osgState->model->accessors.size();
+        osgState->model->accessors.push_back(acc);
+        primits.indices = accIdx;
+      } else {
+        write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT);
+      }
+      break;
+    }
+    case osg::PrimitiveSet::DrawArraysPrimitiveType: {
+      primits.indices = -1;
+      osg::DrawArrays* da = dynamic_cast<osg::DrawArrays*>(ps);
+      osgState->draw_array_first = da->getFirst();
+      osgState->draw_array_count = da->getCount();
+      break;
+    }
+    default: {
+      LOG_E("unsupport osg::PrimitiveSet::Type [%d]", t);
+      exit(1);
+      break;
+    }
+  }
+  // vertex: full vertex and part indecis
+  if (pmtState->vertexAccessor > -1 && osgState->draw_array_first == -1) {
+    primits.attributes["POSITION"] = pmtState->vertexAccessor;
+  } else {
+    osg::Vec3Array* vertexArr = (osg::Vec3Array*)g->getVertexArray();
+    if (dracoState && dracoState->compressed) {
+      // Create a placeholder accessor (no bufferView) with correct count/type
+      tinygltf::Accessor acc;
+      acc.bufferView = -1;
+      acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+      acc.count = (osgState->draw_array_first >= 0) ? osgState->draw_array_count : (int)vertexArr->size();
+      acc.type = TINYGLTF_TYPE_VEC3;
+      // Compute min/max for bbox
+      osg::Vec3f point_max(-1e38, -1e38, -1e38);
+      osg::Vec3f point_min(1e38, 1e38, 1e38);
+      int vec_start = (osgState->draw_array_first >= 0) ? osgState->draw_array_first : 0;
+      int vec_end = (osgState->draw_array_first >= 0) ? (osgState->draw_array_count + vec_start) : (int)vertexArr->size();
+      for (int vidx = vec_start; vidx < vec_end; vidx++) {
+        osg::Vec3f point = vertexArr->at(vidx);
+        expand_bbox3d(point_max, point_min, point);
+      }
+      acc.minValues = {point_min.x(), point_min.y(), point_min.z()};
+      acc.maxValues = {point_max.x(), point_max.y(), point_max.z()};
+      int accIdx = (int)osgState->model->accessors.size();
+      osgState->model->accessors.push_back(acc);
+      primits.attributes["POSITION"] = accIdx;
+      if (pmtState->vertexAccessor == -1 && osgState->draw_array_first == -1) {
+        pmtState->vertexAccessor = accIdx;
+      }
+      if (point_min.x() <= point_max.x() && point_min.y() <= point_max.y() &&
+          point_min.z() <= point_max.z()) {
+        expand_bbox3d(osgState->point_max, osgState->point_min, point_max);
+        expand_bbox3d(osgState->point_max, osgState->point_min, point_min);
+      }
+    } else {
+      osg::Vec3f point_max(-1e38, -1e38, -1e38);
+      osg::Vec3f point_min(1e38, 1e38, 1e38);
+      primits.attributes["POSITION"] = osgState->model->accessors.size();
+      if (pmtState->vertexAccessor == -1 && osgState->draw_array_first == -1) {
+        pmtState->vertexAccessor = osgState->model->accessors.size();
+      }
+      write_vec3_array(vertexArr, osgState, point_max, point_min);
+      if (point_min.x() <= point_max.x() && point_min.y() <= point_max.y() &&
+          point_min.z() <= point_max.z()) {
+        expand_bbox3d(osgState->point_max, osgState->point_min, point_max);
+        expand_bbox3d(osgState->point_max, osgState->point_min, point_min);
+      }
+    }
+  }
+  // normal
+  osg::Vec3Array* normalArr = (osg::Vec3Array*)g->getNormalArray();
+  if (normalArr) {
+    if (pmtState->normalAccessor > -1 && osgState->draw_array_first == -1) {
+      primits.attributes["NORMAL"] = pmtState->normalAccessor;
+    } else {
+      if (dracoState && dracoState->compressed) {
+        tinygltf::Accessor acc;
+        acc.bufferView = -1;
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+        acc.count = (osgState->draw_array_first >= 0) ? osgState->draw_array_count : (int)normalArr->size();
+        acc.type = TINYGLTF_TYPE_VEC3;
+        int accIdx = (int)osgState->model->accessors.size();
+        osgState->model->accessors.push_back(acc);
+        primits.attributes["NORMAL"] = accIdx;
+        if (pmtState->normalAccessor == -1 && osgState->draw_array_first == -1) {
+          pmtState->normalAccessor = accIdx;
+        }
+      } else {
         osg::Vec3f point_max(-1e38, -1e38, -1e38);
         osg::Vec3f point_min(1e38, 1e38, 1e38);
-        osg::Vec3Array* vertexArr = (osg::Vec3Array*)g->getVertexArray();
-        primits.attributes["POSITION"] = osgState->model->accessors.size();
-        // reuse vertex accessor if multi indecis
-        if (pmtState->vertexAccessor == -1 && osgState->draw_array_first == -1)
-        {
-            pmtState->vertexAccessor = osgState->model->accessors.size();
+        primits.attributes["NORMAL"] = osgState->model->accessors.size();
+        if (pmtState->normalAccessor == -1 && osgState->draw_array_first == -1) {
+          pmtState->normalAccessor = osgState->model->accessors.size();
         }
-        write_vec3_array(vertexArr, osgState, point_max, point_min);
-        // merge mesh bbox
-        if (point_min.x() <= point_max.x() && point_min.y() <= point_max.y() && point_min.z() <= point_max.z())
-        {
-            expand_bbox3d(osgState->point_max, osgState->point_min, point_max);
-            expand_bbox3d(osgState->point_max, osgState->point_min, point_min);
-        }
+        write_vec3_array(normalArr, osgState, point_max, point_min);
+      }
     }
-    // normal
-    osg::Vec3Array* normalArr = (osg::Vec3Array*)g->getNormalArray();
-    if (normalArr)
-    {
-        if (pmtState->normalAccessor > -1 && osgState->draw_array_first == -1)
-        {
-            primits.attributes["NORMAL"] = pmtState->normalAccessor;
+  }
+  // textcoord
+  osg::Vec2Array* texArr = (osg::Vec2Array*)g->getTexCoordArray(0);
+  if (texArr) {
+    if (pmtState->textcdAccessor > -1 && osgState->draw_array_first == -1) {
+      primits.attributes["TEXCOORD_0"] = pmtState->textcdAccessor;
+    } else {
+      if (dracoState && dracoState->compressed) {
+        tinygltf::Accessor acc;
+        acc.bufferView = -1;
+        acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+        acc.count = (osgState->draw_array_first >= 0) ? osgState->draw_array_count : (int)texArr->size();
+        acc.type = TINYGLTF_TYPE_VEC2;
+        int accIdx = (int)osgState->model->accessors.size();
+        osgState->model->accessors.push_back(acc);
+        primits.attributes["TEXCOORD_0"] = accIdx;
+        if (pmtState->textcdAccessor == -1 && osgState->draw_array_first == -1) {
+          pmtState->textcdAccessor = accIdx;
         }
-        else
-        {
-            osg::Vec3f point_max(-1e38, -1e38, -1e38);
-            osg::Vec3f point_min(1e38, 1e38, 1e38);
-            primits.attributes["NORMAL"] = osgState->model->accessors.size();
-            // reuse vertex accessor if multi indecis
-            if (pmtState->normalAccessor == -1 && osgState->draw_array_first == -1)
-            {
-                pmtState->normalAccessor = osgState->model->accessors.size();
-            }
-            write_vec3_array(normalArr, osgState, point_max, point_min);
+      } else {
+        primits.attributes["TEXCOORD_0"] = osgState->model->accessors.size();
+        if (pmtState->textcdAccessor == -1 && osgState->draw_array_first == -1) {
+          pmtState->textcdAccessor = osgState->model->accessors.size();
         }
+        write_vec2_array(texArr, osgState);
+      }
     }
-    // textcoord
-    osg::Vec2Array* texArr = (osg::Vec2Array*)g->getTexCoordArray(0);
-    if (texArr)
-    {
-        if (pmtState->textcdAccessor > -1 && osgState->draw_array_first == -1)
-        {
-            primits.attributes["TEXCOORD_0"] = pmtState->textcdAccessor;
-        }
-        else
-        {
-            primits.attributes["TEXCOORD_0"] = osgState->model->accessors.size();
-            // reuse textcoord accessor if multi indecis
-            if (pmtState->textcdAccessor == -1 && osgState->draw_array_first == -1)
-            {
-                pmtState->textcdAccessor = osgState->model->accessors.size();
-            }
-            write_vec2_array(texArr, osgState);
-        }
-    }
-    // material
-    primits.material = -1;
+  }
+  // material
+  primits.material = -1;
 
-    switch (ps->getMode())
-    {
+  switch (ps->getMode()) {
     case GL_TRIANGLES:
-        primits.mode = TINYGLTF_MODE_TRIANGLES;
-        break;
+      primits.mode = TINYGLTF_MODE_TRIANGLES;
+      break;
     case GL_TRIANGLE_STRIP:
-        primits.mode = TINYGLTF_MODE_TRIANGLE_STRIP;
-        break;
+      primits.mode = TINYGLTF_MODE_TRIANGLE_STRIP;
+      break;
     case GL_TRIANGLE_FAN:
-        primits.mode = TINYGLTF_MODE_TRIANGLE_FAN;
-        break;
+      primits.mode = TINYGLTF_MODE_TRIANGLE_FAN;
+      break;
     default:
-        LOG_E("Unsupport Primitive Mode: %d", (int)ps->getMode());
-        exit(1);
-        break;
-    }
-    osgState->model->meshes.back().primitives.push_back(primits);
+      LOG_E("Unsupport Primitive Mode: %d", (int)ps->getMode());
+      exit(1);
+      break;
+  }
+  osgState->model->meshes.back().primitives.push_back(primits);
+  if (dracoState && dracoState->compressed) {
+    tinygltf::Primitive& backPrim = osgState->model->meshes.back().primitives.back();
+    tinygltf::Value::Object dracoExt;
+    dracoExt["bufferView"] = tinygltf::Value(dracoState->bufferView);
+    tinygltf::Value::Object dracoAttribs;
+    if (dracoState->posId != -1) dracoAttribs["POSITION"] = tinygltf::Value(dracoState->posId);
+    if (dracoState->normId != -1) dracoAttribs["NORMAL"] = tinygltf::Value(dracoState->normId);
+    if (dracoState->texId != -1) dracoAttribs["TEXCOORD_0"] = tinygltf::Value(dracoState->texId);
+    if (dracoState->batchId != -1) dracoAttribs["_BATCHID"] = tinygltf::Value(dracoState->batchId);
+    dracoExt["attributes"] = tinygltf::Value(dracoAttribs);
+    backPrim.extensions["KHR_draco_mesh_compression"] = tinygltf::Value(dracoExt);
+  }
 }
 
 void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState, bool enable_simplify, bool enable_draco)
@@ -846,27 +932,45 @@ void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState, bool enable_si
         ::simplify_mesh_geometry(g, simplication_params);
     }
     // Apply Draco compression if enabled
+    DracoState dracoState = {false, -1, -1, -1, -1, -1};
     if (enable_draco) {
         std::vector<unsigned char> compressed_data;
         size_t compressed_size = 0;
         const DracoCompressionParams draco_params = { .enable_compression = true };
-
-        // Try to compress the geometry with Draco
-        ::compress_mesh_geometry(g, draco_params, compressed_data, compressed_size);
-    }
-
-    osg::PrimitiveSet::Type t = g->getPrimitiveSet(0)->getType();
-    PrimitiveState pmtState = {-1, -1, -1};
-    for (unsigned int k = 0; k < g->getNumPrimitiveSets(); k++)
-    {
-        osg::PrimitiveSet* ps = g->getPrimitiveSet(k);
-        if (t != ps->getType())
-        {
-            LOG_E("PrimitiveSets type are NOT same in osgb");
-            exit(1);
+        int dracoPosId = -1, dracoNormId = -1, dracoTexId = -1, dracoBatchId = -1;
+        bool ok = ::compress_mesh_geometry(g, draco_params, compressed_data, compressed_size,
+                                         &dracoPosId, &dracoNormId, &dracoTexId, &dracoBatchId, nullptr);
+        if (ok && compressed_size > 0) {
+            unsigned bufOffset = osgState->buffer->data.size();
+            alignment_buffer(osgState->buffer->data);
+            bufOffset = osgState->buffer->data.size();
+            osgState->buffer->data.resize(bufOffset + compressed_size);
+            std::memcpy(osgState->buffer->data.data() + bufOffset, compressed_data.data(), compressed_size);
+            tinygltf::BufferView bv;
+            bv.buffer = 0;
+            bv.byteOffset = bufOffset;
+            bv.byteLength = compressed_size;
+            int bvIdx = (int)osgState->model->bufferViews.size();
+            osgState->model->bufferViews.push_back(bv);
+            dracoState.compressed = true;
+            dracoState.bufferView = bvIdx;
+            dracoState.posId = dracoPosId;
+            dracoState.normId = dracoNormId;
+            dracoState.texId = dracoTexId;
+            dracoState.batchId = dracoBatchId;
         }
-        write_element_array_primitive(g, ps, osgState, &pmtState);
+  }
+
+  osg::PrimitiveSet::Type t = g->getPrimitiveSet(0)->getType();
+  PrimitiveState pmtState = {-1, -1, -1};
+  for (unsigned int k = 0; k < g->getNumPrimitiveSets(); k++) {
+    osg::PrimitiveSet* ps = g->getPrimitiveSet(k);
+    if (t != ps->getType()) {
+      LOG_E("PrimitiveSets type are NOT same in osgb");
+      exit(1);
     }
+    write_element_array_primitive(g, ps, osgState, &pmtState, &dracoState);
+  }
 }
 
 bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, int node_type, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false) {
