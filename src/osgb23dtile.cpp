@@ -322,10 +322,39 @@ std::string get_parent(std::string str) {
         return "";
 }
 
+std::string normalize_path(const char* path)
+{
+    if (!path) {
+        return std::string();
+    }
+
+#ifdef _WIN32
+    std::string p(path);
+
+    // \\?\UNC\server\share\xxx  ->  \\server\share\xxx
+    const std::string uncPrefix = R"(\\?\UNC\)";
+    if (p.rfind(uncPrefix, 0) == 0)
+    {
+        return R"(\\)" + p.substr(uncPrefix.length());
+    }
+
+    // \\?\C:\xxx  ->  C:\xxx
+    const std::string longPrefix = R"(\\?\)";
+    if (p.rfind(longPrefix, 0) == 0)
+    {
+        return p.substr(longPrefix.length());
+    }
+
+    return p;
+#else
+    return std::string(path);
+#endif
+}
+
 std::string osg_string ( const char* path ) {
     #ifdef WIN32
         std::string root_path =
-        osgDB::convertStringFromUTF8toCurrentCodePage(path);
+        osgDB::convertStringFromUTF8toCurrentCodePage(normalize_path(path));
     #else
         std::string root_path = (path);
     #endif // WIN32
