@@ -10,6 +10,7 @@
 
 - **Osgb to 3D-Tiles**: Convert OpenSceneGraph Binary format to 3D-Tiles format for efficient geospatial data visualization
 - **Shapefile to 3D-Tiles**: Transform Esri Shapefile data to 3D-Tiles for web-based 3D visualization
+- **FBX to 3D-Tiles**: Convert FBX models to 3D-Tiles format
 - **Multi-platform Support**: Fully supported on Linux, macOS (Intel & Apple Silicon), and Windows
 - **Hybrid Stack**: Combines Rust for CLI/data handling with C++ for high-performance 3D processing
 
@@ -108,6 +109,9 @@ set VCPKG_ROOT=<path-to-vcpkg>  # Windows
 ```bash
 git clone --recursive https://github.com/fanvanzh/3dtiles.git
 cd 3dtiles
+
+# If you forgot the --recursive flag, or after pulling updates, initialize submodules manually:
+git submodule update --init --recursive
 ```
 
 ## Linux (Ubuntu 24.04+)
@@ -216,6 +220,9 @@ _3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"pbr\": true}"
 # from single shp file
 _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
 
+# from single fbx file
+_3dtile.exe -f fbx -i E:\Data\model.fbx -o E:\Data\model
+
 # from single osgb file to glb file
 _3dtile.exe -f gltf -i E:\Data\TT\001.osgb -o E:\Data\TT\001.glb
 
@@ -252,7 +259,7 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 ### Required Options
 
 - `-f, --format <FORMAT>` - Input data format
-  Available formats: `osgb`, `shape`, `gltf`, `b3dm`
+  Available formats: `osgb`, `shape`, `gltf`, `b3dm`, `fbx`
 
 - `-i, --input <PATH>` - Input file or directory path
 
@@ -311,12 +318,12 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 
 ### Format Support Matrix
 
-| Optimization Flag | OSGB | Shapefile | GLTF | B3DM |
-|-------------------|------|-----------|------|------|
-| `--enable-lod` | ❌ | ✅ | ❌ | ❌ |
-| `--enable-simplify` | ✅ | ✅ | ❌ | ❌ |
-| `--enable-draco` | ✅ | ✅ | ❌ | ❌ |
-| `--enable-texture-compress` | ✅ | ❌ | ❌ | ❌ |
+| Optimization Flag | OSGB | Shapefile | GLTF | B3DM | FBX |
+|-------------------|------|-----------|------|------|-----|
+| `--enable-lod` | ❌ | ✅ | ❌ | ❌ | ❌ |
+| `--enable-simplify` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `--enable-draco` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `--enable-texture-compress` | ✅ | ❌ | ❌ | ❌ | ✅ |
 
 ### Flag Combinations
 
