@@ -869,7 +869,7 @@ shp23dtile(const ShapeConversionParams* params)
 
     {
         // Store feature attributes to SQLite database using RAII wrapper
-        const std::string sqlite_path = std::filesystem::path(dest) / "attributes.db";
+        const std::string sqlite_path = (std::filesystem::path(dest) / "attributes.db").string();
         // RAII: AttributeStorage will auto-commit and close on scope exit
         AttributeStorage attr_storage(sqlite_path);
 
