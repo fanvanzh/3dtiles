@@ -80,11 +80,6 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
     }
 }
 
-// Function to set KTX2 compression flag
-void set_ktx2_compression_flag(bool enable) {
-    b_use_ktx2_compression = enable;
-}
-
 // Helper function to write buffer data (static to avoid duplicate symbol)
 static void write_buf(void* context, void* data, int len) {
     std::vector<char> *buf = (std::vector<char>*)context;
@@ -619,7 +614,9 @@ bool simplify_mesh_geometry(osg::Geometry* geometry, const SimplificationParams&
 // Function to compress mesh geometry using Draco
 bool compress_mesh_geometry(osg::Geometry* geometry, const DracoCompressionParams& params,
                            std::vector<unsigned char>& compressed_data, size_t& compressed_size,
-                           int* out_position_att_id, int* out_normal_att_id) {
+                           int* out_position_att_id, int* out_normal_att_id,
+                           int* out_texcoord_att_id, int* out_batchid_att_id,
+                           const std::vector<float>* batchIds) {
     if (!params.enable_compression || !geometry) {
         return false;
     }
@@ -641,6 +638,7 @@ bool compress_mesh_geometry(osg::Geometry* geometry, const DracoCompressionParam
     draco::GeometryAttribute posAttr;
     posAttr.Init(draco::GeometryAttribute::POSITION, nullptr, 3, draco::DT_FLOAT32, false, sizeof(float) * 3, 0);
     int posAttId = dracoMesh->AddAttribute(posAttr, true, vertexCount);
+    if (out_position_att_id) *out_position_att_id = posAttId;
 
     // Copy vertex positions
     for (size_t i = 0; i < vertexCount; ++i) {
@@ -651,17 +649,45 @@ bool compress_mesh_geometry(osg::Geometry* geometry, const DracoCompressionParam
 
     // Handle normals if present
     osg::Vec3Array* normalArray = dynamic_cast<osg::Vec3Array*>(geometry->getNormalArray());
-    int normalAttId = -1;
     if (normalArray && normalArray->size() == vertexCount) {
         draco::GeometryAttribute normalAttr;
         normalAttr.Init(draco::GeometryAttribute::NORMAL, nullptr, 3, draco::DT_FLOAT32, false, sizeof(float) * 3, 0);
-        normalAttId = dracoMesh->AddAttribute(normalAttr, true, vertexCount);
+        int normalAttId = dracoMesh->AddAttribute(normalAttr, true, vertexCount);
+        if (out_normal_att_id) *out_normal_att_id = normalAttId;
 
         // Copy normals
         for (size_t i = 0; i < vertexCount; ++i) {
             const osg::Vec3& normal = normalArray->at(i);
             const float norm[3] = { static_cast<float>(normal.x()), static_cast<float>(normal.y()), static_cast<float>(normal.z()) };
             dracoMesh->attribute(normalAttId)->SetAttributeValue(draco::AttributeValueIndex(i), &norm[0]);
+        }
+    }
+
+    // Handle texture coordinates if present
+    osg::Vec2Array* texCoordArray = dynamic_cast<osg::Vec2Array*>(geometry->getTexCoordArray(0));
+    if (texCoordArray && texCoordArray->size() == vertexCount) {
+        draco::GeometryAttribute uvAttr;
+        uvAttr.Init(draco::GeometryAttribute::TEX_COORD, nullptr, 2, draco::DT_FLOAT32, false, sizeof(float) * 2, 0);
+        int uvAttId = dracoMesh->AddAttribute(uvAttr, true, vertexCount);
+        if (out_texcoord_att_id) *out_texcoord_att_id = uvAttId;
+
+        for (size_t i = 0; i < vertexCount; ++i) {
+            const osg::Vec2& uv = texCoordArray->at(i);
+            const float tex[2] = { static_cast<float>(uv.x()), static_cast<float>(uv.y()) };
+            dracoMesh->attribute(uvAttId)->SetAttributeValue(draco::AttributeValueIndex(i), &tex[0]);
+        }
+    }
+
+    // Handle Batch IDs if present
+    if (batchIds && batchIds->size() == vertexCount) {
+        draco::GeometryAttribute batchIdAttr;
+        batchIdAttr.Init(draco::GeometryAttribute::GENERIC, nullptr, 1, draco::DT_FLOAT32, false, sizeof(float), 0);
+        int batchIdAttId = dracoMesh->AddAttribute(batchIdAttr, true, vertexCount);
+        if (out_batchid_att_id) *out_batchid_att_id = batchIdAttId;
+
+        for (size_t i = 0; i < vertexCount; ++i) {
+            float val = (*batchIds)[i];
+            dracoMesh->attribute(batchIdAttId)->SetAttributeValue(draco::AttributeValueIndex(i), &val);
         }
     }
 
@@ -701,6 +727,9 @@ bool compress_mesh_geometry(osg::Geometry* geometry, const DracoCompressionParam
     if (normalArray) {
         encoder.SetAttributeQuantization(draco::GeometryAttribute::NORMAL, params.normal_quantization_bits);
     }
+    if (texCoordArray) {
+        encoder.SetAttributeQuantization(draco::GeometryAttribute::TEX_COORD, params.tex_coord_quantization_bits);
+    }
 
     // Encode the mesh
     draco::EncoderBuffer buffer;
@@ -714,13 +743,6 @@ bool compress_mesh_geometry(osg::Geometry* geometry, const DracoCompressionParam
     compressed_size = buffer.size();
     compressed_data.resize(compressed_size);
     std::memcpy(compressed_data.data(), buffer.data(), compressed_size);
-
-    if (out_position_att_id) {
-        *out_position_att_id = posAttId;
-    }
-    if (out_normal_att_id) {
-        *out_normal_att_id = normalAttId;
-    }
 
     return true;
 }

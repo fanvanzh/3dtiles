@@ -41,9 +41,6 @@ struct DracoCompressionParams {
 bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, int height,
                       std::vector<unsigned char>& ktx2_data);
 
-// Function to set KTX2 compression flag
-void set_ktx2_compression_flag(bool enable);
-
 // Function to optimize and simplify mesh data using meshoptimizer
 // Input: vertices, indices, and optimization parameters
 // Output: optimized vertices and simplified indices
@@ -63,7 +60,9 @@ bool simplify_mesh_geometry(osg::Geometry* geometry, const SimplificationParams&
 // Optional out parameters allow callers to retrieve Draco attribute ids for glTF extension mapping
 bool compress_mesh_geometry(osg::Geometry* geometry, const DracoCompressionParams& params,
                            std::vector<unsigned char>& compressed_data, size_t& compressed_size,
-                           int* out_position_att_id = nullptr, int* out_normal_att_id = nullptr);
+                           int* out_position_att_id = nullptr, int* out_normal_att_id = nullptr,
+                           int* out_texcoord_att_id = nullptr, int* out_batchid_att_id = nullptr,
+                           const std::vector<float>* batchIds = nullptr);
 
 // Function to process textures (KTX2 compression)
 bool process_texture(osg::Texture* tex, std::vector<unsigned char>& image_data, std::string& mime_type, bool enable_texture_compress = false);
