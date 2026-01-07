@@ -118,10 +118,10 @@ fn main() {
             Arg::new("format")
                 .short('f')
                 .long("format")
-                .value_name("osgb,shape,gltf,b3dm")
+                .value_name("osgb,shape,gltf,b3dm,fbx")
                 .help("Set input format")
                 .required(true)
-                .value_parser(["osgb", "shape", "gltf", "b3dm"])
+                .value_parser(["osgb", "shape", "gltf", "b3dm", "fbx"])
                 .num_args(1),
         )
         .arg(
@@ -247,9 +247,68 @@ fn main() {
         "b3dm" => {
             convert_b3dm(input, output);
         }
+        "fbx" => {
+            convert_fbx_cmd(input, output, tile_config, enable_texture_compress, enable_simplify, enable_draco);
+        }
         _ => {
             error!("not support now.");
         }
+    }
+}
+
+fn convert_fbx_cmd(
+    input: &str,
+    output: &str,
+    config: &str,
+    enable_texture_compress: bool,
+    enable_simplify: bool,
+    enable_draco: bool,
+) {
+    use serde_json::Value;
+
+    let mut max_lvl: Option<i32> = None;
+    let mut longitude = 0.0;
+    let mut latitude = 0.0;
+    let mut height = 0.0;
+
+    if !config.is_empty() {
+        if let Ok(val) = serde_json::from_str::<Value>(config) {
+            if let Some(lvl) = val["max_lvl"].as_i64() {
+                max_lvl = Some(lvl as i32);
+            }
+            if let Some(x) = val["x"].as_f64() {
+                longitude = x;
+            }
+            if let Some(y) = val["y"].as_f64() {
+                latitude = y;
+            }
+            if let Some(h) = val["height"].as_f64() {
+                height = h;
+            } else if let Some(offset) = val["offset"].as_f64() {
+                height = offset;
+            }
+        } else {
+            error!("config is not valid json");
+        }
+    }
+
+    info!("Starting FBX conversion: {} -> {}", input, output);
+    info!("Origin: lon={}, lat={}, height={}", longitude, latitude, height);
+
+    if let Err(e) = osgb::convert_fbx(
+        input,
+        output,
+        max_lvl,
+        enable_texture_compress,
+        enable_simplify,
+        enable_draco,
+        longitude,
+        latitude,
+        height,
+    ) {
+        error!("FBX conversion failed: {}", e);
+    } else {
+        info!("FBX conversion finished successfully.");
     }
 }
 

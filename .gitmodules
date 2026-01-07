@@ -1,0 +1,3 @@
+[submodule "thirdparty/ufbx"]
+	path = thirdparty/ufbx
+	url = https://github.com/ufbx/ufbx.git
