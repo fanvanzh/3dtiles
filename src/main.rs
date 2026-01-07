@@ -320,8 +320,9 @@ fn convert_gltf(src: &str, dest: &str) {
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 struct ModelMetadata {
+    #[serde(rename = "@version")]
     pub version: String,
     pub SRS: String,
     pub SRSOrigin: String,
@@ -351,189 +352,192 @@ fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enab
             let mut buffer = String::new();
             if let Ok(_) = f.read_to_string(&mut buffer) {
                 //
-                if let Ok(metadata) = serde_xml_rs::from_str::<ModelMetadata>(&buffer) {
+                match serde_xml_rs::from_str::<ModelMetadata>(buffer.as_str()) {
+                    Ok(metadata) => {
                     //println!("{:?}", metadata);
-                    let v: Vec<&str> = metadata.SRS.split(":").collect();
-                    if v.len() > 1 {
-                        if v[0] == "ENU" {
-                            let v1: Vec<&str> = v[1].split(",").collect();
-                            if v1.len() > 1 {
-                                let v1_num = (*v1[0]).parse::<f64>();
-                                let v2_num = v1[1].parse::<f64>();
-                                if v1_num.is_ok() && v2_num.is_ok() {
-                                    center_y = v1_num.unwrap();
-                                    center_x = v2_num.unwrap();
+                        let v: Vec<&str> = metadata.SRS.split(":").collect();
+                        if v.len() > 1 {
+                            if v[0] == "ENU" {
+                                let v1: Vec<&str> = v[1].split(",").collect();
+                                if v1.len() > 1 {
+                                    let v1_num = (*v1[0]).parse::<f64>();
+                                    let v2_num = v1[1].parse::<f64>();
+                                    if v1_num.is_ok() && v2_num.is_ok() {
+                                        center_y = v1_num.unwrap();
+                                        center_x = v2_num.unwrap();
 
-                                    // Parse and apply SRSOrigin offset
-                                    let origin_parts: Vec<&str> =
-                                        metadata.SRSOrigin.split(",").collect();
-                                    if origin_parts.len() >= 2 {
-                                        if let (Ok(offset_x), Ok(offset_y)) = (
-                                            origin_parts[0].parse::<f64>(),
-                                            origin_parts[1].parse::<f64>(),
-                                        ) {
-                                            // Parse Z offset (height) if available
-                                            let offset_z = if origin_parts.len() >= 3 {
-                                                origin_parts[2].parse::<f64>().unwrap_or(0.0)
-                                            } else {
-                                                0.0
-                                            };
+                                        // Parse and apply SRSOrigin offset
+                                        let origin_parts: Vec<&str> =
+                                            metadata.SRSOrigin.split(",").collect();
+                                        if origin_parts.len() >= 2 {
+                                            if let (Ok(offset_x), Ok(offset_y)) = (
+                                                origin_parts[0].parse::<f64>(),
+                                                origin_parts[1].parse::<f64>(),
+                                            ) {
+                                                // Parse Z offset (height) if available
+                                                let offset_z = if origin_parts.len() >= 3 {
+                                                    origin_parts[2].parse::<f64>().unwrap_or(0.0)
+                                                } else {
+                                                    0.0
+                                                };
 
-                                            // Call enu_init to set up GeoTransform for geometry correction
-                                            let gdal_data: String = {
-                                                use std::path::Path;
-                                                let exe_dir = ::std::env::current_exe().unwrap();
-                                                Path::new(&exe_dir)
-                                                    .parent()
-                                                    .unwrap()
-                                                    .join("gdal")
-                                                    .to_str()
-                                                    .unwrap()
-                                                    .into()
-                                            };
-                                            let proj_lib: String = {
-                                                use std::path::Path;
-                                                let exe_dir = ::std::env::current_exe().unwrap();
-                                                Path::new(&exe_dir)
-                                                    .parent()
-                                                    .unwrap()
-                                                    .join("proj")
-                                                    .to_str()
-                                                    .unwrap()
-                                                    .into()
-                                            };
+                                                // Call enu_init to set up GeoTransform for geometry correction
+                                                let gdal_data: String = {
+                                                    use std::path::Path;
+                                                    let exe_dir = ::std::env::current_exe().unwrap();
+                                                    Path::new(&exe_dir)
+                                                        .parent()
+                                                        .unwrap()
+                                                        .join("gdal")
+                                                        .to_str()
+                                                        .unwrap()
+                                                        .into()
+                                                };
+                                                let proj_lib: String = {
+                                                    use std::path::Path;
+                                                    let exe_dir = ::std::env::current_exe().unwrap();
+                                                    Path::new(&exe_dir)
+                                                        .parent()
+                                                        .unwrap()
+                                                        .join("proj")
+                                                        .to_str()
+                                                        .unwrap()
+                                                        .into()
+                                                };
 
-                                            unsafe {
-                                                use std::ffi::CString;
-                                                let mut origin_enu = vec![offset_x, offset_y, offset_z];
-                                                let gdal_c_str = CString::new(gdal_data).unwrap();
-                                                let gdal_ptr = gdal_c_str.as_ptr();
-                                                let proj_c_str = CString::new(proj_lib).unwrap();
-                                                let proj_ptr = proj_c_str.as_ptr();
-                                                if !osgb::enu_init(center_x, center_y, origin_enu.as_mut_ptr(), gdal_ptr, proj_ptr) {
-                                                    error!("enu_init failed!");
+                                                unsafe {
+                                                    use std::ffi::CString;
+                                                    let mut origin_enu = vec![offset_x, offset_y, offset_z];
+                                                    let gdal_c_str = CString::new(gdal_data).unwrap();
+                                                    let gdal_ptr = gdal_c_str.as_ptr();
+                                                    let proj_c_str = CString::new(proj_lib).unwrap();
+                                                    let proj_ptr = proj_c_str.as_ptr();
+                                                    if !osgb::enu_init(center_x, center_y, origin_enu.as_mut_ptr(), gdal_ptr, proj_ptr) {
+                                                        error!("enu_init failed!");
+                                                    }
                                                 }
+
+                                                // For ENU systems, use height=0 (or terrain elevation) for root transform
+                                                // The SRSOrigin offset is already baked into the tile geometry coordinates
+                                                origin_height = Some(0.0);
+
+                                                info!("ENU SRSOrigin offset detected: x={}, y={}, z={}", offset_x, offset_y, offset_z);
+                                                info!("Using geographic origin for transform: lon={}, lat={}, h=0", center_x, center_y);
+                                            } else {
+                                                error!("Failed to parse SRSOrigin values");
                                             }
-
-                                            // For ENU systems, use height=0 (or terrain elevation) for root transform
-                                            // The SRSOrigin offset is already baked into the tile geometry coordinates
-                                            origin_height = Some(0.0);
-
-                                            info!("ENU SRSOrigin offset detected: x={}, y={}, z={}", offset_x, offset_y, offset_z);
-                                            info!("Using geographic origin for transform: lon={}, lat={}, h=0", center_x, center_y);
                                         } else {
-                                            error!("Failed to parse SRSOrigin values");
+                                            error!("SRSOrigin format invalid, expected x,y,z");
                                         }
                                     } else {
-                                        error!("SRSOrigin format invalid, expected x,y,z");
+                                        error!("parse ENU point error");
                                     }
                                 } else {
-                                    error!("parse ENU point error");
+                                    error!("ENU point is not enough");
                                 }
-                            } else {
-                                error!("ENU point is not enough");
-                            }
-                        } else if v[0] == "EPSG" {
-                            // call gdal to convert
-                            if let Ok(srs) = v[1].parse::<i32>() {
-                                let mut pt: Vec<f64> = metadata
-                                    .SRSOrigin
-                                    .split(",")
-                                    .map(|v| v.parse().unwrap())
-                                    .collect();
-                                if pt.len() >= 2 {
-                                    let gdal_data: String = {
-                                        use std::path::Path;
-                                        let exe_dir = ::std::env::current_exe().unwrap();
-                                        Path::new(&exe_dir)
-                                            .parent()
-                                            .unwrap()
-                                            .join("gdal")
-                                            .to_str()
-                                            .unwrap()
-                                            .into()
-                                    };
-                                    let proj_lib: String = {
-                                        use std::path::Path;
-                                        let exe_dir = ::std::env::current_exe().unwrap();
-                                        Path::new(&exe_dir)
-                                            .parent()
-                                            .unwrap()
-                                            .join("proj")
-                                            .to_str()
-                                            .unwrap()
-                                            .into()
-                                    };
-                                    unsafe {
-                                        use std::ffi::CString;
-                                        let gdal_c_str = CString::new(gdal_data).unwrap();
-                                        let gdal_ptr = gdal_c_str.as_ptr();
-                                        let proj_c_str = CString::new(proj_lib).unwrap();
-                                        let proj_ptr = proj_c_str.as_ptr();
-                                        if osgb::epsg_convert(srs, pt.as_mut_ptr(), gdal_ptr, proj_ptr) {
-                                            center_x = pt[0];
-                                            center_y = pt[1];
-                                            // Store height from original SRSOrigin (pt[2] if available)
-                                            if pt.len() >= 3 {
-                                                origin_height = Some(pt[2]);
-                                                info!("epsg: x->{}, y->{}, h={}", pt[0], pt[1], pt[2]);
+                            } else if v[0] == "EPSG" {
+                                // call gdal to convert
+                                if let Ok(srs) = v[1].parse::<i32>() {
+                                    let mut pt: Vec<f64> = metadata
+                                        .SRSOrigin
+                                        .split(",")
+                                        .map(|v| v.parse().unwrap())
+                                        .collect();
+                                    if pt.len() >= 2 {
+                                        let gdal_data: String = {
+                                            use std::path::Path;
+                                            let exe_dir = ::std::env::current_exe().unwrap();
+                                            Path::new(&exe_dir)
+                                                .parent()
+                                                .unwrap()
+                                                .join("gdal")
+                                                .to_str()
+                                                .unwrap()
+                                                .into()
+                                        };
+                                        let proj_lib: String = {
+                                            use std::path::Path;
+                                            let exe_dir = ::std::env::current_exe().unwrap();
+                                            Path::new(&exe_dir)
+                                                .parent()
+                                                .unwrap()
+                                                .join("proj")
+                                                .to_str()
+                                                .unwrap()
+                                                .into()
+                                        };
+                                        unsafe {
+                                            use std::ffi::CString;
+                                            let gdal_c_str = CString::new(gdal_data).unwrap();
+                                            let gdal_ptr = gdal_c_str.as_ptr();
+                                            let proj_c_str = CString::new(proj_lib).unwrap();
+                                            let proj_ptr = proj_c_str.as_ptr();
+                                            if osgb::epsg_convert(srs, pt.as_mut_ptr(), gdal_ptr, proj_ptr) {
+                                                center_x = pt[0];
+                                                center_y = pt[1];
+                                                // Store height from original SRSOrigin (pt[2] if available)
+                                                if pt.len() >= 3 {
+                                                    origin_height = Some(pt[2]);
+                                                    info!("epsg: x->{}, y->{}, h={}", pt[0], pt[1], pt[2]);
+                                                } else {
+                                                    info!("epsg: x->{}, y->{}", pt[0], pt[1]);
+                                                }
                                             } else {
-                                                info!("epsg: x->{}, y->{}", pt[0], pt[1]);
+                                                error!("epsg convert failed!");
                                             }
-                                        } else {
-                                            error!("epsg convert failed!");
                                         }
+                                    } else {
+                                        error!("epsg point is not enough");
                                     }
                                 } else {
-                                    error!("epsg point is not enough");
+                                    error!("parse EPSG failed");
                                 }
+                            //
                             } else {
-                                error!("parse EPSG failed");
+                                error!("EPSG or ENU is expected in SRS");
                             }
-                        //
                         } else {
-                            error!("EPSG or ENU is expected in SRS");
-                        }
-                    } else {
-                        // error!("SRS content error");
-                        // treat as wkt
-                        let mut pt: Vec<f64> = metadata
-                            .SRSOrigin
-                            .split(",")
-                            .map(|v| v.parse().unwrap())
-                            .collect();
-                        if pt.len() >= 2 {
-                            let gdal_data: String = {
-                                use std::path::Path;
-                                let exe_dir = ::std::env::current_exe().unwrap();
-                                Path::new(&exe_dir)
-                                    .parent()
-                                    .unwrap()
-                                    .join("gdal_data")
-                                    .to_str()
-                                    .unwrap()
-                                    .into()
-                            };
-                            unsafe {
-                                use std::ffi::CString;
-                                let wkt: String = metadata.SRS;
-                                // println!("{:?}", wkt);
-                                let c_str = CString::new(gdal_data).unwrap();
-                                let ptr = c_str.as_ptr();
-                                let wkt_cstr = CString::new(wkt).unwrap();
-                                let wkt_ptr = wkt_cstr.as_ptr();
-                                if osgb::wkt_convert(wkt_ptr, pt.as_mut_ptr(), ptr) {
-                                    center_x = pt[0];
-                                    center_y = pt[1];
-                                    info!("wkt: x->{}, y->{}", pt[0], pt[1]);
-                                } else {
-                                    error!("wkt convert failed!");
+                            // error!("SRS content error");
+                            // treat as wkt
+                            let mut pt: Vec<f64> = metadata
+                                .SRSOrigin
+                                .split(",")
+                                .map(|v| v.parse().unwrap())
+                                .collect();
+                            if pt.len() >= 2 {
+                                let gdal_data: String = {
+                                    use std::path::Path;
+                                    let exe_dir = ::std::env::current_exe().unwrap();
+                                    Path::new(&exe_dir)
+                                        .parent()
+                                        .unwrap()
+                                        .join("gdal_data")
+                                        .to_str()
+                                        .unwrap()
+                                        .into()
+                                };
+                                unsafe {
+                                    use std::ffi::CString;
+                                    let wkt: String = metadata.SRS;
+                                    // println!("{:?}", wkt);
+                                    let c_str = CString::new(gdal_data).unwrap();
+                                    let ptr = c_str.as_ptr();
+                                    let wkt_cstr = CString::new(wkt).unwrap();
+                                    let wkt_ptr = wkt_cstr.as_ptr();
+                                    if osgb::wkt_convert(wkt_ptr, pt.as_mut_ptr(), ptr) {
+                                        center_x = pt[0];
+                                        center_y = pt[1];
+                                        info!("wkt: x->{}, y->{}", pt[0], pt[1]);
+                                    } else {
+                                        error!("wkt convert failed!");
+                                    }
                                 }
                             }
                         }
                     }
-                } else {
-                    error!("parse {} failed", metadata_file.display());
+                    Err(e) => {
+                        error!("parse metadata.xml error: {}", e);
+                    }
                 }
             } else {
                 error!("read {} failed", metadata_file.display());
