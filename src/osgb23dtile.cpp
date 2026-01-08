@@ -43,6 +43,12 @@ using namespace std;
 #if defined(__unix__) || defined(__APPLE__)
 #include <osgDB/Registry>
 USE_OSGPLUGIN(osg)
+USE_OSGPLUGIN(osg2)
+USE_OSGPLUGIN(rgb)
+USE_OSGPLUGIN(tga)
+USE_OSGPLUGIN(jpeg)
+USE_OSGPLUGIN(png)
+USE_SERIALIZER_WRAPPER_LIBRARY(osg)
 #endif
 
 // Helper function to log OSG plugin search paths

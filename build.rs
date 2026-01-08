@@ -179,6 +179,9 @@ fn build_linux_unknown() {
 
     // Note: On Linux, OSG plugins are static libraries (.a) that must be linked at build time
     println!("cargo:rustc-link-lib=osgdb_jpeg");
+    println!("cargo:rustc-link-lib=osgdb_tga");
+    println!("cargo:rustc-link-lib=osgdb_rgb");
+    println!("cargo:rustc-link-lib=osgdb_png");
     println!("cargo:rustc-link-lib=osgdb_osg");
     println!("cargo:rustc-link-lib=osgdb_serializers_osg");
     println!("cargo:rustc-link-lib=osgUtil");
