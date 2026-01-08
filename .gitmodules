@@ -3,4 +3,4 @@
 	url = https://github.com/ufbx/ufbx.git
 [submodule "thirdparty/base64"]
 	path = thirdparty/base64
-	url = https://github.com/tobiaslocker/base64
+	url = https://github.com/tobiaslocker/base64.git
