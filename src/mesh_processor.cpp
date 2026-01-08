@@ -1,5 +1,6 @@
 #include "mesh_processor.h"
 #include <basisu/encoder/basisu_enc.h>
+#include <cstddef>
 #include <osg/Texture>
 #include <osg/Image>
 #include <osg/Array>
@@ -39,7 +40,7 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
         basisu::vector<basisu::image> source_images;
         source_images.push_back(basisu::image(rgba_data.data(), width, height, 4));
         int quality_level = 64;
-        unsigned long file_size = 0;
+        std::size_t file_size = 0;
 
         void* pKTX2_data = basisu::basis_compress(basist::basis_tex_format::cUASTC4x4, source_images,
         quality_level | basisu::cFlagKTX2 | basisu::cFlagKTX2UASTCSuperCompression | basisu::cFlagPrintStatus | basisu::cFlagDebug | basisu::cFlagThreaded,
