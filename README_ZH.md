@@ -6,6 +6,7 @@
 
 - **Osgb 转 3D-Tiles**: 将 OpenSceneGraph 二进制格式转换为 3D-Tiles 格式，为地理空间数据提供高效可视化
 - **Shapefile 转 3D-Tiles**: 将 Esri Shapefile 数据转换为 3D-Tiles，供网页基 3D 可视化使用
+- **FBX 转 3D-Tiles**: 将 FBX 模型转换为 3D-Tiles 格式
 - **多平台支持**: 完整支持 Linux, macOS (Intel & Apple Silicon) 和 Windows
 - **混合栈**: 使用 Rust 处理 CLI/数据，C++ 处理高性能 3D 处理
 
@@ -104,6 +105,9 @@ set VCPKG_ROOT=<vcpkg 路径>  # Windows
 ```bash
 git clone --recursive https://github.com/fanvanzh/3dtiles.git
 cd 3dtiles
+
+# 如果忘记添加 --recursive 参数，或者更新代码后，请手动初始化子模块：
+git submodule update --init --recursive
 ```
 
 ## Linux (Ubuntu 24.04+)
@@ -298,10 +302,7 @@ _3dtile.exe -f osgb -i E:\osgb_path -o E:\out_path -c "{\"offset\": 0}"
 # from single shp file
 _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa --height height
 
-# from single osgb file to glb file
-_3dtile.exe -f gltf -i E:\Data\TT\001.osgb -o E:\Data\TT\001.glb
-
-# from single obj file to glb file
+# from single bbj file to glb file
 _3dtile.exe -f gltf -i E:\Data\TT\001.obj -o E:\Data\TT\001.glb
 
 # convert single b3dm file to glb file
@@ -334,11 +335,12 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 ### 必需选项
 
 - `-f, --format <FORMAT>` 输入数据格式
-  可选格式：`osgb`, `shape`, `gltf`, `b3dm`
+  可选格式：`osgb`, `shape`, `gltf`, `b3dm`, `fbx`
   - `osgb` 为倾斜摄影格式数据
   - `shape` 为 Shapefile 面数据
   - `gltf` 为单一通用模型转 gltf
   - `b3dm` 为单个 3dtile 二进制数据转 gltf
+  - `fbx` 为 FBX 模型数据
 
 - `-i, --input <PATH>` 输入数据的目录或文件路径
   osgb 数据截止到 `<DIR>/Data` 目录的上一级，其他格式具体到文件名
@@ -411,12 +413,12 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 
 ### 格式支持矩阵
 
-| 优化参数 | OSGB | Shapefile | GLTF | B3DM |
-|-------------------|------|-----------|------|------|
-| `--enable-lod` | ❌ | ✅ | ❌ | ❌ |
-| `--enable-simplify` | ✅ | ✅ | ❌ | ❌ |
-| `--enable-draco` | ✅ | ✅ | ❌ | ❌ |
-| `--enable-texture-compress` | ✅ | ❌ | ❌ | ❌ |
+| 优化参数 | OSGB | Shapefile | GLTF | B3DM | FBX |
+|-------------------|------|-----------|------|------|-----|
+| `--enable-lod` | ❌ | ✅ | ❌ | ❌ | ❌ |
+| `--enable-simplify` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `--enable-draco` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `--enable-texture-compress` | ✅ | ❌ | ❌ | ❌ | ✅ |
 
 ### 参数组合建议
 
@@ -446,7 +448,16 @@ _3dtile.exe -f shape -i E:\Data\aa.shp -o E:\Data\aa \
 --enable-simplify --enable-draco
 ```
 
+## ④ 预览
 
+项目根目录提供了一个简单的 `index.html` 查看器，用于预览导出的 3D Tiles 数据。
+
+1.  在项目根目录启动一个本地 HTTP 服务器：
+    ```bash
+    python3 -m http.server 3000
+    ```
+2.  打开浏览器访问：[http://localhost:3000](http://localhost:3000)
+3.  查看器将自动加载 `output` 目录中的 3D Tiles 数据。
 
 # 数据要求及说明
 

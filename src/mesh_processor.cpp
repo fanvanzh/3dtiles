@@ -1,4 +1,6 @@
 #include "mesh_processor.h"
+#include <basisu/encoder/basisu_enc.h>
+#include <cstddef>
 #include <osg/Texture>
 #include <osg/Image>
 #include <osg/Array>
@@ -17,10 +19,7 @@
 #include "draco/core/encoder_buffer.h"
 #include "draco/mesh/mesh.h"
 
-#include <stb_image_write.h>
-
-// KTX2 compression flag
-static bool b_use_ktx2_compression = true;
+#include "stb_image_write.h"
 
 // Function to compress image data to KTX2 using Basis Universal
 bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, int height,
@@ -38,43 +37,20 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
             basisu_initialized = true;
         }
 
-        // Create basisu image from RGBA data
         basisu::vector<basisu::image> source_images;
-        source_images.resize(1);
-        source_images[0].init(rgba_data.data(), width, height, 4);
+        source_images.push_back(basisu::image(rgba_data.data(), width, height, 4));
+        int quality_level = 64;
+        std::size_t file_size = 0;
 
-        // Compress using simplified API
-        size_t compressed_size = 0;
-        // Use ETC1S format for KTX2 compression
-        // Flags:
-        // - Quality 128 (0-255): compression quality
-        // - cFlagKTX2: output KTX2 format
-        // - cFlagGenMipsWrap: generate mipmaps with wrapping
-        unsigned int compression_flags = 64 | basisu::cFlagKTX2 | basisu::cFlagGenMipsWrap;
+        void* pKTX2_data = basisu::basis_compress(basist::basis_tex_format::cUASTC4x4, source_images,
+        quality_level | basisu::cFlagKTX2 | basisu::cFlagKTX2UASTCSuperCompression | basisu::cFlagPrintStatus | basisu::cFlagDebug | basisu::cFlagThreaded,
+        2.0f, &file_size, nullptr);
 
-        void* compressed_data = basisu::basis_compress(
-            basist::basis_tex_format::cUASTC4x4,
-            source_images,
-            static_cast<uint32_t>(compression_flags),
-            1.0f,
-            &compressed_size
-        );
+        ktx2_data.assign((unsigned char*)pKTX2_data, (unsigned char*)pKTX2_data + file_size);
 
-        // Check if compression was successful
-        if (!compressed_data || compressed_size == 0) {
-            return false;
-        }
-
-        // Copy compressed data to output vector
-        ktx2_data.resize(compressed_size);
-        memcpy(ktx2_data.data(), compressed_data, compressed_size);
-
-        // Free the compressed data
-        basisu::basis_free_data(compressed_data);
+        basisu::basis_free_data(pKTX2_data);
 
         return true;
-    } catch (const std::exception& e) {
-        return false;
     } catch (...) {
         return false;
     }

@@ -26,6 +26,18 @@
       "sourceLanguages": ["rust", "cpp"]
     },
     {
+      "name": "Debug FBX (Linux, lldb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/_3dtile",
+      "args": ["-f", "fbx", "-i", "/path/to/fbx", "-o", "/path/to/output/dir", "--enable-simplify", "--enable-draco", "--enable-texture-compress"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cargo build",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "sourceLanguages": ["rust", "cpp"]
+    },
+    {
       "name": "Debug (macOS, lldb)",
       "type": "lldb",
       "request": "launch",
@@ -40,7 +52,17 @@
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/target/debug/_3dtile",
-      "args": ["-f", "shape", "-i", "/Users/wallance/Developer/cim/data/南京SHP数据/南京市_百度建筑.shp", "-o", "/Users/wallance/Developer/vite-cesium-echarts/test-output-shapefile", "--height", "HEIGHT", "--enable-simplify", "--lod-levels", "0.1,0.02,0.005", "--lod-base-error", "0.2"],
+      "args": ["-f", "shape", "-i", "/path/to/shp", "-o", "/path/to/output/dir", "--height", "HEIGHT", "--enable-simplify", "--lod-levels", "0.1,0.02,0.005", "--lod-base-error", "0.2"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cargo build",
+      "sourceLanguages": ["rust", "cpp"]
+    },
+    {
+      "name": "Debug FBX (macOS, lldb)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/_3dtile",
+      "args": ["-f", "fbx", "-i", "/path/to/fbx", "-o", "/path/to/output/dir", "--enable-simplify", "--enable-draco", "--enable-texture-compress"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "cargo build",
       "sourceLanguages": ["rust", "cpp"]
@@ -61,6 +83,16 @@
       "request": "launch",
       "program": "${workspaceFolder}\\target\\debug\\_3dtile.exe",
       "args": ["-f", "shape", "-i", "/path/to/osgb/dir", "-o", "/path/to/output/dir", "--height", "HEIGHT"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cargo build",
+      "sourceLanguages": ["rust", "cpp"]
+    },
+    {
+      "name": "Debug FBX (Windows, MSVC)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}\\target\\debug\\_3dtile.exe",
+      "args": ["-f", "fbx", "-i", "/path/to/fbx", "-o", "/path/to/output/dir", "--enable-simplify", "--enable-draco", "--enable-texture-compress"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "cargo build",
       "sourceLanguages": ["rust", "cpp"]

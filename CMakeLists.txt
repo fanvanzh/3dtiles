@@ -9,36 +9,25 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Set ENABLE_STRICT_CHECKS=ON to enable strict mode locally
 option(ENABLE_STRICT_CHECKS "Enable strict compilation checks (like CI)" OFF)
 
-if(ENABLE_STRICT_CHECKS)
-    message(STATUS "Strict compilation mode enabled (matching CI behavior)")
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        add_compile_options(
-            -Wall                    # Enable all common warnings
-            -Wextra                  # Enable extra warnings
-            -Wpedantic               # Strict ISO C++ compliance
-            -Werror=reorder          # Error on member initialization order issues
-            -Werror=designated-init  # Error on designated initializer issues (GCC specific)
-        )
-    endif()
-else()
-    message(STATUS "Normal compilation mode (use -DENABLE_STRICT_CHECKS=ON for CI-like strictness)")
-endif()
-
 # vcpkg integration
 if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
 endif()
 
-# Add draco compression support
-option(ENABLE_OPTIMIZER "Enable optimizer" ON)
-if(ENABLE_OPTIMIZER)
-    add_definitions(-DOPTIMIZER)
-endif()
-
 file(GLOB_RECURSE SOURCES src/*.cpp)
 file(GLOB_RECURSE HEADERS src/*.h src/json.hpp)
+
+# ufbx (single-file C library)
+add_library(ufbx STATIC thirdparty/ufbx/ufbx.c)
+target_include_directories(ufbx PUBLIC thirdparty/ufbx)
+target_compile_features(ufbx PUBLIC c_std_99)
+if(UNIX AND NOT APPLE)
+    target_link_libraries(ufbx PUBLIC m)
+endif()
+
 add_library(_3dtile STATIC ${SOURCES})
 target_include_directories(_3dtile PUBLIC src)
+target_link_libraries(_3dtile PRIVATE ufbx)
 
 find_package(spdlog CONFIG REQUIRED)
 target_link_libraries(_3dtile PUBLIC spdlog::spdlog_header_only)
@@ -152,4 +141,6 @@ target_link_libraries(_3dtile PUBLIC Eigen3::Eigen)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 target_link_libraries(_3dtile PRIVATE unofficial::sqlite3::sqlite3)
 
+
 install(TARGETS _3dtile DESTINATION lib)
+install(TARGETS ufbx DESTINATION lib)
