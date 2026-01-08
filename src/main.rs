@@ -10,6 +10,8 @@ extern crate chrono;
 extern crate env_logger;
 extern crate libc;
 
+mod common;
+mod fbx;
 pub mod fun_c;
 mod osgb;
 mod shape;
@@ -362,7 +364,7 @@ fn convert_fbx_cmd(
         warn!("LOD is not supported for FBX; flag will be ignored");
     }
 
-    if let Err(e) = osgb::convert_fbx(
+    if let Err(e) = fbx::convert_fbx(
         input,
         output,
         max_lvl,
