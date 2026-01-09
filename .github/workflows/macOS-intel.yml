@@ -18,6 +18,9 @@ jobs:
       with:
         submodules: 'recursive'
 
+    - name: Install automake (including aclocal)
+      run: brew install autoconf autoconf-archive automake libtool
+
     - name: Setup anew (or from cache) vcpkg (and does not build any package)
       uses: lukka/run-vcpkg@v11
       with:
@@ -26,9 +29,7 @@ jobs:
         runVcpkgInstall: true
       env:
         VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-
-    - name: Install automake (including aclocal)
-      run: brew install autoconf autoconf-archive automake libtool
+        VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
 
     - name: Install Rust toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1

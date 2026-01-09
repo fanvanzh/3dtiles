@@ -26,6 +26,7 @@ jobs:
         runVcpkgInstall: true
       env:
         VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+        VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
 
     - name: Install Rust toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
