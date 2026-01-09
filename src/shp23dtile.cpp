@@ -168,10 +168,10 @@ public:
             }
             for (int i = 0; i < 4; i++) {
                 subnode[i]->add(id, box);
-		//when box is added to a node, stop the loop
-		if (box.isAdd) {
-		    break;
-		}
+                //when box is added to a node, stop the loop
+                if (box.isAdd) {
+                    break;
+                }
             }
         }
     }
@@ -866,15 +866,10 @@ shp23dtile(const ShapeConversionParams* params)
         return false;
     }
 
-    // Store feature attributes to SQLite database using RAII wrapper
-    char sqlite_path[512];
-#ifdef _WIN32
-    sprintf(sqlite_path, "%s\\attributes.db", dest);
-#else
-    sprintf(sqlite_path, "%s/attributes.db", dest);
-#endif
 
     {
+        // Store feature attributes to SQLite database using RAII wrapper
+        const std::string sqlite_path = (std::filesystem::path(dest) / "attributes.db").string();
         // RAII: AttributeStorage will auto-commit and close on scope exit
         AttributeStorage attr_storage(sqlite_path);
 
@@ -1357,13 +1352,20 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes,
         size_t draco_size = 0;
         int draco_pos_att = -1;
         int draco_norm_att = -1;
+        int draco_tex_att = -1;
+        int draco_batchid_att = -1;
         bool wrote_draco_ext = false;
         if (draco_requested) {
           DracoCompressionParams params = draco_params.value();
           params.enable_compression = true;
+
+          std::vector<float> batch_ids_f;
+          batch_ids_f.reserve(merged_batch_ids.size());
+          for(auto id : merged_batch_ids) batch_ids_f.push_back(static_cast<float>(id));
+
           bool compress_mesh_sucess = compress_mesh_geometry(
               merged_geom.get(), params, draco_data, draco_size, &draco_pos_att,
-              &draco_norm_att);
+              &draco_norm_att, &draco_tex_att, &draco_batchid_att, &batch_ids_f);
           if (!compress_mesh_sucess) {
             LOG_E("compress mesh failure, please check your mesh");
             return std::string();
@@ -1381,41 +1383,47 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes,
                 int idx_size = ps->getNumIndices();
                 uint32_t max_idx = 0;
 
-                int byteOffset = buffer.data.size();
                 for (int m = 0; m < idx_size; m++) {
                         uint32_t idx = static_cast<uint32_t>(ps->index(m));
-                        put_val(buffer.data, idx);
                         SET_MAX(max_idx, idx);
                 }
 
                 index_accessor_index = model.accessors.size();
 
                 tinygltf::Accessor acc;
-                acc.bufferView = model.bufferViews.size();
                 acc.byteOffset = 0;
-                alignment_buffer(buffer.data);
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
                 acc.count = idx_size;
                 acc.type = TINYGLTF_TYPE_SCALAR;
                 acc.maxValues = {(double)max_idx};
                 acc.minValues = {0.0};
-                model.accessors.push_back(acc);
 
-                tinygltf::BufferView bfv = create_buffer_view(TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER, byteOffset,
-                                                             buffer.data.size() - byteOffset);
-                model.bufferViews.push_back(bfv);
+                if (!draco_requested) {
+                    int byteOffset = buffer.data.size();
+                    for (int m = 0; m < idx_size; m++) {
+                        uint32_t idx = static_cast<uint32_t>(ps->index(m));
+                        put_val(buffer.data, idx);
+                    }
+                    acc.bufferView = model.bufferViews.size();
+                    alignment_buffer(buffer.data);
+                    tinygltf::BufferView bfv = create_buffer_view(TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER, byteOffset,
+                                                                 buffer.data.size() - byteOffset);
+                    model.bufferViews.push_back(bfv);
+                } else {
+                    acc.bufferView = -1;
+                }
+                model.accessors.push_back(acc);
         }
         {
                 osg::Vec3Array* v3f = merged_vertices.get();
                 int vec_size = v3f->size();
                 std::vector<double> box_max = {-1e38, -1e38, -1e38};
                 std::vector<double> box_min = {1e38, 1e38, 1e38};
-                int byteOffset = buffer.data.size();
+
                 for (int vidx = 0; vidx < vec_size; vidx++) {
                     osg::Vec3f point = v3f->at(vidx);
                     vector<float> vertex = {point.x(), point.y(), point.z()};
                     for (int i = 0; i < 3; i++) {
-                        put_val(buffer.data, vertex[i]);
                         SET_MAX(box_max[i], vertex[i]);
                         SET_MIN(box_min[i], vertex[i]);
                     }
@@ -1423,74 +1431,104 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes,
 
                 vertex_accessor_index = model.accessors.size();
                 tinygltf::Accessor acc;
-                acc.bufferView = model.bufferViews.size();
                 acc.byteOffset = 0;
-                alignment_buffer(buffer.data);
                 acc.count = vec_size;
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
                 acc.type = TINYGLTF_TYPE_VEC3;
                 acc.maxValues = box_max;
                 acc.minValues = box_min;
-                model.accessors.push_back(acc);
 
-                tinygltf::BufferView bfv = create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
-                                                             buffer.data.size() - byteOffset);
-                model.bufferViews.push_back(bfv);
+                if (!draco_requested) {
+                    int byteOffset = buffer.data.size();
+                    for (int vidx = 0; vidx < vec_size; vidx++) {
+                        osg::Vec3f point = v3f->at(vidx);
+                        vector<float> vertex = {point.x(), point.y(), point.z()};
+                        for (int i = 0; i < 3; i++) {
+                            put_val(buffer.data, vertex[i]);
+                        }
+                    }
+                    acc.bufferView = model.bufferViews.size();
+                    alignment_buffer(buffer.data);
+                    tinygltf::BufferView bfv = create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
+                                                                 buffer.data.size() - byteOffset);
+                    model.bufferViews.push_back(bfv);
+                } else {
+                    acc.bufferView = -1;
+                }
+                model.accessors.push_back(acc);
         }
         {
                 osg::Vec3Array* v3f = merged_normals.get();
                 std::vector<double> box_max = {-1e38, -1e38, -1e38};
                 std::vector<double> box_min = {1e38, 1e38, 1e38};
                 int normal_size = v3f->size();
-                int byteOffset = buffer.data.size();
+
                 for (int vidx = 0; vidx < normal_size; vidx++) {
                     osg::Vec3f point = v3f->at(vidx);
                     vector<float> normal = {point.x(), point.y(), point.z()};
-
                     for (int i = 0; i < 3; i++) {
-                        put_val(buffer.data, normal[i]);
                         SET_MAX(box_max[i], normal[i]);
                         SET_MIN(box_min[i], normal[i]);
                     }
                 }
+
                 normal_accessor_index = model.accessors.size();
                 tinygltf::Accessor acc;
-                acc.bufferView = model.bufferViews.size();
                 acc.byteOffset = 0;
-                alignment_buffer(buffer.data);
                 acc.count = normal_size;
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
                 acc.type = TINYGLTF_TYPE_VEC3;
                 acc.minValues = box_min;
                 acc.maxValues = box_max;
-                model.accessors.push_back(acc);
 
-                tinygltf::BufferView bfv = create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
-                                                             buffer.data.size() - byteOffset);
-                model.bufferViews.push_back(bfv);
+                if (!draco_requested) {
+                    int byteOffset = buffer.data.size();
+                    for (int vidx = 0; vidx < normal_size; vidx++) {
+                        osg::Vec3f point = v3f->at(vidx);
+                        vector<float> normal = {point.x(), point.y(), point.z()};
+                        for (int i = 0; i < 3; i++) {
+                            put_val(buffer.data, normal[i]);
+                        }
+                    }
+                    acc.bufferView = model.bufferViews.size();
+                    alignment_buffer(buffer.data);
+                    tinygltf::BufferView bfv = create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
+                                                                 buffer.data.size() - byteOffset);
+                    model.bufferViews.push_back(bfv);
+                } else {
+                    acc.bufferView = -1;
+                }
+                model.accessors.push_back(acc);
         }
         {
-                int byteOffset = buffer.data.size();
                 uint32_t max_batch = 0;
                 for (auto batch_id : merged_batch_ids) {
-                        put_val(buffer.data, batch_id);
                         SET_MAX(max_batch, batch_id);
                 }
+
                 batchid_accessor_index = model.accessors.size();
                 tinygltf::Accessor acc;
-                acc.bufferView = model.bufferViews.size();
                 acc.byteOffset = 0;
-                alignment_buffer(buffer.data);
                 acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
                 acc.count = merged_batch_ids.size();
                 acc.type = TINYGLTF_TYPE_SCALAR;
                 acc.maxValues = {(double)max_batch};
                 acc.minValues = {0.0};
-                model.accessors.push_back(acc);
 
-                tinygltf::BufferView bfv = create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
-                                                             buffer.data.size() - byteOffset);
-                model.bufferViews.push_back(bfv);
+                if (!draco_requested) {
+                    int byteOffset = buffer.data.size();
+                    for (auto batch_id : merged_batch_ids) {
+                        put_val(buffer.data, batch_id);
+                    }
+                    acc.bufferView = model.bufferViews.size();
+                    alignment_buffer(buffer.data);
+                    tinygltf::BufferView bfv = create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
+                                                                 buffer.data.size() - byteOffset);
+                    model.bufferViews.push_back(bfv);
+                } else {
+                    acc.bufferView = -1;
+                }
+                model.accessors.push_back(acc);
         }
 
         tinygltf::Mesh mesh;
@@ -1528,6 +1566,12 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes,
                 attrs["POSITION"] = tinygltf::Value(draco_pos_att);
                 if (draco_norm_att >= 0) {
                         attrs["NORMAL"] = tinygltf::Value(draco_norm_att);
+                }
+                if (draco_tex_att >= 0) {
+                        attrs["TEXCOORD_0"] = tinygltf::Value(draco_tex_att);
+                }
+                if (draco_batchid_att >= 0) {
+                        attrs["_BATCHID"] = tinygltf::Value(draco_batchid_att);
                 }
 
                 tinygltf::Value::Object draco_ext;
