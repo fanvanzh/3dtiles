@@ -18,12 +18,22 @@ jobs:
       with:
         submodules: 'recursive'
 
+    - name: Cache vcpkg tool and installed packages
+      uses: actions/cache@v4
+      id: cache-vcpkg
+      with:
+        path: |
+          ${{ github.workspace }}/vcpkg_installed/
+        key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+        restore-keys: |
+          ${{ runner.os }}-vcpkg-installed-
+
     - name: Setup anew (or from cache) vcpkg (and does not build any package)
       uses: lukka/run-vcpkg@v11
       with:
-        doNotCache: false
+        doNotCache: true
         vcpkgGitCommitId: '84bab45d415d22042bd0b9081aea57f362da3f35'
-        runVcpkgInstall: true
+        runVcpkgInstall: ${{ steps.cache-vcpkg-installed.outputs.cache-hit != 'true' }}
       env:
         VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
         VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
