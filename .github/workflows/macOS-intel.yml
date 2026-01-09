@@ -23,6 +23,7 @@ jobs:
       with:
         doNotCache: false
         vcpkgGitCommitId: '84bab45d415d22042bd0b9081aea57f362da3f35'
+        runVcpkgInstall: true
       env:
         VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
@@ -36,5 +37,5 @@ jobs:
 
     - name: Build
       run: cargo build -vv --release
-      # env:
-      #   ENABLE_STRICT_CHECKS: 1
+      env:
+        VCPKG_HAS_BEEN_INSTALLED: 1
