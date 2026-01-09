@@ -18,16 +18,29 @@ jobs:
       with:
         submodules: 'recursive'
 
+    - name: Install automake (including aclocal)
+      run: brew install autoconf autoconf-archive automake libtool
+
+    - name: Cache vcpkg tool and installed packages
+      uses: actions/cache@v4
+      id: cache-vcpkg
+      with:
+        path: |
+          ${{ github.workspace }}/vcpkg_installed/
+        key: ${{ runner.os }}-arm-vcpkg-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+        restore-keys: |
+          ${{ runner.os }}-arm-vcpkg-
+
     - name: Setup anew (or from cache) vcpkg (and does not build any package)
       uses: lukka/run-vcpkg@v11
       with:
-        doNotCache: false
+        doNotCache: true
         vcpkgGitCommitId: '84bab45d415d22042bd0b9081aea57f362da3f35'
+        runVcpkgInstall: ${{ steps.cache-vcpkg-installed.outputs.cache-hit != 'true' }}
+        runVcpkgFormatString: '[`install`, `--recurse`, `--clean-after-build`, `--x-install-root`, `$[env.VCPKG_INSTALLED_DIR]`, `--triplet`, `$[env.VCPKG_DEFAULT_TRIPLET]`, `--allow-unsupported`]'
       env:
         VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-
-    - name: Install automake (including aclocal)
-      run: brew install autoconf autoconf-archive automake libtool
+        VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
 
     - name: Install Rust toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -36,5 +49,5 @@ jobs:
 
     - name: Build
       run: cargo build -vv --release
-      # env:
-      #   ENABLE_STRICT_CHECKS: 1
+      env:
+        VCPKG_HAS_BEEN_INSTALLED: 1
