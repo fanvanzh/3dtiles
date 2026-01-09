@@ -33,64 +33,57 @@ fn create_dir_symlink() -> std::io::Result<()> {
     let cargo_manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
         .expect("Failed to get CARGO_MANIFEST_DIR environment variable");
     let root_vcpkg_installed_dir = Path::new(&cargo_manifest_dir).join("vcpkg_installed");
-    if !root_vcpkg_installed_dir.exists() {
-        let err_msg = format!(
-            "root_vcpkg_installed_dir not exists: {}",
-            root_vcpkg_installed_dir.display()
-        );
-        println!("cargo:warning={}", err_msg);
-        return Err(io::Error::new(io::ErrorKind::NotFound, err_msg));
-    }
-
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let build_vcpkg_installed_dir = Path::new(&out_dir).join("build").join("vcpkg_installed");
-
-    if let Some(parent_build_vcpkg_installed_dir) = build_vcpkg_installed_dir.parent() {
-        fs::create_dir_all(parent_build_vcpkg_installed_dir)?;
-    }
-
-    println!(
-        "cargo:warning=build_vcpkg_installed_dir: {}",
-        build_vcpkg_installed_dir.display()
-    );
-
-    if build_vcpkg_installed_dir.exists() {
+    if root_vcpkg_installed_dir.exists() {
+        let out_dir = env::var("OUT_DIR").unwrap();
+        let build_vcpkg_installed_dir = Path::new(&out_dir).join("build").join("vcpkg_installed");
+    
+        if let Some(parent_build_vcpkg_installed_dir) = build_vcpkg_installed_dir.parent() {
+            fs::create_dir_all(parent_build_vcpkg_installed_dir)?;
+        }
+    
         println!(
-            "cargo:warning=build_vcpkg_installed_dir already exists, so there is no need to create it again.: {:?}",
-            build_vcpkg_installed_dir
+            "cargo:warning=build_vcpkg_installed_dir: {}",
+            build_vcpkg_installed_dir.display()
         );
-        return Ok(());
-    }
-
-    #[cfg(target_family = "unix")]
-    {
-        std::os::unix::fs::symlink(root_vcpkg_installed_dir, build_vcpkg_installed_dir)?;
-    }
-
-    #[cfg(target_family = "windows")]
-    {
-        let status = std::process::Command::new("cmd")
-            .args([
-                "/c",
-                "mklink",
-                "/J",
-                &build_vcpkg_installed_dir.to_string_lossy(),
-                &root_vcpkg_installed_dir.to_string_lossy(),
-            ])
-            .status()?;
-
-        if status.success() {
+    
+        if build_vcpkg_installed_dir.exists() {
             println!(
-                "cargo:warning=mklink /J success: {:?} -> {:?}",
-                build_vcpkg_installed_dir, root_vcpkg_installed_dir
+                "cargo:warning=build_vcpkg_installed_dir already exists, so there is no need to create it again.: {:?}",
+                build_vcpkg_installed_dir
             );
-        } else {
-            let err_msg = format!(
-                "mklink /J failed: {:?} -> {:?}",
-                build_vcpkg_installed_dir, root_vcpkg_installed_dir
-            );
-            println!("cargo:warning={}", err_msg);
-            return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+            return Ok(());
+        }
+    
+        #[cfg(target_family = "unix")]
+        {
+            std::os::unix::fs::symlink(root_vcpkg_installed_dir, build_vcpkg_installed_dir)?;
+        }
+    
+        #[cfg(target_family = "windows")]
+        {
+            let status = std::process::Command::new("cmd")
+                .args([
+                    "/c",
+                    "mklink",
+                    "/J",
+                    &build_vcpkg_installed_dir.to_string_lossy(),
+                    &root_vcpkg_installed_dir.to_string_lossy(),
+                ])
+                .status()?;
+    
+            if status.success() {
+                println!(
+                    "cargo:warning=mklink /J success: {:?} -> {:?}",
+                    build_vcpkg_installed_dir, root_vcpkg_installed_dir
+                );
+            } else {
+                let err_msg = format!(
+                    "mklink /J failed: {:?} -> {:?}",
+                    build_vcpkg_installed_dir, root_vcpkg_installed_dir
+                );
+                println!("cargo:warning={}", err_msg);
+                return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+            }
         }
     }
 
