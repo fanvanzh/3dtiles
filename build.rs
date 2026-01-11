@@ -29,23 +29,20 @@ fn export_compile_commands(out_dir: &Path) {
     }
 }
 
-fn create_dir_symlink() -> std::io::Result<()> {
+fn create_vcpkg_installed_dir_symlink() -> std::io::Result<()> {
     let cargo_manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
         .expect("Failed to get CARGO_MANIFEST_DIR environment variable");
     let root_vcpkg_installed_dir = Path::new(&cargo_manifest_dir).join("vcpkg_installed");
     if root_vcpkg_installed_dir.exists() {
         let out_dir = env::var("OUT_DIR").unwrap();
         let build_vcpkg_installed_dir = Path::new(&out_dir).join("build").join("vcpkg_installed");
-    
-        if let Some(parent_build_vcpkg_installed_dir) = build_vcpkg_installed_dir.parent() {
-            fs::create_dir_all(parent_build_vcpkg_installed_dir)?;
-        }
-    
-        println!(
-            "cargo:warning=build_vcpkg_installed_dir: {}",
-            build_vcpkg_installed_dir.display()
-        );
-    
+
+        // ensure all parent dirs exists
+        let parent_build_vcpkg_installed_dir = build_vcpkg_installed_dir.parent().expect(&format!("there is no parent directory in {}", build_vcpkg_installed_dir.display()));
+        fs::create_dir_all(parent_build_vcpkg_installed_dir).expect("Failed to create build dir");
+
+        println!("cargo:warning=build_vcpkg_installed_dir: {}", build_vcpkg_installed_dir.display());
+
         if build_vcpkg_installed_dir.exists() {
             println!(
                 "cargo:warning=build_vcpkg_installed_dir already exists, so there is no need to create it again.: {:?}",
@@ -53,37 +50,17 @@ fn create_dir_symlink() -> std::io::Result<()> {
             );
             return Ok(());
         }
-    
+
         #[cfg(target_family = "unix")]
         {
-            std::os::unix::fs::symlink(root_vcpkg_installed_dir, build_vcpkg_installed_dir)?;
+            std::os::unix::fs::symlink(&root_vcpkg_installed_dir, &build_vcpkg_installed_dir)
+            .expect(&format!("Failed to create symlink for Unix-like os from {} -> {}", root_vcpkg_installed_dir.display(), build_vcpkg_installed_dir.display()));
         }
-    
+
         #[cfg(target_family = "windows")]
         {
-            let status = std::process::Command::new("cmd")
-                .args([
-                    "/c",
-                    "mklink",
-                    "/J",
-                    &build_vcpkg_installed_dir.to_string_lossy(),
-                    &root_vcpkg_installed_dir.to_string_lossy(),
-                ])
-                .status()?;
-    
-            if status.success() {
-                println!(
-                    "cargo:warning=mklink /J success: {:?} -> {:?}",
-                    build_vcpkg_installed_dir, root_vcpkg_installed_dir
-                );
-            } else {
-                let err_msg = format!(
-                    "mklink /J failed: {:?} -> {:?}",
-                    build_vcpkg_installed_dir, root_vcpkg_installed_dir
-                );
-                println!("cargo:warning={}", err_msg);
-                return Err(io::Error::new(io::ErrorKind::Other, err_msg));
-            }
+            std::os::windows::fs::symlink_dir(&root_vcpkg_installed_dir, &build_vcpkg_installed_dir)
+                .expect(&format!("Failed to create symlink for windows os from {} -> {}", root_vcpkg_installed_dir.display(), build_vcpkg_installed_dir.display()));
         }
     }
 
@@ -96,7 +73,7 @@ fn build_win_msvc() {
 
     let vcpkg_has_been_installed = env::var("VCPKG_HAS_BEEN_INSTALLED").unwrap_or_default() == "1";
     if vcpkg_has_been_installed {
-        create_dir_symlink().expect("create_dir_symlink fail");
+        create_vcpkg_installed_dir_symlink().expect("create_dir_symlink fail");
     }
 
     // Check if strict mode is enabled via environment variable
@@ -185,7 +162,7 @@ fn build_linux_unknown() {
 
     let vcpkg_has_been_installed = env::var("VCPKG_HAS_BEEN_INSTALLED").unwrap_or_default() == "1";
     if vcpkg_has_been_installed {
-        create_dir_symlink().expect("create_dir_symlink fail");
+        create_vcpkg_installed_dir_symlink().expect("create_dir_symlink fail");
     }
 
     // Check if strict mode is enabled via environment variable
@@ -314,10 +291,10 @@ fn build_linux_unknown() {
 
 fn build_macos() {
     let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
-    
+
     let vcpkg_has_been_installed = env::var("VCPKG_HAS_BEEN_INSTALLED").unwrap_or_default() == "1";
     if vcpkg_has_been_installed {
-        create_dir_symlink().expect("create_dir_symlink fail");
+        create_vcpkg_installed_dir_symlink().expect("create_dir_symlink fail");
     }
 
     // Check if strict mode is enabled via environment variable
@@ -456,7 +433,7 @@ fn build_macos_x86_64() {
 
     let vcpkg_has_been_installed = env::var("VCPKG_HAS_BEEN_INSTALLED").unwrap_or_default() == "1";
     if vcpkg_has_been_installed {
-        create_dir_symlink().expect("create_dir_symlink fail");
+        create_vcpkg_installed_dir_symlink().expect("create_dir_symlink fail");
     }
 
     // Check if strict mode is enabled via environment variable
