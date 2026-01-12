@@ -1204,25 +1204,16 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         sample.wrapT = TINYGLTF_TEXTURE_WRAP_REPEAT;
         model.samplers = { sample };
     }
-
     // use KHR_materials_unlit
-    model.extensionsRequired = { "KHR_materials_unlit" };
-    model.extensionsUsed = {"KHR_materials_unlit"};
+    if (enable_unlit) {
+        model.extensionsRequired.push_back("KHR_materials_unlit");
+        model.extensionsUsed.push_back("KHR_materials_unlit");
+    }
 
     // Update extensions declaration to include KHR_texture_basisu when using KTX2
     if (enable_texture_compress) {
-        if (enable_unlit) {
-            model.extensionsRequired = { "KHR_materials_unlit", "KHR_texture_basisu" };
-            model.extensionsUsed = { "KHR_materials_unlit", "KHR_texture_basisu" };
-        } else {
-            model.extensionsRequired = { "KHR_texture_basisu" };
-            model.extensionsUsed = { "KHR_texture_basisu" };
-        }
-    } else {
-        if (enable_unlit) {
-            model.extensionsRequired = { "KHR_materials_unlit" };
-            model.extensionsUsed = { "KHR_materials_unlit" };
-        }
+        model.extensionsRequired.push_back("KHR_texture_basisu");
+        model.extensionsUsed.push_back("KHR_texture_basisu");
     }
 
     // Add Draco extension if compression is enabled
