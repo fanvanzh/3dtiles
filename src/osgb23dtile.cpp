@@ -12,6 +12,8 @@
 #include <string>
 #include <cstring>
 #include <algorithm>
+#include <cstdint>
+#include <limits>
 
 // Add Basis Universal includes for KTX2 compression
 #include <basisu/encoder/basisu_comp.h>
@@ -43,7 +45,22 @@ using namespace std;
 #if defined(__unix__) || defined(__APPLE__)
 #include <osgDB/Registry>
 USE_OSGPLUGIN(osg)
+USE_OSGPLUGIN(osg2)
+USE_OSGPLUGIN(rgb)
+USE_OSGPLUGIN(tga)
+USE_OSGPLUGIN(jpeg)
+USE_OSGPLUGIN(png)
+USE_SERIALIZER_WRAPPER_LIBRARY(osg)
 #endif
+
+struct DracoState {
+    bool compressed;
+    int bufferView;
+    int posId;
+    int normId;
+    int texId;
+    int batchId;
+};
 
 // Helper function to log OSG plugin search paths
 void log_osg_plugin_info() {
@@ -466,94 +483,6 @@ void alignment_buffer(std::vector<T>& buf) {
     }
 }
 
-std::string vs_str() {
-    return
-R"(
-precision highp float;
-uniform mat4 u_modelViewMatrix;
-uniform mat4 u_projectionMatrix;
-attribute vec3 a_position;
-attribute vec2 a_texcoord0;
-attribute float a_batchid;
-varying vec2 v_texcoord0;
-void main(void)
-{
-    v_texcoord0 = a_texcoord0;
-    gl_Position = u_projectionMatrix * u_modelViewMatrix * vec4(a_position, 1.0);
-}
-)";
-}
-
-std::string fs_str() {
-    return
-R"(
-precision highp float;
-varying vec2 v_texcoord0;
-uniform sampler2D u_diffuse;
-void main(void)
-{
-  gl_FragColor = texture2D(u_diffuse, v_texcoord0);
-}
-)";
-}
-
-std::string program(int vs, int fs) {
-    char buf[512];
-std::string fmt = R"(
-{
-"attributes": [
-"a_position",
-"a_texcoord0"
-],
-"vertexShader": %d,
-"fragmentShader": %d
-}
-)";
-    sprintf(buf, fmt.data(), vs, fs);
-    return buf;
-}
-
-std::string tech_string() {
-return
-R"(
-{
-  "attributes": {
-    "a_batchid": {
-      "semantic": "_BATCHID",
-      "type": 5123
-    },
-    "a_position": {
-      "semantic": "POSITION",
-      "type": 35665
-    },
-    "a_texcoord0": {
-      "semantic": "TEXCOORD_0",
-      "type": 35664
-    }
-  },
-  "program": 0,
-  "states": {
-    "enable": [
-      2884,
-      2929
-    ]
-  },
-  "uniforms": {
-    "u_diffuse": {
-      "type": 35678
-    },
-    "u_modelViewMatrix": {
-      "semantic": "MODELVIEW",
-      "type": 35676
-    },
-    "u_projectionMatrix": {
-      "semantic": "PROJECTION",
-      "type": 35676
-    }
-  }
-})";
-}
-
 tinygltf::Material make_color_material_osgb(double r, double g, double b) {
     tinygltf::Material material;
     material.name = "default";
@@ -623,6 +552,154 @@ write_osg_indecis(T* drawElements, OsgBuildState* osgState, int componentType)
     bfv.byteOffset = buffer_start;
     bfv.byteLength = osgState->buffer->data.size() - buffer_start;
     osgState->model->bufferViews.push_back(bfv);
+}
+
+// Selects the smallest glTF component type that can hold the given max index.
+// Returns UNSIGNED_BYTE, UNSIGNED_SHORT, or UNSIGNED_INT based on max_index.
+int pick_index_component_type(uint32_t max_index) {
+  if (max_index <= std::numeric_limits<uint8_t>::max()) {
+    return TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
+  }
+  if (max_index <= std::numeric_limits<uint16_t>::max()) {
+    return TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
+  }
+  return TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
+}
+
+// Writes a vector of indices to the glTF buffer and creates corresponding
+// accessor and buffer view. Selects the smallest component type that fits the
+// index range. For Draco-compressed meshes, creates a placeholder accessor.
+// Returns the accessor index in the model, or -1 if indices is empty.
+int write_index_vector(const std::vector<uint32_t>& indices, OsgBuildState* osgState,
+                       DracoState* dracoState) {
+  if (indices.empty()) {
+    return -1;
+  }
+
+  uint32_t max_index = 0;
+  uint32_t min_index = std::numeric_limits<uint32_t>::max();
+  for (auto idx : indices) {
+    max_index = std::max(max_index, idx);
+    min_index = std::min(min_index, idx);
+  }
+
+  const int componentType = pick_index_component_type(max_index);
+  if (dracoState && dracoState->compressed) {
+    tinygltf::Accessor acc;
+    acc.bufferView = -1;
+    acc.type = TINYGLTF_TYPE_SCALAR;
+    acc.componentType = componentType;
+    acc.count = indices.size();
+    acc.maxValues = {(double)max_index};
+    acc.minValues = {(double)min_index};
+    int accIdx = (int)osgState->model->accessors.size();
+    osgState->model->accessors.push_back(acc);
+    return accIdx;
+  }
+
+  unsigned buffer_start = osgState->buffer->data.size();
+  switch (componentType) {
+    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+      for (auto idx : indices) {
+        put_val(osgState->buffer->data, static_cast<uint8_t>(idx));
+      }
+      break;
+    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+      for (auto idx : indices) {
+        put_val(osgState->buffer->data, static_cast<uint16_t>(idx));
+      }
+      break;
+    default:
+      for (auto idx : indices) {
+        put_val(osgState->buffer->data, static_cast<uint32_t>(idx));
+      }
+      break;
+  }
+  alignment_buffer(osgState->buffer->data);
+
+  tinygltf::Accessor acc;
+  acc.bufferView = osgState->model->bufferViews.size();
+  acc.type = TINYGLTF_TYPE_SCALAR;
+  acc.componentType = componentType;
+  acc.count = indices.size();
+  acc.maxValues = {(double)max_index};
+  acc.minValues = {(double)min_index};
+  int accIdx = (int)osgState->model->accessors.size();
+  osgState->model->accessors.push_back(acc);
+
+  tinygltf::BufferView bfv;
+  bfv.buffer = 0;
+  bfv.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
+  bfv.byteOffset = buffer_start;
+  bfv.byteLength = osgState->buffer->data.size() - buffer_start;
+  osgState->model->bufferViews.push_back(bfv);
+
+  return accIdx;
+}
+
+// Converts GL_QUADS or GL_QUAD_STRIP index sequences to triangle indices.
+// GL_QUADS: every 4 indices form a quad, split into 2 triangles.
+// GL_QUAD_STRIP: pairs of indices form quads in strip order, split into 2 triangles per quad.
+// Returns true if triangulation succeeded and filled 'out', false otherwise.
+bool triangulate_quad_like(const std::vector<uint32_t>& indices, GLenum mode,
+                           std::vector<uint32_t>& out) {
+  out.clear();
+
+  if (mode == GL_QUADS) {
+    if (indices.size() < 4) {
+      return false;
+    }
+    if (indices.size() % 4 != 0) {
+      LOG_E("GL_QUADS index count (%zu) is not divisible by 4, trailing vertices will be ignored",
+            indices.size());
+    }
+    size_t quad_count = indices.size() / 4;
+    out.reserve(quad_count * 6);
+    for (size_t q = 0; q < quad_count; ++q) {
+      size_t base = q * 4;
+      out.push_back(indices[base]);
+      out.push_back(indices[base + 1]);
+      out.push_back(indices[base + 2]);
+      out.push_back(indices[base]);
+      out.push_back(indices[base + 2]);
+      out.push_back(indices[base + 3]);
+    }
+    return !out.empty();
+  }
+
+  if (mode == GL_QUAD_STRIP) {
+    if (indices.size() < 4) {
+      return false;
+    }
+    if (indices.size() % 2 != 0) {
+      LOG_E("GL_QUAD_STRIP index count (%zu) is not even, trailing vertex will be ignored",
+            indices.size());
+    }
+    size_t pair_count = indices.size() / 2;
+    if (pair_count < 2) {
+      return false;
+    }
+    out.reserve((pair_count - 1) * 6);
+    for (size_t i = 0; i + 1 < pair_count; ++i) {
+      size_t base = i * 2;
+      if (base + 3 >= indices.size()) {
+        break;
+      }
+      uint32_t a = indices[base];
+      uint32_t b = indices[base + 1];
+      uint32_t c = indices[base + 2];
+      uint32_t d = indices[base + 3];
+      out.push_back(a);
+      out.push_back(b);
+      out.push_back(c);
+      out.push_back(b);
+      out.push_back(d);
+      out.push_back(c);
+    }
+    return !out.empty();
+  }
+
+  return false;
 }
 
 void
@@ -709,69 +786,67 @@ struct PrimitiveState
     int textcdAccessor;
 };
 
-struct DracoState {
-  bool compressed;
-  int bufferView;
-  int posId;
-  int normId;
-  int texId;
-  int batchId;
-};
-
-void write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgBuildState* osgState,
-                                   PrimitiveState* pmtState, DracoState* dracoState) {
+void write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps,
+                                   OsgBuildState* osgState, PrimitiveState* pmtState,
+                                   DracoState* dracoState) {
   tinygltf::Primitive primits;
   primits.indices = osgState->model->accessors.size();
   // reset draw_array state
   osgState->draw_array_first = -1;
+  const GLenum gl_mode = ps->getMode();
+  const bool needs_quad_triangulation = (gl_mode == GL_QUADS || gl_mode == GL_QUAD_STRIP);
+  std::vector<uint32_t> triangulated_indices;
+
+  auto collect_and_triangulate = [&](auto* drawElements) {
+    std::vector<uint32_t> source;
+    source.reserve(drawElements->getNumIndices());
+    for (unsigned m = 0; m < drawElements->getNumIndices(); ++m) {
+      source.push_back(drawElements->at(m));
+    }
+    return triangulate_quad_like(source, gl_mode, triangulated_indices);
+  };
+
+  auto write_triangulated = [&](auto* drawElements, int componentType) {
+    if (!needs_quad_triangulation) {
+      if (dracoState && dracoState->compressed) {
+        tinygltf::Accessor acc;
+        acc.bufferView = -1;
+        acc.type = TINYGLTF_TYPE_SCALAR;
+        acc.componentType = componentType;
+        acc.count = drawElements->getNumIndices();
+        int accIdx = (int)osgState->model->accessors.size();
+        osgState->model->accessors.push_back(acc);
+        primits.indices = accIdx;
+      } else {
+        write_osg_indecis(drawElements, osgState, componentType);
+      }
+      return;
+    }
+
+    if (collect_and_triangulate(drawElements)) {
+      primits.indices = write_index_vector(triangulated_indices, osgState, dracoState);
+    } else {
+      primits.indices = -1;
+    }
+  };
   osg::PrimitiveSet::Type t = ps->getType();
   switch (t) {
     case (osg::PrimitiveSet::DrawElementsUBytePrimitiveType): {
-      const osg::DrawElementsUByte* drawElements = static_cast<const osg::DrawElementsUByte*>(ps);
-      if (dracoState && dracoState->compressed) {
-        tinygltf::Accessor acc;
-        acc.bufferView = -1;
-        acc.type = TINYGLTF_TYPE_SCALAR;
-        acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
-        acc.count = drawElements->getNumIndices();
-        int accIdx = (int)osgState->model->accessors.size();
-        osgState->model->accessors.push_back(acc);
-        primits.indices = accIdx;
-      } else {
-        write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE);
-      }
+      const osg::DrawElementsUByte* drawElements =
+          static_cast<const osg::DrawElementsUByte*>(ps);
+      write_triangulated(drawElements, TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE);
       break;
     }
     case (osg::PrimitiveSet::DrawElementsUShortPrimitiveType): {
-      const osg::DrawElementsUShort* drawElements = static_cast<const osg::DrawElementsUShort*>(ps);
-      if (dracoState && dracoState->compressed) {
-        tinygltf::Accessor acc;
-        acc.bufferView = -1;
-        acc.type = TINYGLTF_TYPE_SCALAR;
-        acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT;
-        acc.count = drawElements->getNumIndices();
-        int accIdx = (int)osgState->model->accessors.size();
-        osgState->model->accessors.push_back(acc);
-        primits.indices = accIdx;
-      } else {
-        write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT);
-      }
+      const osg::DrawElementsUShort* drawElements =
+          static_cast<const osg::DrawElementsUShort*>(ps);
+      write_triangulated(drawElements, TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT);
       break;
     }
     case (osg::PrimitiveSet::DrawElementsUIntPrimitiveType): {
-      const osg::DrawElementsUInt* drawElements = static_cast<const osg::DrawElementsUInt*>(ps);
-      if (dracoState && dracoState->compressed) {
-        tinygltf::Accessor acc;
-        acc.bufferView = -1;
-        acc.type = TINYGLTF_TYPE_SCALAR;
-        acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
-        acc.count = drawElements->getNumIndices();
-        int accIdx = (int)osgState->model->accessors.size();
-        osgState->model->accessors.push_back(acc);
-        primits.indices = accIdx;
-      } else {
-        write_osg_indecis(drawElements, osgState, TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT);
-      }
+      const osg::DrawElementsUInt* drawElements =
+          static_cast<const osg::DrawElementsUInt*>(ps);
+      write_triangulated(drawElements, TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT);
       break;
     }
     case osg::PrimitiveSet::DrawArraysPrimitiveType: {
@@ -779,6 +854,16 @@ void write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgB
       osg::DrawArrays* da = dynamic_cast<osg::DrawArrays*>(ps);
       osgState->draw_array_first = da->getFirst();
       osgState->draw_array_count = da->getCount();
+      if (needs_quad_triangulation && da->getCount() > 0) {
+        std::vector<uint32_t> source;
+        source.reserve(da->getCount());
+        for (int i = 0; i < da->getCount(); ++i) {
+          source.push_back(i);
+        }
+        if (triangulate_quad_like(source, gl_mode, triangulated_indices)) {
+          primits.indices = write_index_vector(triangulated_indices, osgState, dracoState);
+        }
+      }
       break;
     }
     default: {
@@ -896,6 +981,18 @@ void write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgB
   primits.material = -1;
 
   switch (ps->getMode()) {
+    case GL_POINTS:
+      primits.mode = TINYGLTF_MODE_POINTS;
+      break;
+    case GL_LINES:
+      primits.mode = TINYGLTF_MODE_LINE;
+      break;
+    case GL_LINE_LOOP:
+      primits.mode = TINYGLTF_MODE_LINE_LOOP;
+      break;
+    case GL_LINE_STRIP:
+      primits.mode = TINYGLTF_MODE_LINE_STRIP;
+      break;
     case GL_TRIANGLES:
       primits.mode = TINYGLTF_MODE_TRIANGLES;
       break;
@@ -904,6 +1001,12 @@ void write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps, OsgB
       break;
     case GL_TRIANGLE_FAN:
       primits.mode = TINYGLTF_MODE_TRIANGLE_FAN;
+      break;
+    case GL_QUADS:
+      primits.mode = TINYGLTF_MODE_TRIANGLES;
+      break;
+    case GL_QUAD_STRIP:
+      primits.mode = TINYGLTF_MODE_TRIANGLES;
       break;
     default:
       LOG_E("Unsupport Primitive Mode: %d", (int)ps->getMode());
@@ -965,10 +1068,10 @@ void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState, bool enable_si
   PrimitiveState pmtState = {-1, -1, -1};
   for (unsigned int k = 0; k < g->getNumPrimitiveSets(); k++) {
     osg::PrimitiveSet* ps = g->getPrimitiveSet(k);
-    if (t != ps->getType()) {
-      LOG_E("PrimitiveSets type are NOT same in osgb");
-      exit(1);
-    }
+    // if (t != ps->getType()) {
+    //   LOG_E("PrimitiveSets type are NOT same in osgb");
+    //   exit(1);
+    // }
     write_element_array_primitive(g, ps, osgState, &pmtState, &dracoState);
   }
 }
@@ -1101,7 +1204,11 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         sample.wrapT = TINYGLTF_TEXTURE_WRAP_REPEAT;
         model.samplers = { sample };
     }
+
     // use KHR_materials_unlit
+    model.extensionsRequired = { "KHR_materials_unlit" };
+    model.extensionsUsed = {"KHR_materials_unlit"};
+
     // Update extensions declaration to include KHR_texture_basisu when using KTX2
     if (enable_texture_compress) {
         if (enable_unlit) {
