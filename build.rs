@@ -29,9 +29,52 @@ fn export_compile_commands(out_dir: &Path) {
     }
 }
 
+fn create_vcpkg_installed_dir_symlink() -> std::io::Result<()> {
+    let cargo_manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+        .expect("Failed to get CARGO_MANIFEST_DIR environment variable");
+    let root_vcpkg_installed_dir = Path::new(&cargo_manifest_dir).join("vcpkg_installed");
+    if root_vcpkg_installed_dir.exists() {
+        let out_dir = env::var("OUT_DIR").unwrap();
+        let build_vcpkg_installed_dir = Path::new(&out_dir).join("build").join("vcpkg_installed");
+
+        // ensure all parent dirs exists
+        let parent_build_vcpkg_installed_dir = build_vcpkg_installed_dir.parent().expect(&format!("there is no parent directory in {}", build_vcpkg_installed_dir.display()));
+        fs::create_dir_all(parent_build_vcpkg_installed_dir).expect("Failed to create build dir");
+
+        println!("cargo:warning=build_vcpkg_installed_dir: {}", build_vcpkg_installed_dir.display());
+
+        if build_vcpkg_installed_dir.exists() {
+            println!(
+                "cargo:warning=build_vcpkg_installed_dir already exists, so there is no need to create it again.: {:?}",
+                build_vcpkg_installed_dir
+            );
+            return Ok(());
+        }
+
+        #[cfg(target_family = "unix")]
+        {
+            std::os::unix::fs::symlink(&root_vcpkg_installed_dir, &build_vcpkg_installed_dir)
+            .expect(&format!("Failed to create symlink for Unix-like os from {} -> {}", root_vcpkg_installed_dir.display(), build_vcpkg_installed_dir.display()));
+        }
+
+        #[cfg(target_family = "windows")]
+        {
+            std::os::windows::fs::symlink_dir(&root_vcpkg_installed_dir, &build_vcpkg_installed_dir)
+                .expect(&format!("Failed to create symlink for windows os from {} -> {}", root_vcpkg_installed_dir.display(), build_vcpkg_installed_dir.display()));
+        }
+    }
+
+    Ok(())
+}
+
 fn build_win_msvc() {
     // Get VCPKG_ROOT environment variable
     let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
+
+    let vcpkg_has_been_installed = env::var("VCPKG_HAS_BEEN_INSTALLED").unwrap_or_default() == "1";
+    if vcpkg_has_been_installed {
+        create_vcpkg_installed_dir_symlink().expect("create_dir_symlink fail");
+    }
 
     // Check if strict mode is enabled via environment variable
     let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
@@ -117,6 +160,11 @@ fn get_target_dir() -> std::path::PathBuf {
 
 fn build_linux_unknown() {
     let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
+
+    let vcpkg_has_been_installed = env::var("VCPKG_HAS_BEEN_INSTALLED").unwrap_or_default() == "1";
+    if vcpkg_has_been_installed {
+        create_vcpkg_installed_dir_symlink().expect("create_dir_symlink fail");
+    }
 
     // Check if strict mode is enabled via environment variable
     let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
@@ -248,6 +296,11 @@ fn build_linux_unknown() {
 
 fn build_macos() {
     let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
+
+    let vcpkg_has_been_installed = env::var("VCPKG_HAS_BEEN_INSTALLED").unwrap_or_default() == "1";
+    if vcpkg_has_been_installed {
+        create_vcpkg_installed_dir_symlink().expect("create_dir_symlink fail");
+    }
 
     // Check if strict mode is enabled via environment variable
     let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
@@ -386,6 +439,11 @@ fn build_macos() {
 
 fn build_macos_x86_64() {
     let vcpkg_root = std::env::var("VCPKG_ROOT").expect("VCPKG_ROOT environment variable is not set");
+
+    let vcpkg_has_been_installed = env::var("VCPKG_HAS_BEEN_INSTALLED").unwrap_or_default() == "1";
+    if vcpkg_has_been_installed {
+        create_vcpkg_installed_dir_symlink().expect("create_dir_symlink fail");
+    }
 
     // Check if strict mode is enabled via environment variable
     let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
@@ -586,6 +644,7 @@ fn copy_osg_plugins(plugins_dir: &str) {
 }
 
 /// 打印 ./vcpkg_installed 下的目录树，用 cargo:warning 输出，这样能在 cargo build 输出中看到
+#[allow(dead_code)]
 fn print_vcpkg_tree(root: &Path) -> io::Result<()> {
     if !root.exists() {
         println!("cargo:warning=path '{}' does not exist", root.display());
