@@ -119,6 +119,7 @@ fn build_win_msvc() {
 
     // 1. FFI static
     println!("cargo:rustc-link-lib=static=_3dtile");
+    println!("cargo:rustc-link-lib=static=ufbx");
 
     // 2. OSG
     println!("cargo:rustc-link-lib=osgUtil");
@@ -215,6 +216,7 @@ fn build_linux_unknown() {
 
     // 1. FFI static
     println!("cargo:rustc-link-lib=static=_3dtile");
+    println!("cargo:rustc-link-lib=static=ufbx");
 
     // 2. OSG
     // println!("cargo:rustc-link-lib=osgdb_jp2");
@@ -350,6 +352,7 @@ fn build_macos() {
 
     // 1. FFI static
     println!("cargo:rustc-link-lib=static=_3dtile");
+    println!("cargo:rustc-link-lib=static=ufbx");
 
     // 2. OSG
     // Note: On macOS ARM64, OSG plugins are static libraries (.a) that must be linked at build time
@@ -492,6 +495,7 @@ fn build_macos_x86_64() {
 
     // 1. FFI static
     println!("cargo:rustc-link-lib=static=_3dtile");
+    println!("cargo:rustc-link-lib=static=ufbx");
 
     // 2. OSG
     // Note: On macOS x86_64, OSG plugins are static libraries (.a) that must be linked at build time

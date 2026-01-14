@@ -1076,7 +1076,7 @@ void write_osgGeometry(osg::Geometry* g, OsgBuildState* osgState, bool enable_si
   }
 }
 
-bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, int node_type, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false) {
+bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, int node_type, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false, bool enable_unlit = true) {
     vector<string> fileNames = { path };
     std::string parent_path = get_parent(path);
 
@@ -1204,10 +1204,11 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
         sample.wrapT = TINYGLTF_TEXTURE_WRAP_REPEAT;
         model.samplers = { sample };
     }
-
     // use KHR_materials_unlit
-    model.extensionsRequired = { "KHR_materials_unlit" };
-    model.extensionsUsed = {"KHR_materials_unlit"};
+    if (enable_unlit) {
+        model.extensionsRequired.push_back("KHR_materials_unlit");
+        model.extensionsUsed.push_back("KHR_materials_unlit");
+    }
 
     // Update extensions declaration to include KHR_texture_basisu when using KTX2
     if (enable_texture_compress) {
@@ -1224,6 +1225,9 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
     for (int i = 0 ; i < infoVisitor.texture_array.size(); i++)
     {
         tinygltf::Material mat = make_color_material_osgb(1.0, 1.0, 1.0);
+        if (enable_unlit) {
+            mat.extensions["KHR_materials_unlit"] = tinygltf::Value(tinygltf::Value::Object());
+        }
         mat.pbrMetallicRoughness.baseColorTexture.index = i;
         model.materials.push_back(mat);
     }
@@ -1265,13 +1269,13 @@ bool osgb2glb_buf(std::string path, std::string& glb_buff, MeshInfo& mesh_info, 
     return true;
 }
 
-bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box, int node_type, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false)
+bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box, int node_type, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false, bool enable_unlit = true)
 {
     using nlohmann::json;
 
     std::string glb_buf;
     MeshInfo minfo;
-    bool ret = osgb2glb_buf(path, glb_buf, minfo, node_type, enable_texture_compress, enable_meshopt, enable_draco);
+    bool ret = osgb2glb_buf(path, glb_buf, minfo, node_type, enable_texture_compress, enable_meshopt, enable_draco, enable_unlit);
     if (!ret)
         return false;
 
@@ -1351,14 +1355,14 @@ std::vector<double> convert_bbox(TileBox tile) {
     return v;
 }
 
-void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false) {
+void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl, bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false, bool enable_unlit = true) {
     std::string json_str;
     if (tree.file_name.empty()) return;
     int lvl = get_lvl_num(tree.file_name);
     if (lvl > max_lvl) return;
     if (tree.type > 0) {
         std::string b3dm_buf;
-        osgb2b3dm_buf(tree.file_name, b3dm_buf, tree.bbox, tree.type, enable_texture_compress, enable_meshopt, enable_draco);
+        osgb2b3dm_buf(tree.file_name, b3dm_buf, tree.bbox, tree.type, enable_texture_compress, enable_meshopt, enable_draco, enable_unlit);
         std::string out_file = out_path;
         out_file += "/";
         out_file += replace(get_file_name(tree.file_name), ".osgb", tree.type != 2 ? ".b3dm" : "o.b3dm");
@@ -1374,7 +1378,7 @@ void do_tile_job(osg_tree& tree, std::string out_path, int max_lvl, bool enable_
         // end test
     }
     for (auto& i : tree.sub_nodes) {
-        do_tile_job(i,out_path,max_lvl, enable_texture_compress, enable_meshopt, enable_draco);
+        do_tile_job(i,out_path,max_lvl, enable_texture_compress, enable_meshopt, enable_draco, enable_unlit);
     }
 }
 
@@ -1518,7 +1522,7 @@ extern "C" void*
 osgb23dtile_path(const char* in_path, const char* out_path,
                     double *box, int* len, double x, double y,
                     int max_lvl,
-                    bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false)
+                    bool enable_texture_compress = false, bool enable_meshopt = false, bool enable_draco = false, bool enable_unlit = true)
 {
     std::string path = osg_string(in_path);
     osg_tree root = get_all_tree(path);
@@ -1527,7 +1531,7 @@ osgb23dtile_path(const char* in_path, const char* out_path,
         LOG_E( "open file [%s] fail!", in_path);
         return NULL;
     }
-    do_tile_job(root, out_path, max_lvl, enable_texture_compress, enable_meshopt, enable_draco);
+    do_tile_job(root, out_path, max_lvl, enable_texture_compress, enable_meshopt, enable_draco, enable_unlit);
     extend_tile_box(root);
     if (root.bbox.max.empty() || root.bbox.min.empty())
     {

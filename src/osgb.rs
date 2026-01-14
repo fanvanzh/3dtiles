@@ -10,6 +10,8 @@ use rayon::prelude::*;
 use std::error::Error;
 use std::path::Path;
 
+use crate::common::str_to_vec_c;
+
 extern "C" {
 
     fn osgb23dtile_path(
@@ -23,6 +25,7 @@ extern "C" {
         enable_texture_compress: bool,
         enable_meshopt: bool,
         enable_draco: bool,
+        enable_unlit: bool,
     ) -> *mut libc::c_void;
 
     pub fn osgb2glb(name_in: *const u8, name_out: *const u8) -> bool;
@@ -46,12 +49,7 @@ extern "C" {
 
     #[allow(dead_code)]
     fn meter_to_longti(m: f64, lati: f64) -> f64;
-}
 
-fn str_to_vec_c(str: &str) -> Vec<u8> {
-    let mut buf = str.as_bytes().to_vec();
-    buf.push(0x00);
-    buf
 }
 
 #[derive(Debug)]
@@ -79,6 +77,7 @@ pub fn osgb_batch_convert(
     enable_texture_compress: bool,
     enable_meshopt: bool,
     enable_draco_compress: bool,
+    enable_unlit: bool,
 ) -> Result<(), Box<dyn Error>> {
     use std::fs::File;
     use std::io::prelude::*;
@@ -141,6 +140,7 @@ pub fn osgb_batch_convert(
                 enable_texture_compress,
                 enable_meshopt,
                 enable_draco_compress,
+                enable_unlit,
             );
             if out_ptr.is_null() {
                 error!("failed: {}", info.in_dir);
@@ -292,3 +292,4 @@ fn box_to_tileset_box(box_v: &Vec<f64>) -> Vec<f64> {
 
     box_new
 }
+

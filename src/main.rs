@@ -10,6 +10,8 @@ extern crate chrono;
 extern crate env_logger;
 extern crate libc;
 
+mod common;
+mod fbx;
 pub mod fun_c;
 mod osgb;
 mod shape;
@@ -118,10 +120,10 @@ fn main() {
             Arg::new("format")
                 .short('f')
                 .long("format")
-                .value_name("osgb,shape,gltf,b3dm")
+                .value_name("osgb,shape,gltf,b3dm,fbx")
                 .help("Set input format")
                 .required(true)
-                .value_parser(["osgb", "shape", "gltf", "b3dm"])
+                .value_parser(["osgb", "shape", "gltf", "b3dm", "fbx"])
                 .num_args(1),
         )
         .arg(
@@ -177,6 +179,30 @@ fn main() {
                 .help("Enable LOD (Level of Detail) with default configuration")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new("enable-unlit")
+                .long("enable-unlit")
+                .help("Enable KHR_materials_unlit extension (useful for baked lighting)")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+           Arg::new("lon")
+            .long("lon")
+            .help("Set the longitude")
+            .num_args(1),
+        )
+        .arg(
+           Arg::new("lat")
+            .long("lat")
+            .help("Set the latitude")
+            .num_args(1),
+        )
+        .arg(
+           Arg::new("alt")
+            .long("alt")
+            .help("Set the altitude")
+            .num_args(1),
+        )
         .get_matches();
 
     let input = matches
@@ -200,11 +226,22 @@ fn main() {
         .map(|s| s.as_str())
         .unwrap_or("");
 
+    let lat_val = matches
+        .get_one::<String>("lat")
+        .and_then(|s| s.parse::<f64>().ok());
+    let lon_val = matches
+        .get_one::<String>("lon")
+        .and_then(|s| s.parse::<f64>().ok());
+    let alt_val = matches
+        .get_one::<String>("alt")
+        .and_then(|s| s.parse::<f64>().ok());
+
     // Parse feature flags
     let enable_draco = matches.get_flag("enable-draco");
     let enable_simplify = matches.get_flag("enable-simplify");
     let enable_texture_compress = matches.get_flag("enable-texture-compress");
     let enable_lod = matches.get_flag("enable-lod");
+    let enable_unlit = matches.get_flag("enable-unlit");
 
     if matches.get_flag("verbose") {
         info!("set program versose on");
@@ -227,9 +264,13 @@ fn main() {
         error!("{} does not exists.", input);
         return;
     }
+    // Canonicalize path to ensure absolute paths for C++ loader
+    let abs_input_buf = in_path.canonicalize().unwrap_or(in_path.to_path_buf());
+    let input = abs_input_buf.to_str().unwrap();
+
     match format {
         "osgb" => {
-            convert_osgb(input, output, tile_config, enable_simplify, enable_texture_compress, enable_draco);
+            convert_osgb(input, output, tile_config, enable_simplify, enable_texture_compress, enable_draco, enable_unlit);
         }
         "shape" => {
             convert_shapefile(
@@ -247,9 +288,97 @@ fn main() {
         "b3dm" => {
             convert_b3dm(input, output);
         }
+        "fbx" => {
+            convert_fbx_cmd(
+                input,
+                output,
+                tile_config,
+                enable_texture_compress,
+                enable_simplify,
+                enable_draco,
+                enable_unlit,
+                enable_lod,
+                lat_val,
+                lon_val,
+                alt_val,
+            );
+        }
         _ => {
             error!("not support now.");
         }
+    }
+}
+
+fn convert_fbx_cmd(
+    input: &str,
+    output: &str,
+    config: &str,
+    enable_texture_compress: bool,
+    enable_simplify: bool,
+    enable_draco: bool,
+    enable_unlit: bool,
+    enable_lod: bool,
+    lat: Option<f64>,
+    lon: Option<f64>,
+    height: Option<f64>,
+) {
+    use serde_json::Value;
+
+    let mut max_lvl: Option<i32> = None;
+    // Default to CLI args, or 0.0
+    let mut longitude = lon.unwrap_or(0.0);
+    let mut latitude = lat.unwrap_or(0.0);
+    let mut height_f = height.unwrap_or(0.0);
+
+    if !config.is_empty() {
+        if let Ok(val) = serde_json::from_str::<Value>(config) {
+            if let Some(lvl) = val["max_lvl"].as_i64() {
+                max_lvl = Some(lvl as i32);
+            }
+            // Only use config values if CLI args are not provided
+            if lon.is_none() {
+                if let Some(x) = val["x"].as_f64() {
+                    longitude = x;
+                }
+            }
+            if lat.is_none() {
+                if let Some(y) = val["y"].as_f64() {
+                    latitude = y;
+                }
+            }
+            if height.is_none() {
+                if let Some(h) = val["height"].as_f64() {
+                    height_f = h;
+                } else if let Some(offset) = val["offset"].as_f64() {
+                    height_f = offset;
+                }
+            }
+        } else {
+            error!("config is not valid json");
+        }
+    }
+
+    info!("Starting FBX conversion: {} -> {}", input, output);
+    info!("Origin: lon={}, lat={}, height={}", longitude, latitude, height_f);
+    if enable_lod {
+        warn!("LOD is not supported for FBX; flag will be ignored");
+    }
+
+    if let Err(e) = fbx::convert_fbx(
+        input,
+        output,
+        max_lvl,
+        enable_texture_compress,
+        enable_simplify,
+        enable_draco,
+        enable_unlit,
+        longitude,
+        latitude,
+        height_f,
+    ) {
+        error!("FBX conversion failed: {}", e);
+    } else {
+        info!("FBX conversion finished successfully.");
     }
 }
 
@@ -328,7 +457,7 @@ struct ModelMetadata {
     pub SRSOrigin: String,
 }
 
-fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enable_texture_compress: bool, enable_draco: bool) {
+fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enable_texture_compress: bool, enable_draco: bool, enable_unlit: bool) {
     use serde_json::Value;
     use std::fs::File;
     use std::io::prelude::*;
@@ -568,7 +697,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enab
     if let Err(e) = osgb::osgb_batch_convert(
         &dir, &dir_dest, max_lvl,
         center_x, center_y, trans_region,
-        enu_offset, origin_height, enable_texture_compress, enable_simplify, enable_draco)
+        enu_offset, origin_height, enable_texture_compress, enable_simplify, enable_draco, enable_unlit)
     {
         error!("{}", e);
         return;
