@@ -124,8 +124,8 @@ fn build_win_msvc() {
     println!("cargo:rustc-link-lib=osgUtil");
     println!("cargo:rustc-link-lib=osgDB");
     println!("cargo:rustc-link-lib=osg");
-    let osg_plugins_lib = vcpkg_installed_lib_dir.join("osgPlugins-3.6.5");
-    println!("cargo:rustc-link-search=native={}", osg_plugins_lib.display());
+    //let osg_plugins_lib = vcpkg_installed_lib_dir.join("osgPlugins-3.6.5");
+    //println!("cargo:rustc-link-search=native={}", osg_plugins_lib.display());
 
     // 3. OpenThreads (依赖 _3dtile)
     println!("cargo:rustc-link-lib=OpenThreads");
@@ -146,7 +146,7 @@ fn build_win_msvc() {
     copy_proj_data(vcpkg_share_dir.to_str().unwrap());
 
     // copy OSG plugins
-    let osg_plugins_src = vcpkg_installed_lib_dir.join("osgPlugins-3.6.5");
+    let osg_plugins_src = vcpkg_installed_dir.join("plugins").join("osgPlugins-3.6.5");
     copy_osg_plugins(osg_plugins_src.to_str().unwrap());
 }
 
