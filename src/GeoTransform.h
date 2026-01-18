@@ -2,13 +2,27 @@
 /* vcpkg path */
 #include <ogr_spatialref.h>
 #include <ogrsf_frmts.h>
+#include <memory>
 
 #include "glm/glm.hpp"
+
+// GDAL OGRCoordinateTransformation custom deleter
+struct OGRCTDeleter
+{
+    void operator()(OGRCoordinateTransformation* pCT) const
+    {
+        if (pCT != nullptr)
+        {
+            OGRCoordinateTransformation::DestroyCT(pCT);
+        }
+    }
+};
 
 class GeoTransform
 {
 public:
-    static OGRCoordinateTransformation *pOgrCT;
+    // Use smart pointer to manage GDAL coordinate transformation object lifecycle
+    static std::unique_ptr<OGRCoordinateTransformation, OGRCTDeleter> pOgrCT;
 
     static double OriginX;
 
