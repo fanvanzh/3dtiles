@@ -1,7 +1,7 @@
 #include "GeoTransform.h"
 #include <cstdio>
 
-OGRCoordinateTransformation *GeoTransform::pOgrCT = nullptr;
+std::unique_ptr<OGRCoordinateTransformation, OGRCTDeleter> GeoTransform::pOgrCT = nullptr;
 double GeoTransform::OriginX = 0.0;
 double GeoTransform::OriginY = 0.0;
 double GeoTransform::OriginZ = 0.0;
@@ -66,7 +66,8 @@ glm::dvec3 GeoTransform::CartographicToEcef(double lnt, double lat, double heigh
 
 void GeoTransform::Init(OGRCoordinateTransformation *pOgrCT, double *Origin)
 {
-    GeoTransform::pOgrCT = pOgrCT;
+    // Use smart pointer to manage coordinate transformation object, automatically releases old resources
+    GeoTransform::pOgrCT.reset(pOgrCT);
     GeoTransform::OriginX = Origin[0];
     GeoTransform::OriginY = Origin[1];
     GeoTransform::OriginZ = Origin[2];
@@ -76,7 +77,13 @@ void GeoTransform::Init(OGRCoordinateTransformation *pOgrCT, double *Origin)
     glm::dvec3 origin_cartographic = origin;
     // Log ENU origin before transform
     fprintf(stderr, "[GeoTransform] ENU origin: x=%.8f y=%.8f z=%.3f\n", origin.x, origin.y, origin.z);
-    pOgrCT->Transform(1, &origin_cartographic.x, &origin_cartographic.y, &origin_cartographic.z);
+
+    // Use get() to obtain raw pointer for coordinate transformation
+    if (GeoTransform::pOgrCT)
+    {
+        GeoTransform::pOgrCT->Transform(1, &origin_cartographic.x, &origin_cartographic.y, &origin_cartographic.z);
+    }
+
     // Log cartographic origin after transform (degrees)
     fprintf(stderr, "[GeoTransform] Cartographic origin: lon=%.10f lat=%.10f h=%.3f\n", origin_cartographic.x, origin_cartographic.y, origin_cartographic.z);
 

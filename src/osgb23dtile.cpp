@@ -164,7 +164,7 @@ public:
         if (GeoTransform::pOgrCT)
         {
             osg::Vec3Array *vertexArr = (osg::Vec3Array *)geometry.getVertexArray();
-            OGRCoordinateTransformation *poCT = GeoTransform::pOgrCT;
+            OGRCoordinateTransformation *poCT = GeoTransform::pOgrCT.get();
 
             /** 1. We obtain the bound of this tile */
             glm::dvec3 Min = glm::dvec3(DBL_MAX);
