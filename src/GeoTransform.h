@@ -21,24 +21,26 @@ struct OGRCTDeleter
 class GeoTransform
 {
 public:
-    // Use smart pointer to manage GDAL coordinate transformation object lifecycle
-    static std::unique_ptr<OGRCoordinateTransformation, OGRCTDeleter> pOgrCT;
+    // Use inline thread_local to ensure each thread has its own coordinate transformation object
+    // This avoids race conditions when multiple threads access pOgrCT concurrently
+    // With inline initialization, no need to define in .cpp file
+    static inline thread_local std::unique_ptr<OGRCoordinateTransformation, OGRCTDeleter> pOgrCT = nullptr;
 
-    static double OriginX;
+    static inline thread_local double OriginX = 0.0;
 
-    static double OriginY;
+    static inline thread_local double OriginY = 0.0;
 
-    static double OriginZ;
+    static inline thread_local double OriginZ = 0.0;
 
-    // For ENU systems: store the geographic origin separately
-    static double GeoOriginLon;
-    static double GeoOriginLat;
-    static double GeoOriginHeight;
+    // For ENU systems: store as geographic origin separately
+    static inline thread_local double GeoOriginLon = 0.0;
+    static inline thread_local double GeoOriginLat = 0.0;
+    static inline thread_local double GeoOriginHeight = 0.0;
 
     // Flag to indicate if this is an ENU system
-    static bool IsENU;
+    static inline thread_local bool IsENU = false;
 
-    static glm::dmat4 EcefToEnuMatrix;
+    static inline thread_local glm::dmat4 EcefToEnuMatrix = glm::dmat4(1);
 
     static glm::dmat4 CalcEnuToEcefMatrix(double lnt, double lat, double height_min);
 

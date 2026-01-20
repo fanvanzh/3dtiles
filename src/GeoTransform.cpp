@@ -1,15 +1,6 @@
 #include "GeoTransform.h"
 #include <cstdio>
-
-std::unique_ptr<OGRCoordinateTransformation, OGRCTDeleter> GeoTransform::pOgrCT = nullptr;
-double GeoTransform::OriginX = 0.0;
-double GeoTransform::OriginY = 0.0;
-double GeoTransform::OriginZ = 0.0;
-double GeoTransform::GeoOriginLon = 0.0;
-double GeoTransform::GeoOriginLat = 0.0;
-double GeoTransform::GeoOriginHeight = 0.0;
-bool GeoTransform::IsENU = false;
-glm::dmat4 GeoTransform::EcefToEnuMatrix = glm::dmat4(1);
+#include <glm/glm.hpp>
 
 glm::dmat4 GeoTransform::CalcEnuToEcefMatrix(double lnt, double lat, double height_min)
 {
