@@ -214,28 +214,14 @@ struct TileMeta {
     double max_child_ge = 0.0; // used when aggregating
 };
 
-// Build a deterministic nested path where each child resides inside its parent's
-// directory: children/<z_x_y>/tileset.json. This keeps content URIs as "./..." with
-// no parent-directory traversal.
 static std::string tileset_path_for_node(int z, int x, int y, int min_z) {
     if (z <= min_z) {
-        return "tileset.json"; // root tileset at output root
+        return "tileset.json";
     }
-    std::vector<std::string> segments;
-    int cz = z;
-    int cx = x;
-    int cy = y;
-    while (cz > min_z) {
-        std::string id = std::to_string(cz) + "_" + std::to_string(cx) + "_" + std::to_string(cy);
-        segments.push_back("children/" + id);
-        cz -= 1;
-        cx /= 2;
-        cy /= 2;
-    }
-    std::filesystem::path p;
-    for (auto it = segments.rbegin(); it != segments.rend(); ++it) {
-        p /= *it;
-    }
+    std::filesystem::path p = "tile";
+    p /= std::to_string(z);
+    p /= std::to_string(x);
+    p /= std::to_string(y);
     p /= "tileset.json";
     return p.generic_string();
 }
@@ -385,9 +371,10 @@ static bool write_node_tileset(const TileMeta& node,
         std::error_code ec;
         std::filesystem::create_directories(parent_dir, ec);
 
-        // Child lives in parent_dir/children/<id>/tileset.json
-        std::string child_id = std::to_string(child.z) + "_" + std::to_string(child.x) + "_" + std::to_string(child.y);
-        child_node["content"]["uri"] = "./children/" + child_id + "/tileset.json";
+        // Calculate relative path from parent to child
+        std::filesystem::path child_path = std::filesystem::path(dest_root) / child.tileset_rel;
+        std::filesystem::path child_uri = std::filesystem::relative(child_path, parent_dir);
+        child_node["content"]["uri"] = "./" + child_uri.generic_string();
 
         root_node["children"].push_back(child_node);
     }
@@ -578,15 +565,6 @@ static void build_hierarchical_tilesets(const std::vector<TileMeta>& leaves,
 
         // update map
         nodes[key] = meta;
-    }
-
-    // Drop flat intermediate tile/ directory to avoid confusion and stale files
-    {
-        std::error_code ec;
-        std::filesystem::remove_all(std::filesystem::path(dest_root) / "tile", ec);
-        if (ec) {
-            LOG_E("remove flat tile dir failed: %s", ec.message().c_str());
-        }
     }
 
     // write parents from bottom (high z) to top
@@ -943,12 +921,6 @@ shp23dtile(const ShapeConversionParams* params)
 
     for (auto item : items_array) {
         node* _node = (node*)item;
-        std::filesystem::path tile_dir = std::filesystem::path(dest) / "tile" / std::to_string(_node->_z) / std::to_string(_node->_x);
-        std::error_code ec;
-        std::filesystem::create_directories(tile_dir, ec);
-        if (ec) {
-            LOG_E("create directory %s fail", tile_dir.string().c_str());
-        }
         // fix the box
         {
             OGREnvelope node_box;
@@ -1063,6 +1035,7 @@ shp23dtile(const ShapeConversionParams* params)
 
         // Store one or more b3dm under flat tile/z/x/y/ first; relocation happens later
         std::filesystem::path leaf_dir = std::filesystem::path("tile") / std::to_string(_node->_z) / std::to_string(_node->_x) / std::to_string(_node->_y);
+        std::error_code ec;
         std::filesystem::create_directories(std::filesystem::path(dest) / leaf_dir, ec);
         std::filesystem::path tile_json_rel = leaf_dir / "tileset.json";
         std::filesystem::path tile_json_full = std::filesystem::path(dest) / tile_json_rel;
