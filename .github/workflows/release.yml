@@ -100,10 +100,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            _3dtile-${{ steps.get_version.outputs.version }}-linux-x86_64.tar.gz
-            _3dtile-${{ steps.get_version.outputs.version }}-macos-arm64.tar.gz
-            _3dtile-${{ steps.get_version.outputs.version }}-macos-x86_64.tar.gz
-            _3dtile-${{ steps.get_version.outputs.version }}-windows-x86_64.zip
+            artifacts/_3dtile-${{ steps.get_version.outputs.version }}-linux-x86_64.tar.gz
+            artifacts/_3dtile-${{ steps.get_version.outputs.version }}-macos-arm64.tar.gz
+            artifacts/_3dtile-${{ steps.get_version.outputs.version }}-macos-x86_64.tar.gz
+            artifacts/_3dtile-${{ steps.get_version.outputs.version }}-windows-x86_64.zip
           body_path: release_notes.md
           draft: false
           prerelease: ${{ contains(steps.get_version.outputs.version, '-') }}
