@@ -25,6 +25,43 @@ A powerful 3D-Tiles converter toolkit for efficient conversion of large-scale 3D
 - **[English Documentation](./README_EN.md)** - Complete build and usage guide in English
 - **[中文文档](./README_ZH.md)** - 完整的编译和使用指南（中文）
 
+## Release
+
+To create a new release:
+
+```bash
+# Create and push a version tag
+git tag v0.5.0
+git push origin v0.5.0
+```
+
+The GitHub Actions will automatically:
+- Build for all platforms (Linux, macOS ARM64, macOS x86_64, Windows)
+- Package binaries with version numbers
+- Generate release notes
+- Create GitHub Release
+- Upload platform-specific binaries
+
+### Pre-release Versions
+
+For pre-release versions (alpha, beta, rc):
+
+```bash
+# Alpha version
+git tag v0.5.0-alpha.1
+git push origin v0.5.0-alpha.1
+
+# Beta version
+git tag v0.5.0-beta.1
+git push origin v0.5.0-beta.1
+
+# Release candidate
+git tag v0.5.0-rc.1
+git push origin v0.5.0-rc.1
+```
+
+Pre-release versions will be automatically marked as "Pre-release" on GitHub.
+
 ## Resources
 
 - [How to build?](https://github.com/fanvanzh/3dtiles/wiki/How-to-build)

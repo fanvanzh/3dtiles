@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    uses: ./.github/workflows/build.yml
+    with:
+      os: ubuntu-24.04
+      platform: linux-x86_64
+      package: true
+
+  build-macos-arm64:
+    uses: ./.github/workflows/build.yml
+    with:
+      os: macos-15
+      platform: macos-arm64
+      package: true
+
+  build-macos-x64:
+    uses: ./.github/workflows/build.yml
+    with:
+      os: macos-15-intel
+      platform: macos-x86_64
+      package: true
+
+  build-windows:
+    uses: ./.github/workflows/build.yml
+    with:
+      os: windows-latest
+      platform: windows-x86_64
+      package: true
+
+  release:
+    needs: [build-linux, build-macos-arm64, build-macos-x64, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Rename artifacts with version
+        run: |
+          cd artifacts
+          for dir in */; do
+            platform=${dir%/}
+            if [ "$platform" = "linux-x86_64" ] || [ "$platform" = "macos-arm64" ] || [ "$platform" = "macos-x86_64" ]; then
+              mv $platform/_3dtile-${platform}.tar.gz _3dtile-${{ steps.get_version.outputs.version }}-${platform}.tar.gz
+            elif [ "$platform" = "windows-x86_64" ]; then
+              mv $platform/_3dtile-${platform}.zip _3dtile-${{ steps.get_version.outputs.version }}-${platform}.zip
+            fi
+          done
+          ls -lh
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          echo "## Release $VERSION" > release_notes.md
+          echo "" >> release_notes.md
+          echo "### Downloads" >> release_notes.md
+          echo "- Linux x86_64: \`_3dtile-${VERSION}-linux-x86_64.tar.gz\`" >> release_notes.md
+          echo "- macOS ARM64: \`_3dtile-${VERSION}-macos-arm64.tar.gz\`" >> release_notes.md
+          echo "- macOS x86_64: \`_3dtile-${VERSION}-macos-x86_64.tar.gz\`" >> release_notes.md
+          echo "- Windows x86_64: \`_3dtile-${VERSION}-windows-x86_64.zip\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Changes" >> release_notes.md
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "Changes since $PREV_TAG:" >> release_notes.md
+            git log ${PREV_TAG}..HEAD --pretty=format:"- %s" >> release_notes.md
+          else
+            echo "Initial release" >> release_notes.md
+          fi
+
+          cat release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            _3dtile-${{ steps.get_version.outputs.version }}-linux-x86_64.tar.gz
+            _3dtile-${{ steps.get_version.outputs.version }}-macos-arm64.tar.gz
+            _3dtile-${{ steps.get_version.outputs.version }}-macos-x86_64.tar.gz
+            _3dtile-${{ steps.get_version.outputs.version }}-windows-x86_64.zip
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.get_version.outputs.version, '-') }}
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
