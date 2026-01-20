@@ -1456,7 +1456,7 @@ void calc_geometric_error(osg_tree& tree) {
     else {
         double max_sub_geometric_error = 0.0;
         for (auto &sub_node : tree.sub_nodes) {
-          max_sub_geometric_error = std::max(max_sub_geometric_error, sub_node.geometricError);
+            max_sub_geometric_error = std::max(max_sub_geometric_error, sub_node.geometricError);
         }
 
         tree.geometricError = max_sub_geometric_error * 2.0;
@@ -1533,10 +1533,7 @@ osgb23dtile_path(const char* in_path, const char* out_path,
     }
     // prevent for root node disappear
     calc_geometric_error(root);
-    spdlog::info("geometricError: {}", root.geometricError);
-    // root.geometricError = 1000.0;
     std::string json = encode_tile_json(root, x, y);
-    // spdlog::info("json: {}", json);
     root.bbox.extend(0.2);
     memcpy(box, root.bbox.max.data(), 3 * sizeof(double));
     memcpy(box + 3, root.bbox.min.data(), 3 * sizeof(double));
