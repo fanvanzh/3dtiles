@@ -8,6 +8,7 @@
 
 #include <set>
 #include <cmath>
+#include <spdlog/spdlog.h>
 #include <vector>
 #include <string>
 #include <cstring>
@@ -311,7 +312,7 @@ double get_geometric_error(TileBox& bbox){
 
     double max_err = std::max((bbox.max[0] - bbox.min[0]),(bbox.max[1] - bbox.min[1]));
     max_err = std::max(max_err, (bbox.max[2] - bbox.min[2]));
-    return max_err / 20.0;
+    return max_err / 2.0;
 //     const double pi = std::acos(-1);
 //     double round = 2 * pi * 6378137.0 / 128.0;
 //     return round / std::pow(2.0, lvl );
@@ -1450,23 +1451,15 @@ void calc_geometric_error(osg_tree& tree) {
         calc_geometric_error(i);
     }
     if (tree.sub_nodes.empty()) {
-        tree.geometricError = 0.0;
+        tree.geometricError = get_geometric_error(tree.bbox);
     }
     else {
-        bool has = false;
-        osg_tree leaf;
-        for (auto& i : tree.sub_nodes) {
-            if (abs(i.geometricError) > EPS)
-            {
-                has = true;
-                leaf = i;
-            }
+        double max_sub_geometric_error = 0.0;
+        for (auto &sub_node : tree.sub_nodes) {
+          max_sub_geometric_error = std::max(max_sub_geometric_error, sub_node.geometricError);
         }
 
-        if (has == false)
-            tree.geometricError = get_geometric_error(tree.bbox);
-        else
-            tree.geometricError = leaf.geometricError * 2.0;
+        tree.geometricError = max_sub_geometric_error * 2.0;
     }
 }
 
@@ -1540,8 +1533,10 @@ osgb23dtile_path(const char* in_path, const char* out_path,
     }
     // prevent for root node disappear
     calc_geometric_error(root);
-    root.geometricError = 1000.0;
-    std::string json = encode_tile_json(root,x,y);
+    spdlog::info("geometricError: {}", root.geometricError);
+    // root.geometricError = 1000.0;
+    std::string json = encode_tile_json(root, x, y);
+    // spdlog::info("json: {}", json);
     root.bbox.extend(0.2);
     memcpy(box, root.bbox.max.data(), 3 * sizeof(double));
     memcpy(box + 3, root.bbox.min.data(), 3 * sizeof(double));
