@@ -98,7 +98,7 @@ jobs:
 
       - name: Upload artifact
         if: inputs.package
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.platform }}
           path: _3dtile-${{ inputs.platform }}${{ inputs.os == 'windows-latest' && '.zip' || '.tar.gz' }}
