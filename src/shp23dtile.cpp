@@ -401,12 +401,12 @@ static void build_hierarchical_tilesets(const std::vector<TileMeta>& leaves,
     if (leaves.size() == 1) {
         // trivial case: wrap single leaf into a root tileset that references it
         std::unordered_map<uint64_t, TileMeta> nodes;
-        const auto& leaf = leaves.front();
+        auto leaf = leaves.front();
         uint64_t leaf_key = encode_key(leaf.z, leaf.x, leaf.y);
         nodes[leaf_key] = leaf;
 
         TileMeta root;
-        root.z = std::max(leaf.z - 1, 0); // virtual parent level
+        root.z = leaf.z - 1; // virtual parent level (may be -1)
         root.x = leaf.x / 2;
         root.y = leaf.y / 2;
         root.bbox = leaf.bbox;
@@ -414,6 +414,17 @@ static void build_hierarchical_tilesets(const std::vector<TileMeta>& leaves,
         root.tileset_rel = "tileset.json";
         root.is_leaf = false;
         root.children_keys.push_back(leaf_key);
+
+        // Update leaf tileset_rel to nested path
+        // Force nested path for leaf node even when z == root.z
+        std::filesystem::path leaf_path = "tile";
+        leaf_path /= std::to_string(leaf.z);
+        leaf_path /= std::to_string(leaf.x);
+        leaf_path /= std::to_string(leaf.y);
+        leaf_path /= "tileset.json";
+        leaf.tileset_rel = leaf_path.generic_string();
+        nodes[leaf_key] = leaf;
+
         nodes[encode_key(root.z, root.x, root.y)] = root;
 
         write_node_tileset(root, nodes, dest_root, root.z);
