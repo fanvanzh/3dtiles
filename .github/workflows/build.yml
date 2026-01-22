@@ -1,0 +1,104 @@
+name: Reusable Build
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+        description: 'Operating system to build for (ubuntu-24.04, macos-15, windows-latest)'
+      platform:
+        required: true
+        type: string
+        description: 'Platform name for artifact naming (linux-x86_64, macos-arm64, windows-x86_64)'
+      package:
+        required: false
+        type: boolean
+        default: false
+        description: 'Whether to package the build artifacts'
+    outputs:
+      artifact-name:
+        value: ${{ jobs.build.outputs.artifact-name }}
+        description: 'Name of the uploaded artifact'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ${{ inputs.os }}
+    outputs:
+      artifact-name: ${{ steps.package.outputs.artifact-name }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+
+      - name: Install dependencies (Linux)
+        if: inputs.os == 'ubuntu-24.04'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxxf86vm-dev autoconf autoconf-archive automake libtool
+
+      - name: Install dependencies (macOS)
+        if: startsWith(inputs.os, 'macos')
+        run: brew install autoconf autoconf-archive automake libtool
+
+      - name: Cache vcpkg
+        uses: actions/cache@v5
+        id: cache-vcpkg
+        with:
+          path: ${{ github.workspace }}/vcpkg_installed/
+          key: ${{ runner.os }}${{ inputs.os == 'macos-15' && '-arm' || inputs.os == 'macos-15-intel' && '-x64' || '' }}-vcpkg-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+          restore-keys: ${{ runner.os }}${{ inputs.os == 'macos-15' && '-arm' || inputs.os == 'macos-15-intel' && '-x64' || '' }}-vcpkg-
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          doNotCache: true
+          vcpkgGitCommitId: '84bab45d415d22042bd0b9081aea57f362da3f35'
+          runVcpkgInstall: ${{ steps.cache-vcpkg-installed.outputs.cache-hit != 'true' || inputs.package }}
+          runVcpkgFormatString: ${{ inputs.os == 'macos-15' && '[`install`, `--recurse`, `--clean-after-build`, `--x-install-root`, `$[env.VCPKG_INSTALLED_DIR]`, `--triplet`, `$[env.VCPKG_DEFAULT_TRIPLET]`, `--allow-unsupported`]' || '' }}
+        env:
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+          VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Build
+        run: cargo build -vv --release
+        env:
+          VCPKG_HAS_BEEN_INSTALLED: 1
+
+      - name: Package (Unix)
+        id: package
+        if: inputs.package && inputs.os != 'windows-latest'
+        run: |
+          mkdir -p release
+          cp target/release/_3dtile release/
+          cp -r -v target/release/gdal release/
+          cp -r -v target/release/proj release/
+          cp -r -v target/release/osgPlugins-3.6.5 release/
+          tar -czf _3dtile-${{ inputs.platform }}.tar.gz -C release .
+          echo "artifact-name=${{ inputs.platform }}" >> $GITHUB_OUTPUT
+
+      - name: Package (Windows)
+        id: package-windows
+        if: inputs.package && inputs.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release
+          Copy-Item target/release/_3dtile.exe release/
+          Copy-Item -Recurse target/release/gdal release/
+          Copy-Item -Recurse target/release/proj release/
+          Copy-Item -Recurse target/release/osgPlugins-3.6.5 release/
+          Compress-Archive -Path release/* -DestinationPath _3dtile-${{ inputs.platform }}.zip
+          echo "artifact-name=${{ inputs.platform }}" >> $env:GITHUB_OUTPUT
+
+      - name: Upload artifact
+        if: inputs.package
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ inputs.platform }}
+          path: _3dtile-${{ inputs.platform }}${{ inputs.os == 'windows-latest' && '.zip' || '.tar.gz' }}

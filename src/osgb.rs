@@ -84,7 +84,6 @@ pub fn osgb_batch_convert(
     use std::sync::mpsc::channel;
 
     let path = dir.join("Data");
-    // .\Data directory
     if !path.exists() || !path.is_dir() {
         return Err(From::from(format!("dir {} not exist", path.display())));
     }
@@ -172,6 +171,7 @@ pub fn osgb_batch_convert(
         }
     }
     let mut root_box = vec![-1.0E+38f64, -1.0E+38, -1.0E+38, 1.0E+38, 1.0E+38, 1.0E+38];
+    let mut root_geometric_error = 0.0;
     for x in tile_array.iter() {
         for i in 0..3 {
             if x.box_v[i] > root_box[i] {
@@ -181,6 +181,12 @@ pub fn osgb_batch_convert(
         for i in 3..6 {
             if x.box_v[i] < root_box[i] {
                 root_box[i] = x.box_v[i]
+            }
+        }
+        let json_val: serde_json::Value = serde_json::from_str(&x.json).unwrap();
+        if let Some(ge) = json_val["geometricError"].as_f64() {
+            if ge > root_geometric_error {
+                root_geometric_error = ge;
             }
         }
     }
@@ -212,13 +218,13 @@ pub fn osgb_batch_convert(
                 "version": "1.0",
                 "gltfUpAxis": "Z"
             },
-            "geometricError": 2000,
+            "geometricError": root_geometric_error * 2.0,
             "root" : {
                 "transform" : trans_vec,
                 "boundingVolume" : {
                     "box": box_to_tileset_box(&root_box)
                 },
-                "geometricError": 2000,
+                "geometricError": root_geometric_error * 2.0,
                 "children": []
             }
         }
@@ -229,12 +235,13 @@ pub fn osgb_batch_convert(
         let path = x.path;
         let json_val: serde_json::Value = serde_json::from_str(&x.json).unwrap();
         let tile_box = json_val["boundingVolume"]["box"].as_array().unwrap();
+        let tile_geometric_error = json_val["geometricError"].as_f64().unwrap_or(1000.0);
         let tile_object = json!(
             {
                 "boundingVolume": {
                     "box": &tile_box
                 },
-                "geometricError": 1000,
+                "geometricError": tile_geometric_error,
                 "content": {
                     "uri" : format!("{}/tileset.json", path.replace(&out_dir,"./").replace("\\","/"))
                 }
@@ -249,7 +256,7 @@ pub fn osgb_batch_convert(
                 "version": "1.0",
                 "gltfUpAxis":"Z"
             },
-            "geometricError": 1000,
+            "geometricError": tile_geometric_error,
             "root": json_val
         }
         );

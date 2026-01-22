@@ -270,7 +270,8 @@ fn main() {
 
     match format {
         "osgb" => {
-            convert_osgb(input, output, tile_config, enable_simplify, enable_texture_compress, enable_draco, enable_unlit);
+            // osgb默认开启material_unlit
+            convert_osgb(input, output, tile_config, enable_simplify, enable_texture_compress, enable_draco, true);
         }
         "shape" => {
             convert_shapefile(
