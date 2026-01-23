@@ -39,15 +39,19 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
 
         basisu::vector<basisu::image> source_images;
         source_images.push_back(basisu::image(rgba_data.data(), width, height, 4));
-        int quality_level = 64;
+        int quality_level = 128;
         std::size_t file_size = 0;
 
         // FIX: https://github.com/fanvanzh/3dtiles/issues/372
         // Thanks to liyq0307
+        unsigned int basis_flags = quality_level | basisu::cFlagKTX2 | basisu::cFlagGenMipsWrap | basisu::cFlagThreaded;
+#ifdef DEBUG
+        basis_flags |= basisu::cFlagDebug | basisu::cFlagPrintStatus;
+#endif
         void *pKTX2_data = basisu::basis_compress(
             basist::basis_tex_format::cETC1S, source_images,
-            128 | basisu::cFlagKTX2 | basisu::cFlagGenMipsWrap, 1.0f,
-            &file_size
+            basis_flags, 1.0f,
+            &file_size, nullptr
         );
 
         ktx2_data.assign((unsigned char*)pKTX2_data, (unsigned char*)pKTX2_data + file_size);
