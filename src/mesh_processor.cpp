@@ -42,9 +42,11 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
         int quality_level = 64;
         std::size_t file_size = 0;
 
-        void* pKTX2_data = basisu::basis_compress(basist::basis_tex_format::cUASTC4x4, source_images,
-        quality_level | basisu::cFlagKTX2 | basisu::cFlagKTX2UASTCSuperCompression | basisu::cFlagPrintStatus | basisu::cFlagDebug | basisu::cFlagThreaded,
-        2.0f, &file_size, nullptr);
+        void *pKTX2_data = basisu::basis_compress(
+            basist::basis_tex_format::cETC1S, source_images,
+            128 | basisu::cFlagKTX2 | basisu::cFlagGenMipsWrap, 1.0f,
+            &file_size
+        );
 
         ktx2_data.assign((unsigned char*)pKTX2_data, (unsigned char*)pKTX2_data + file_size);
 
