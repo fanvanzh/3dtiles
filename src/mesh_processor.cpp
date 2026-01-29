@@ -30,12 +30,11 @@ bool compress_to_ktx2(const std::vector<unsigned char>& rgba_data, int width, in
             return false;
         }
 
-        // Initialize Basis Universal encoder
-        static bool basisu_initialized = false;
-        if (!basisu_initialized) {
+        // Initialize Basis Universal encoder (Thread safety)
+        static std::once_flag basisu_initialized;
+        std::call_once(basisu_initialized, []() {
             basisu::basisu_encoder_init();
-            basisu_initialized = true;
-        }
+        });
 
         basisu::vector<basisu::image> source_images;
         source_images.push_back(basisu::image(rgba_data.data(), width, height, 4));
