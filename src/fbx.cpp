@@ -578,7 +578,7 @@ std::string FBXLoader::calcMaterialHash(const ufbx_material *mat) {
     float e_g = (float)mat->fbx.emission_color.value_vec3.y;
     float e_b = (float)mat->fbx.emission_color.value_vec3.z;
     float ef = mat->fbx.emission_factor.has_value ? (float)mat->fbx.emission_factor.value_real : 1.0f;
-    if (fabs(e_r - 1.0f) > 1e-6 || fabs(e_g - 1.0f) > 1e-6 || fabs(e_b - 1.0f) > 1e-6) {
+    if (fabs(e_r - 1.0f) > 1e-6 && fabs(e_g - 1.0f) > 1e-6 && fabs(e_b - 1.0f) > 1e-6) {
         emission[0] = (float)mat->fbx.emission_color.value_vec3.x * ef;
         emission[1] = (float)mat->fbx.emission_color.value_vec3.y * ef;
         emission[2] = (float)mat->fbx.emission_color.value_vec3.z * ef;
