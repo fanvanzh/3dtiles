@@ -229,14 +229,14 @@ osg::StateSet* FBXLoader::getOrCreateStateSet(const ufbx_material* mat) {
         float e_r = mat->pbr.emission_color.value_vec3.x;
         float e_g = mat->pbr.emission_color.value_vec3.y;
         float e_b = mat->pbr.emission_color.value_vec3.z;
-        if (e_r != 1.0f || e_g != 1.0f || e_b != 1.0f) {
+        if (fabs(e_r - 1.0f) > 1e-6 || fabs(e_g - 1.0f) > 1e-6 || fabs(e_b - 1.0f) > 1e-6) {
             emission.set(e_r, e_g, e_b, 1.0f);
         }
     } else if (mat->fbx.emission_color.has_value) {
         float e_r = mat->fbx.emission_color.value_vec3.x;
         float e_g = mat->fbx.emission_color.value_vec3.y;
         float e_b = mat->fbx.emission_color.value_vec3.z;
-        if (e_r != 1.0f || e_g != 1.0f || e_b != 1.0f) {
+        if (fabs(e_r - 1.0f) > 1e-6 || fabs(e_g - 1.0f) > 1e-6 || fabs(e_b - 1.0f) > 1e-6) {
             emission.set(e_r, e_g, e_b, 1.0f);
             if (mat->fbx.emission_factor.has_value) emission *= mat->fbx.emission_factor.value_real;
         }
