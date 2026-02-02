@@ -565,14 +565,24 @@ std::string FBXLoader::calcMaterialHash(const ufbx_material *mat) {
 
   float emission[3] = {0.0f, 0.0f, 0.0f};
   if (mat->pbr.emission_color.has_value) {
-    emission[0] = (float)mat->pbr.emission_color.value_vec3.x;
-    emission[1] = (float)mat->pbr.emission_color.value_vec3.y;
-    emission[2] = (float)mat->pbr.emission_color.value_vec3.z;
+    float e_r = (float)mat->pbr.emission_color.value_vec3.x;
+    float e_g = (float)mat->pbr.emission_color.value_vec3.y;
+    float e_b = (float)mat->pbr.emission_color.value_vec3.z;
+    if (fabs(e_r - 1.0f) > 1e-6 && fabs(e_g - 1.0f) > 1e-6 && fabs(e_b - 1.0f) > 1e-6) {
+        emission[0] = (float)mat->pbr.emission_color.value_vec3.x;
+        emission[1] = (float)mat->pbr.emission_color.value_vec3.y;
+        emission[2] = (float)mat->pbr.emission_color.value_vec3.z;
+    }
   } else if (mat->fbx.emission_color.has_value) {
+    float e_r = (float)mat->fbx.emission_color.value_vec3.x;
+    float e_g = (float)mat->fbx.emission_color.value_vec3.y;
+    float e_b = (float)mat->fbx.emission_color.value_vec3.z;
     float ef = mat->fbx.emission_factor.has_value ? (float)mat->fbx.emission_factor.value_real : 1.0f;
-    emission[0] = (float)mat->fbx.emission_color.value_vec3.x * ef;
-    emission[1] = (float)mat->fbx.emission_color.value_vec3.y * ef;
-    emission[2] = (float)mat->fbx.emission_color.value_vec3.z * ef;
+    if (fabs(e_r - 1.0f) > 1e-6 || fabs(e_g - 1.0f) > 1e-6 || fabs(e_b - 1.0f) > 1e-6) {
+        emission[0] = (float)mat->fbx.emission_color.value_vec3.x * ef;
+        emission[1] = (float)mat->fbx.emission_color.value_vec3.y * ef;
+        emission[2] = (float)mat->fbx.emission_color.value_vec3.z * ef;
+    }
   }
   oss.write(reinterpret_cast<const char*>(emission), sizeof(emission));
 
