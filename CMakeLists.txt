@@ -14,8 +14,35 @@ if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
 endif()
 
-file(GLOB_RECURSE SOURCES src/*.cpp)
-file(GLOB_RECURSE HEADERS src/*.h src/json.hpp)
+set(HEADERS
+    src/attribute_storage.h
+    src/coordinate_system.h
+    src/coordinate_transformer.h
+    src/dxt_img.h
+    src/extern.h
+    src/FBXPipeline.h
+    src/fbx.h
+    src/GeoTransform.h
+    src/lod_pipeline.h
+    src/mesh_processor.h
+    src/osg_fix.h
+    src/shape.h
+)
+
+set(SOURCES
+    src/attribute_storage.cpp
+    src/coordinate_system.cpp
+    src/coordinate_transformer.cpp
+    src/dxt_img.cpp
+    src/fbx.cpp
+    src/FBXPipeline.cpp
+    src/GeoTransform.cpp
+    src/lod_pipeline.cpp
+    src/mesh_processor.cpp
+    src/osgb23dtile.cpp
+    src/shp23dtile.cpp
+    src/tileset.cpp
+)
 
 # ufbx (single-file C library)
 add_library(ufbx STATIC thirdparty/ufbx/ufbx.c)
