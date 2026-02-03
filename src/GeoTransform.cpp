@@ -1,3 +1,5 @@
+#include "coordinate_system.h"
+#include "coordinate_transformer.h"
 #include "GeoTransform.h"
 #include <cstdio>
 #include <glm/glm.hpp>
@@ -100,4 +102,27 @@ void GeoTransform::SetGeographicOrigin(double lon, double lat, double height)
     GeoTransform::EcefToEnuMatrix = glm::inverse(EnuToEcefMatrix);
 
     fprintf(stderr, "[GeoTransform] Geographic origin set: lon=%.10f lat=%.10f h=%.3f\n", lon, lat, height);
+}
+
+void GeoTransform::InitFromSource(const OGRSpatialReference* spatialRef, const glm::dvec3& refPoint) {
+        sourceCS = Tiles::Core::Geo::CoordinateSystem::fromShapefile(spatialRef, refPoint);
+        targetCS.type = Tiles::Core::Geo::CoordinateType::CARTESIAN;
+        targetCS.epsgCode = "EPSG:4978";
+        targetCS.upAxis = Tiles::Core::Geo::UpAxis::Z_UP;
+        targetCS.isMeterUnit = true;
+}
+
+glm::dvec3 GeoTransform::transformPoint(double x, double y, double z) {
+    glm::dvec3 point(x, y, z);
+    glm::dvec3 center = GeoTransform::sourceCS.getCenter();
+
+    if (GeoTransform::sourceCS.isGeographic()) {
+        return Tiles::Core::Geo::CoordinateTransformer::geographicToLocalMeter(point, center);
+    } else if (GeoTransform::sourceCS.isProjected()) {
+        // Convert both point and center from projected to geographic coordinates
+        glm::dvec3 geo = Tiles::Core::Geo::CoordinateTransformer::projectedToGeographic(point, GeoTransform::sourceCS.epsgCode);
+        glm::dvec3 centerGeo = Tiles::Core::Geo::CoordinateTransformer::projectedToGeographic(center, GeoTransform::sourceCS.epsgCode);
+        return Tiles::Core::Geo::CoordinateTransformer::geographicToLocalMeter(geo, centerGeo);
+    }
+    return point;
 }
