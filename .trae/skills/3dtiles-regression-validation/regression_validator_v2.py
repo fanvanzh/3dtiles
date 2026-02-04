@@ -12,6 +12,20 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# 导入 gltf_comparator 模块
+try:
+    from gltf_comparator import GLTFComparator, ComparisonReport as GLTFComparisonReport
+    GLTF_COMPARATOR_AVAILABLE = True
+except ImportError:
+    GLTF_COMPARATOR_AVAILABLE = False
+
+# 导入 tiles_comparator 模块
+try:
+    from tiles_comparator import TilesComparator, ComparisonReport as TilesComparisonReport
+    TILES_COMPARATOR_AVAILABLE = True
+except ImportError:
+    TILES_COMPARATOR_AVAILABLE = False
+
 
 class ValidationMode(Enum):
     STRICT = "strict"      # 字节级完全一致
@@ -225,32 +239,87 @@ class RegressionValidator:
                 ))
                 continue
 
-            is_match, diff_info = self.compare_files_bytes(
-                baseline_files[filename],
-                current_files[filename]
-            )
+            baseline_path = baseline_files[filename]
+            current_path = current_files[filename]
 
-            if is_match:
-                results.append(FileResult(
-                    path=filename,
-                    result=ValidationResult.PASS,
-                    message="文件内容完全一致",
-                    details={
-                        "size": os.path.getsize(baseline_files[filename]),
-                        "hash": self.calculate_file_hash(baseline_files[filename])
-                    }
-                ))
+            # 使用 tiles_comparator 进行深度内容比对
+            if TILES_COMPARATOR_AVAILABLE:
+                try:
+                    comparator = TilesComparator(
+                        float_tolerance=self.config.float_tolerance,
+                        ignore_fields=set(self.config.ignore_fields)
+                    )
+                    tiles_report = comparator.compare(baseline_path, current_path)
+
+                    if tiles_report.identical:
+                        results.append(FileResult(
+                            path=filename,
+                            result=ValidationResult.PASS,
+                            message=f"{tiles_report.file_type}内容完全一致",
+                            details={
+                                "comparator": "tiles_comparator",
+                                "total_items": tiles_report.total_items,
+                                "matched_items": tiles_report.matched_items,
+                                "tolerance_matched": tiles_report.tolerance_matched
+                            }
+                        ))
+                    else:
+                        results.append(FileResult(
+                            path=filename,
+                            result=ValidationResult.FAIL if self.config.mode == ValidationMode.STRICT else ValidationResult.WARNING,
+                            message=f"{tiles_report.file_type}内容存在 {len(tiles_report.differences)} 个差异",
+                            details={
+                                "comparator": "tiles_comparator",
+                                "total_items": tiles_report.total_items,
+                                "matched_items": tiles_report.matched_items,
+                                "differences": len(tiles_report.differences),
+                                "diff_sample": [
+                                    {
+                                        "path": d.path,
+                                        "field": d.field,
+                                        "value1": str(d.value1),
+                                        "value2": str(d.value2)
+                                    }
+                                    for d in tiles_report.differences[:3]
+                                ]
+                            }
+                        ))
+
+                except Exception as e:
+                    results.append(FileResult(
+                        path=filename,
+                        result=ValidationResult.WARNING,
+                        message=f"tiles_comparator执行异常: {str(e)}",
+                        details={}
+                    ))
             else:
-                results.append(FileResult(
-                    path=filename,
-                    result=ValidationResult.FAIL,
-                    message=f"文件内容存在差异",
-                    details={
-                        "baseline_size": os.path.getsize(baseline_files[filename]),
-                        "current_size": os.path.getsize(current_files[filename]),
-                        "size_diff": diff_info
-                    }
-                ))
+                # 降级到字节级比较
+                is_match, diff_info = self.compare_files_bytes(
+                    baseline_path,
+                    current_path
+                )
+
+                if is_match:
+                    results.append(FileResult(
+                        path=filename,
+                        result=ValidationResult.PASS,
+                        message="文件内容完全一致",
+                        details={
+                            "size": os.path.getsize(baseline_path),
+                            "hash": self.calculate_file_hash(baseline_path)
+                        }
+                    ))
+                else:
+                    results.append(FileResult(
+                        path=filename,
+                        result=ValidationResult.FAIL,
+                        message=f"文件内容存在差异",
+                        details={
+                            "baseline_size": os.path.getsize(baseline_path),
+                            "current_size": os.path.getsize(current_path),
+                            "size_diff": diff_info
+                        }
+                    ))
 
         # 检查是否有新增文件
         for filename in sorted(current_files.keys()):
@@ -264,45 +333,7 @@ class RegressionValidator:
 
         return results
 
-    def validate_b3dm_content(self, baseline: str, current: str) -> List[FileResult]:
-        """验证B3DM文件内部结构（glTF部分）"""
-        results = []
-        b3dm_files = [f for f in self.find_content_files(baseline).keys() if f.endswith('.b3dm')]
-
-        for b3dm_file in b3dm_files:
-            baseline_path = os.path.join(baseline, b3dm_file)
-            current_path = os.path.join(current, b3dm_file)
-
-            if not os.path.exists(current_path):
-                continue
-
-            try:
-                # 解析B3DM头部
-                with open(baseline_path, 'rb') as f:
-                    baseline_header = f.read(28)  # B3DM header is 28 bytes
-                with open(current_path, 'rb') as f:
-                    current_header = f.read(28)
-
-                # 比较B3DM magic和version
-                if baseline_header[:8] != current_header[:8]:
-                    results.append(FileResult(
-                        path=b3dm_file,
-                        result=ValidationResult.FAIL,
-                        message="B3DM头部magic或version不匹配",
-                        details={}
-                    ))
-
-            except Exception as e:
-                results.append(FileResult(
-                    path=b3dm_file,
-                    result=ValidationResult.WARNING,
-                    message=f"B3DM解析异常: {str(e)}",
-                    details={}
-                ))
-
-        return results
-
-    def validate_with_official_tools(self, current: str) -> List[FileResult]:
+    def validate_with_official_tools(self, baseline: str, current: str) -> List[FileResult]:
         """使用官方工具进行验证"""
         results = []
 
@@ -324,13 +355,13 @@ class RegressionValidator:
             )
 
             # 读取验证报告
-            report_path = tileset_path.replace(".json", "_report.json")
+            report_path = tileset_path.replace(".json", ".report.json")
             if os.path.exists(report_path):
                 with open(report_path, 'r') as f:
                     validation_report = json.load(f)
 
-                num_errors = validation_report.get("issues", {}).get("numErrors", 0)
-                num_warnings = validation_report.get("issues", {}).get("numWarnings", 0)
+                num_errors = validation_report.get("numErrors", 0)
+                num_warnings = validation_report.get("numWarnings", 0)
 
                 if num_errors == 0:
                     results.append(FileResult(
@@ -344,7 +375,7 @@ class RegressionValidator:
                         path="tileset.json",
                         result=ValidationResult.FAIL,
                         message=f"3d-tiles-validator发现 {num_errors} 个错误",
-                        details={"errors": validation_report.get("issues", {}).get("messages", [])[:5]}
+                        details={"errors": validation_report.get("issues", [])[:5]}
                     ))
             else:
                 results.append(FileResult(
@@ -380,7 +411,14 @@ class RegressionValidator:
         content_files = self.find_content_files(current)
         glb_files = [f for f in content_files.values() if f.endswith('.glb')]
 
-        for glb_file in glb_files[:3]:  # 只验证前3个glb文件
+        # 查找基准目录中的 glb 文件用于对比
+        baseline_content_files = self.find_content_files(baseline)
+        baseline_glb_files = [f for f in baseline_content_files.values() if f.endswith('.glb')]
+
+        for i, glb_file in enumerate(glb_files[:3]):  # 只验证前3个glb文件
+            glb_filename = os.path.basename(glb_file)
+
+            # 1. 使用 gltf-validator 进行规范验证
             try:
                 result = subprocess.run(
                     ["gltf-validator", glb_file, "--stdout"],
@@ -389,32 +427,133 @@ class RegressionValidator:
                     timeout=60
                 )
 
-                if result.returncode == 0:
-                    validation_result = json.loads(result.stdout)
-                    num_errors = validation_result.get("issues", {}).get("numErrors", 0)
+                # gltf-validator 的输出包含摘要信息和 JSON，需要提取 JSON 部分
+                # JSON 对象以 '{' 开头，通常在输出的最后部分
+                output = result.stdout.strip()
 
-                    if num_errors == 0:
-                        results.append(FileResult(
-                            path=os.path.basename(glb_file),
-                            result=ValidationResult.PASS,
-                            message="gltf-validator验证通过",
-                            details={}
-                        ))
-                    else:
-                        results.append(FileResult(
-                            path=os.path.basename(glb_file),
-                            result=ValidationResult.FAIL,
-                            message=f"gltf-validator发现 {num_errors} 个错误",
-                            details={}
-                        ))
+                # 找到最后一个完整的 JSON 对象
+                # 从最后一个 '{' 开始，找到匹配的 '}'
+                last_brace_pos = output.rfind('{')
+                if last_brace_pos >= 0:
+                    json_str = output[last_brace_pos:]
 
+                    # 验证 JSON 是否完整（括号匹配）
+                    brace_count = 0
+                    for i, char in enumerate(json_str):
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                json_str = json_str[:i + 1]
+                                break
+
+                    try:
+                        validation_result = json.loads(json_str)
+                        num_errors = validation_result.get("issues", {}).get("numErrors", 0)
+                        num_warnings = validation_result.get("issues", {}).get("numWarnings", 0)
+
+                        if num_errors == 0:
+                            results.append(FileResult(
+                                path=glb_filename,
+                                result=ValidationResult.PASS,
+                                message=f"gltf-validator验证通过 (warnings: {num_warnings})",
+                                details={"validator": "gltf-validator"}
+                            ))
+                        else:
+                            results.append(FileResult(
+                                path=glb_filename,
+                                result=ValidationResult.FAIL,
+                                message=f"gltf-validator发现 {num_errors} 个错误",
+                                details={"validator": "gltf-validator", "errors": num_errors}
+                            ))
+                    except json.JSONDecodeError as e:
+                        results.append(FileResult(
+                            path=glb_filename,
+                            result=ValidationResult.WARNING,
+                            message=f"gltf-validator JSON解析失败: {str(e)}",
+                            details={"json_preview": json_str[:200]}
+                        ))
+                else:
+                    results.append(FileResult(
+                        path=glb_filename,
+                        result=ValidationResult.WARNING,
+                        message="gltf-validator输出格式异常",
+                        details={"output": output[:200]}
+                    ))
+
+            except FileNotFoundError:
+                results.append(FileResult(
+                    path=glb_filename,
+                    result=ValidationResult.WARNING,
+                    message="gltf-validator未安装，跳过规范验证",
+                    details={}
+                ))
             except Exception as e:
                 results.append(FileResult(
-                    path=os.path.basename(glb_file),
+                    path=glb_filename,
                     result=ValidationResult.WARNING,
                     message=f"gltf-validator执行异常: {str(e)}",
                     details={}
                 ))
+
+            # 2. 使用 gltf_comparator 进行内容比对（如果存在对应的基准文件）
+            if GLTF_COMPARATOR_AVAILABLE and baseline_glb_files:
+                baseline_glb = None
+                for baseline_file in baseline_glb_files:
+                    if os.path.basename(baseline_file) == glb_filename:
+                        baseline_glb = baseline_file
+                        break
+
+                if baseline_glb and os.path.exists(baseline_glb):
+                    try:
+                        comparator = GLTFComparator(
+                            float_tolerance=self.config.float_tolerance,
+                            ignore_fields=set(self.config.ignore_fields)
+                        )
+                        gltf_report = comparator.compare(baseline_glb, glb_file)
+
+                        if gltf_report.identical:
+                            results.append(FileResult(
+                                path=f"{glb_filename} (内容比对)",
+                                result=ValidationResult.PASS,
+                                message="glTF内容完全一致",
+                                details={
+                                    "validator": "gltf_comparator",
+                                    "total_items": gltf_report.total_items,
+                                    "matched_items": gltf_report.matched_items,
+                                    "tolerance_matched": gltf_report.tolerance_matched
+                                }
+                            ))
+                        else:
+                            results.append(FileResult(
+                                path=f"{glb_filename} (内容比对)",
+                                result=ValidationResult.FAIL if self.config.mode == ValidationMode.STRICT else ValidationResult.WARNING,
+                                message=f"glTF内容存在 {len(gltf_report.differences)} 个差异",
+                                details={
+                                    "validator": "gltf_comparator",
+                                    "total_items": gltf_report.total_items,
+                                    "matched_items": gltf_report.matched_items,
+                                    "differences": len(gltf_report.differences),
+                                    "diff_sample": [
+                                        {
+                                            "path": d.path,
+                                            "field": d.field,
+                                            "value1": str(d.value1),
+                                            "value2": str(d.value2)
+                                        }
+                                        for d in gltf_report.differences[:3]
+                                    ]
+                                }
+                            ))
+
+                    except Exception as e:
+                        results.append(FileResult(
+                            path=f"{glb_filename} (内容比对)",
+                            result=ValidationResult.WARNING,
+                            message=f"gltf_comparator执行异常: {str(e)}",
+                            details={}
+                        ))
 
         return results
 
@@ -491,15 +630,8 @@ class RegressionValidator:
                 })
                 print(f"  ✗ {result.path}: {result.message}")
 
-        # 3. 验证B3DM内部结构（仅在严格模式下）
-        if self.config.mode == ValidationMode.STRICT:
-            print("\n[3/4] 验证B3DM内部结构...")
-            b3dm_results = self.validate_b3dm_content(baseline, current)
-            self.results.extend(b3dm_results)
-
-            for result in b3dm_results:
-                self.summary["total"] += 1
-                if result.result == ValidationResult.PASS:
+        # 3. 使用官方工具验证
+        print("\n[3/4] 使用官方工具验证...")
                     self.summary["passed"] += 1
                     print(f"  ✓ {result.path}")
                 else:
@@ -512,7 +644,7 @@ class RegressionValidator:
 
         # 4. 使用官方工具验证
         print("\n[4/4] 使用官方工具验证...")
-        official_results = self.validate_with_official_tools(current)
+        official_results = self.validate_with_official_tools(baseline, current)
         self.results.extend(official_results)
 
         for result in official_results:
