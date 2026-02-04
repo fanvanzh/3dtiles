@@ -225,7 +225,6 @@ pub fn osgb_batch_convert(
                     "box": box_to_tileset_box(&root_box)
                 },
                 "geometricError": root_geometric_error * 2.0,
-                "refine": "REPLACE",
                 "children": []
             }
         }
