@@ -1232,6 +1232,13 @@ void alignment_buffer(std::vector<T>& buf) {
     }
 }
 
+template<class T>
+void alignment_buffer_4(std::vector<T>& buf) {
+    while (buf.size() % 4 != 0) {
+        buf.push_back(0x00);
+    }
+}
+
 #define SET_MIN(x,v) do{ if (x > v) x = v; }while (0);
 #define SET_MAX(x,v) do{ if (x < v) x = v; }while (0);
 
@@ -1493,17 +1500,32 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes,
                 batchid_accessor_index = model.accessors.size();
                 tinygltf::Accessor acc;
                 acc.byteOffset = 0;
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
+
+                // Per glTF spec: Vertex attribute data must be aligned to 4-byte boundaries
+                // gltf-validator requires element size to be 4-byte aligned for vertex attributes
+                // Use FLOAT (4 bytes) for _BATCHID to ensure 4-byte alignment
+                // UNSIGNED_BYTE (1 byte) and UNSIGNED_SHORT (2 bytes) are not 4-byte aligned
+                // UNSIGNED_INT (4 bytes) is not allowed for mesh attributes
+                acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+
                 acc.count = merged_batch_ids.size();
                 acc.type = TINYGLTF_TYPE_SCALAR;
                 acc.maxValues = {(double)max_batch};
                 acc.minValues = {0.0};
 
                 if (!draco_requested) {
+                    // Per glTF spec: Vertex attribute data must be aligned to 4-byte boundaries
+                    // Ensure buffer is 4-byte aligned before writing _BATCHID data
+                    alignment_buffer_4(buffer.data);
                     int byteOffset = buffer.data.size();
+                    // Write as FLOAT (4 bytes) for 4-byte alignment
                     for (auto batch_id : merged_batch_ids) {
-                        put_val(buffer.data, batch_id);
+                        float val = static_cast<float>(batch_id);
+                        put_val(buffer.data, val);
                     }
+                    // Per glTF spec: Vertex attribute data must be aligned to 4-byte boundaries
+                    // Ensure the _BATCHID data itself is 4-byte aligned
+                    alignment_buffer_4(buffer.data);
                     acc.bufferView = model.bufferViews.size();
                     alignment_buffer(buffer.data);
                     tinygltf::BufferView bfv = create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
@@ -1573,6 +1595,13 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes,
         model.materials = { make_color_material(1.0, 1.0, 1.0) };
     }
 
+    // Ensure buffer data is 8-byte aligned so that generated GLB is 8-byte aligned
+    // This is required for B3DM total length to be 8-byte aligned
+    int buffer_padding = (8 - (buffer.data.size() % 8)) % 8;
+    for (int i = 0; i < buffer_padding; ++i) {
+        buffer.data.push_back(0x00);
+    }
+
     model.buffers.push_back(std::move(buffer));
     model.asset.version = "2.0";
     model.asset.generator = "fanfan";
@@ -1590,6 +1619,38 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes,
     std::ostringstream ss;
     bool res = gltf.WriteGltfSceneToStream(&model, ss, false, true);
     std::string buf = ss.str();
+
+    // Ensure GLB is 8-byte aligned for B3DM total length alignment
+    // GLB structure: header(12) + JSON chunk(8 + len) + BIN chunk(8 + len)
+    int glb_padding = (8 - (buf.size() % 8)) % 8;
+    if (glb_padding > 0) {
+        // Extend BIN chunk by adding padding to the end
+        // BIN chunk length is at offset: 12 + 8 + json_chunk_length + 4
+        // But we need to find the BIN chunk header first
+
+        // Read JSON chunk length from GLB
+        int json_chunk_len = *reinterpret_cast<const int*>(&buf[12]);
+        int bin_chunk_header_offset = 12 + 8 + json_chunk_len;
+        // Ensure bin_chunk_header_offset is 4-byte aligned (GLB spec)
+        if (bin_chunk_header_offset % 4 != 0) {
+            bin_chunk_header_offset += 4 - (bin_chunk_header_offset % 4);
+        }
+
+        // Read current BIN chunk length
+        int bin_chunk_len = *reinterpret_cast<const int*>(&buf[bin_chunk_header_offset]);
+
+        // Update BIN chunk length
+        int new_bin_chunk_len = bin_chunk_len + glb_padding;
+        *reinterpret_cast<int*>(&buf[bin_chunk_header_offset]) = new_bin_chunk_len;
+
+        // Add padding bytes to the end of GLB
+        buf.append(glb_padding, '\0');
+
+        // Update GLB header length
+        int new_glb_len = buf.size();
+        *reinterpret_cast<int*>(&buf[8]) = new_glb_len;
+    }
+
     return buf;
 }
 
@@ -1600,7 +1661,11 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height, bool 
     feature_json_string += "{\"BATCH_LENGTH\":";
     feature_json_string += std::to_string(meshes.size());
     feature_json_string += "}";
-    while (feature_json_string.size() % 4 != 0 ) {
+    // Per 3D Tiles spec: Feature Table Binary must start at 8-byte aligned offset
+    // Feature Table Binary starts at: header_len(28) + feature_json_len
+    // So feature_json_len must be such that (28 + feature_json_len) % 8 == 0
+    // Since 28 % 8 = 4, we need feature_json_len % 8 == 4
+    while ((28 + feature_json_string.size()) % 8 != 0) {
         feature_json_string.push_back(' ');
     }
 
@@ -1650,9 +1715,6 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height, bool 
     }
 
     std::string batch_json_string = batch_json.dump();
-    while (batch_json_string.size() % 4 != 0 ) {
-        batch_json_string.push_back(' ');
-    }
 
     std::string glb_buf = make_polymesh(meshes, enable_simplify, simplification_params, enable_draco, draco_params);
     if (glb_buf.size() == 0) {
@@ -1660,11 +1722,54 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height, bool 
         return std::string();
     }
 
+    int header_len = 28;
+
+    // Per 3D Tiles spec 1.0:
+    // - Feature Table Binary starts at (28 + feature_json_len), must be 8-byte aligned
+    // - Batch Table JSON starts at (28 + feature_json_len + feature_bin_len), must be 8-byte aligned
+    // - Batch Table Binary starts at (28 + feature_json_len + feature_bin_len + batch_json_len), must be 8-byte aligned
+    // - GLB data starts at (28 + feature_json_len + feature_bin_len + batch_json_len + batch_bin_len), must be 8-byte aligned
+    // - Total byte length must be 8-byte aligned
+
+    // Calculate padding for Feature Table JSON
+    // Feature Table Binary starts at (28 + feature_json_len), must be 8-byte aligned
+    // Since 28 % 8 = 4, we need feature_json_len % 8 == 4
+    int feature_json_padding = (4 - (feature_json_string.size() % 8)) % 8;
+    feature_json_string.append(feature_json_padding, ' ');
+
+    // Calculate padding for Batch Table JSON
+    // Batch Table Binary starts at (28 + feature_json_len + batch_json_len), must be 8-byte aligned
+    // Since feature_bin_len = 0 and (28 + feature_json_len) % 8 == 0, we need batch_json_len % 8 == 0
+    // Note: We need to ensure batch_json_len itself is a multiple of 8
+    int batch_json_padding = (8 - (batch_json_string.size() % 8)) % 8;
+    if (batch_json_padding > 0) {
+        batch_json_string.append(batch_json_padding, ' ');
+    }
+
     int feature_json_len = feature_json_string.size();
     int feature_bin_len = 0;
     int batch_json_len = batch_json_string.size();
     int batch_bin_len = 0;
-    int total_len = 28 /*header size*/ + feature_json_len + batch_json_len + glb_buf.size();
+
+    // Verify alignments
+    int feature_table_binary_start = 28 + feature_json_len;
+    int batch_table_json_start = feature_table_binary_start + feature_bin_len;
+    int batch_table_binary_start = batch_table_json_start + batch_json_len;
+    int glb_start = batch_table_binary_start + batch_bin_len;
+
+    // All must be 8-byte aligned
+    // feature_table_binary_start % 8 == 0 (ensured by feature_json_padding)
+    // batch_table_json_start % 8 == 0 (since feature_bin_len = 0)
+    // batch_table_binary_start % 8 == 0 (ensured by batch_json_padding)
+    // glb_start % 8 == 0 (since batch_bin_len = 0)
+
+    // Total length must also be 8-byte aligned
+    // At this point:
+    // - (28 + feature_json_len) % 8 == 0
+    // - batch_json_len % 8 == 0
+    // - glb_buf.size() % 8 == 0 (ensured by buffer padding in GLB generation)
+    // So total_len % 8 == 0
+    int total_len = 28 + feature_json_len + batch_json_len + glb_buf.size();
 
     std::string b3dm_buf;
     b3dm_buf += "b3dm";
@@ -1675,9 +1780,11 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height, bool 
     put_val(b3dm_buf, feature_bin_len);
     put_val(b3dm_buf, batch_json_len);
     put_val(b3dm_buf, batch_bin_len);
-    //put_val(b3dm_buf, total_len);
     b3dm_buf.append(feature_json_string.begin(),feature_json_string.end());
     b3dm_buf.append(batch_json_string.begin(),batch_json_string.end());
+
+    // Append GLB data
     b3dm_buf.append(glb_buf);
+
     return b3dm_buf;
 }
