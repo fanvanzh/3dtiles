@@ -173,7 +173,14 @@ generate_test_baseline() {
 
     # 构建命令
     local full_input="${PROJECT_ROOT}/${input_path}"
-    local cmd="$EXECUTABLE -f $format -i \"$full_input\" -o \"$output_dir/\""
+    local output_path="$output_dir/"
+    
+    # gltf格式需要指定具体的glb文件名
+    if [ "$format" == "gltf" ]; then
+        output_path="$output_dir/bench.glb"
+    fi
+    
+    local cmd="$EXECUTABLE -f $format -i \"$full_input\" -o \"$output_path\""
 
     # 添加参数
     if [ -n "$args" ] && [ "$args" != "null" ]; then

@@ -632,18 +632,6 @@ class RegressionValidator:
 
         # 3. 使用官方工具验证
         print("\n[3/4] 使用官方工具验证...")
-                    self.summary["passed"] += 1
-                    print(f"  ✓ {result.path}")
-                else:
-                    self.summary["failed"] += 1
-                    self.summary["errors"].append({
-                        "file": result.path,
-                        "message": result.message
-                    })
-                    print(f"  ✗ {result.path}: {result.message}")
-
-        # 4. 使用官方工具验证
-        print("\n[4/4] 使用官方工具验证...")
         official_results = self.validate_with_official_tools(baseline, current)
         self.results.extend(official_results)
 
