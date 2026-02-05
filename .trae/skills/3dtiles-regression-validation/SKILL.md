@@ -28,17 +28,36 @@ description: "3D Tiles重构回归验证与数据质量验证技能。确保重�
 ```
 .trae/skills/3dtiles-regression-validation/
 ├── SKILL.md                          # 本文件
-├── test_config.json                  # 测试配置（v2.0）
-├── regression_validator_v2.py        # 回归验证脚本
-├── tiles_validator.py                # 数据质量验证脚本
-├── run_tests.py                      # 测试执行器
-├── generate_baseline.sh              # 基准数据生成脚本
-└── run_regression_test.sh            # 综合测试工作流
+├── test_config.json                  # 测试配置（v3.0）
+├── 3dtiles_regression/               # Python包
+│   ├── __init__.py                   # 包初始化
+│   ├── __main__.py                   # 模块入口
+│   ├── cli.py                        # 命令行入口
+│   ├── config.py                     # 配置解析
+│   ├── converter.py                  # 格式转换
+│   ├── runner.py                     # 测试运行器
+│   ├── reporter.py                   # 报告生成
+│   └── validators/                   # 验证器模块
+│       ├── __init__.py               # 验证器包初始化
+│       ├── official_tools.py         # 官方工具集成
+│       └── pre_rendering_validator.py # 预渲染验证
+├── requirements.txt                  # Python依赖
+├── README.md                         # 详细使用文档
+├── QUICKSTART.md                     # 快速开始指南
+├── COMPLETE_SOLUTION.md              # 完整解决方案文档
+└── QUICK_REFERENCE.md                # 快速参考手册
 ```
 
 ## 快速开始
 
 ### 1. 安装依赖
+
+#### Python依赖
+
+```bash
+# 安装Python依赖
+pip install -r requirements.txt
+```
 
 #### gltf-validator（glTF验证工具）
 
@@ -95,175 +114,174 @@ npx 3d-tiles-tools --help
 #### 完整验证
 
 ```bash
-# 验证所有工具已安装
-gltf-validator --version
-npx 3d-tiles-validator --version
-npx 3d-tiles-tools --help
+# 生成所有测试套件的基准数据
+python3 -m 3dtiles_regression generate --suite all
+
+# 生成指定测试套件的基准数据
+python3 -m 3dtiles_regression generate --suite smoke
+
+# 生成指定测试用例的基准数据
+python3 -m 3dtiles_regression generate --test osgb_to_gltf_bench
+
+# 强制覆盖已存在的基准数据
+python3 -m 3dtiles_regression generate --suite smoke --force
+
+# 显示详细信息
+python3 -m 3dtiles_regression generate --suite smoke --verbose
 ```
 
-### 2. 数据质量验证（独立使用）
+#### 运行回归测试
 
 ```bash
-# 验证单个 tileset.json
-python3 tiles_validator.py ./output/tileset.json --type tileset
+# 运行所有测试套件
+python3 -m 3dtiles_regression run --suite all
 
-# 验证单个 glb 文件
-python3 tiles_validator.py ./output/tile.b3dm --type gltf
+# 运行指定测试套件
+python3 -m 3dtiles_regression run --suite smoke
 
-# 验证整个目录
-python3 tiles_validator.py ./output --type directory --recursive --verbose
+# 运行指定测试用例
+python3 -m 3dtiles_regression run --test osgb_to_gltf_bench
 
-# 保存验证报告
-python3 tiles_validator.py ./output --report validation_report.json
+# 按优先级运行
+python3 -m 3dtiles_regression run --priority P0
+
+# 指定验证模式
+python3 -m 3dtiles_regression run --suite smoke --mode strict
+
+# 并发执行
+python3 -m 3dtiles_regression run --suite smoke --parallel 4
+
+# 显示详细信息
+python3 -m 3dtiles_regression run --suite smoke --verbose
 ```
 
-### 3. 回归测试（完整流程）
+#### 生成报告
 
 ```bash
-# 使用综合脚本
-cd .trae/skills/3dtiles-regression-validation
-./run_regression_test.sh --all
+# 生成HTML报告
+python3 -m 3dtiles_regression report --format html --output ./reports
 
-# 或使用Python测试执行器
-python3 run_tests.py core --mode strict
+# 生成JSON报告
+python3 -m 3dtiles_regression report --format json --output ./reports
 
-# 生成基准数据
-./generate_baseline.sh --suite core
-
-# 运行特定测试套件
-python3 run_tests.py optimization --mode relaxed
+# 生成所有格式报告
+python3 -m 3dtiles_regression report --format both --output ./reports
 ```
 
-## 验证工具详解
+## 框架架构
 
-### tiles_validator.py - 数据质量验证
+### 核心模块
 
-#### 命令行选项
+#### config.py - 配置解析
 
-```bash
-# 基本用法
-python3 tiles_validator.py <路径> [选项]
+负责解析test_config.json配置文件，提供测试用例和验证模式的访问接口。
 
-# 选项说明
---type {auto,tileset,gltf,directory}  # 验证类型（默认自动检测）
---recursive, -r                       # 递归验证目录
---verbose, -v                         # 详细输出
---report <文件>                        # 保存报告到JSON文件
-```
+**主要功能:**
+- 解析测试套件配置
+- 解析验证模式配置
+- 提供配置查询接口
 
-#### 使用示例
+**关键类:**
+- `Config`: 配置管理类
+- `TestSuite`: 测试套件数据类
+- `TestCase`: 测试用例数据类
+- `ValidationMode`: 验证模式数据类
 
-```bash
-# 验证 tileset.json
-python3 tiles_validator.py ./output/tileset.json
+#### converter.py - 格式转换
 
-# 验证 glb 文件
-python3 tiles_validator.py ./output/tile.b3dm --type gltf
+负责调用转换工具执行3D格式转换。
 
-# 递归验证整个目录
-python3 tiles_validator.py ./output -r -v
+**主要功能:**
+- 执行OSGB到glTF转换
+- 执行Shapefile到3D Tiles转换
+- 执行FBX到3D Tiles转换
+- 处理转换输出
 
-# 验证并保存报告
-python3 tiles_validator.py ./output -r --report report.json
-```
+**关键类:**
+- `Converter`: 格式转换器类
+- `ConversionResult`: 转换结果数据类
 
-#### 支持的验证内容
+#### runner.py - 测试运行器
 
-| 文件类型 | 验证工具 | 验证内容 |
-|----------|----------|----------|
-| tileset.json | 3d-tiles-validator | 结构完整性、边界体积、几何误差、引用有效性 |
-| .gltf/.glb | gltf-validator | 格式规范、资源完整性、扩展支持、性能统计 |
-| .b3dm/.i3dm/.pnts | 3d-tiles-validator | 头部信息、Feature Table、Batch Table、glTF内容 |
+负责执行测试用例、验证输出和生成测试结果。
 
-#### 验证报告解读
+**主要功能:**
+- 执行测试用例
+- 调用验证器进行验证
+- 收集测试结果
+- 生成测试报告
 
-```json
-{
-  "validator": "3d-tiles-validator",
-  "success": true,
-  "issues": [
-    {
-      "code": "TEXTURE_SIZE_NOT_POWER_OF_TWO",
-      "message": "Texture size is not a power of two: 513x513",
-      "severity": "warning",
-      "pointer": "/materials/0/pbrMetallicRoughness/baseColorTexture"
-    }
-  ],
-  "stats": {
-    "totalVertices": 15000,
-    "totalTriangles": 12000,
-    "totalBufferSize": 5242880
-  }
-}
-```
+**关键类:**
+- `TestRunner`: 测试运行器类
+- `TestResult`: 测试结果数据类
 
-### regression_validator_v2.py - 回归验证
+#### reporter.py - 报告生成
 
-#### 验证模式
+负责生成HTML和JSON格式的测试报告。
 
-| 模式 | 说明 | 适用场景 |
-|------|------|----------|
-| **strict** | 字节级逐字节比较 | 确保完全一致的输出 |
-| **relaxed** | 允许浮点数容差 | 允许微小数值差异 |
-| **fast** | 仅验证关键字段 | 快速验证结构完整性 |
+**主要功能:**
+- 生成HTML报告
+- 生成JSON报告
+- 聚合测试结果
+- 生成统计信息
 
-#### 命令行选项
+**关键类:**
+- `Reporter`: 报告生成器类
+- `TestReport`: 测试报告数据类
 
-```bash
-# 严格模式（默认）
-python3 regression_validator_v2.py <基准目录> <当前输出目录> --mode strict
+#### validators/pre_rendering_validator.py - 预渲染验证
 
-# 宽松模式（允许浮点误差）
-python3 regression_validator_v2.py <基准> <当前> \
-    --mode relaxed \
-    --float-tolerance 1e-4
+负责在不使用可视化工具的情况下检测渲染问题。
 
-# 快速模式
-python3 regression_validator_v2.py <基准> <当前> --mode fast
+**主要功能:**
+- 验证glTF文件渲染准备
+- 验证tileset.json渲染准备
+- 检测常见的渲染问题
+- 生成预渲染验证报告
 
-# 自定义忽略字段
-python3 regression_validator_v2.py <基准> <当前> \
-    --ignore-fields generator created timestamp version
+**关键类:**
+- `PreRenderingValidator`: 预渲染验证器类
+- `PreRenderingResult`: 预渲染验证结果数据类
 
-# 跳过官方工具验证
-python3 regression_validator_v2.py <基准> <当前> --skip-validation
+**验证内容:**
+- 几何数据完整性
+- 材质数据有效性
+- 纹理数据可用性
+- 边界体积正确性
+- 变换矩阵有效性
 
-# 指定报告输出路径
-python3 regression_validator_v2.py <基准> <当前> --report ./my_report.json
-```
+#### validators/official_tools.py - 官方工具集成
 
-### run_tests.py - 测试执行器
+负责集成和调用官方验证工具。
 
-#### 测试套件
+**主要功能:**
+- 调用gltf-validator
+- 调用3d-tiles-validator
+- 解析验证结果
+- 整合验证报告
 
-| 套件 | 描述 | 用例数 | CI必需 | 超时 |
-|------|------|--------|--------|------|
-| smoke | 冒烟测试 | 1 | ✓ | 60s |
-| core | 核心功能测试 | 8 | ✓ | 300s |
-| optimization | 优化参数测试 | 10 | ✓ | 600s |
-| combination | 参数组合测试 | 6 | ✗ | 900s |
-| export | 导出功能测试 | 3 | ✗ | 300s |
-| performance | 性能测试 | 3 | ✗ | 1800s |
-| edge_cases | 边界情况测试 | 3 | ✗ | 300s |
+**关键类:**
+- `OfficialValidator`: 官方验证器类
+- `GltfValidationResult`: glTF验证结果数据类
+- `TilesValidationResult`: Tiles验证结果数据类
 
-#### 使用示例
+#### cli.py - 命令行入口
 
-```bash
-# 运行核心测试套件
-python3 run_tests.py core --mode strict
+提供命令行接口，支持多种操作模式。
 
-# 运行所有测试
-python3 run_tests.py all --mode relaxed
+**主要命令:**
+- `generate`: 生成基准数据
+- `run`: 运行回归测试
+- `validate`: 数据质量验证
+- `report`: 生成测试报告
 
-# 只运行P0优先级测试
-python3 run_tests.py core --priority P0
+### 验证模式
 
-# 运行P0和P1测试
-python3 run_tests.py core --priority P0 P1
-
-# 指定输出目录
-python3 run_tests.py core --output ./my_test_output
-```
+| 模式 | 说明 | 浮点容差 | 官方验证 | 内容验证 | 字节比较 |
+|------|------|----------|----------|----------|----------|
+| **strict** | 严格模式 | 1e-9 | ✓ | ✓ | ✓ |
+| **relaxed** | 宽松模式 | 1e-4 | ✓ | ✓ | ✓ |
+| **fast** | 快速模式 | 1e-2 | ✗ | ✗ | ✗ |
 
 ## 官方验证工具详解
 
@@ -302,6 +320,7 @@ sudo chmod +x /usr/local/bin/gltf-validator
 2. 解压并将目录添加到 PATH
 
 #### 基本用法
+
 ```bash
 # 验证单个文件
 gltf-validator model.glb
@@ -316,29 +335,20 @@ gltf-validator model.glb -o report.json --validate-resources
 gltf-validator /path/to/models/ -o ./reports/ --threads 4 --all
 ```
 
-#### 配置文件示例
-```yaml
-# gltf-validator-config.yaml
-validateResources: true
-writeTimestamp: true
-mode: strict
-
-ignoredIssues:
-  - TEXTURE_SIZE_NOT_POWER_OF_TWO
-
-enabledExtensions:
-  - KHR_lights_punctual
-  - KHR_materials_transmission
-```
-
 ### 3d-tiles-validator
 
 #### 安装
+
 ```bash
-npm install 3d-tiles-validator
+# 通过npm安装
+npm install -g 3d-tiles-validator
+
+# 验证安装
+npx 3d-tiles-validator --version
 ```
 
 #### 基本用法
+
 ```bash
 # 验证 tileset.json
 npx 3d-tiles-validator --tilesetFile tileset.json
@@ -364,36 +374,76 @@ npx 3d-tiles-validator --tilesetFile tileset.json --reportFile report.json
 | CONTENT_TYPE_GLB | glTF Binary |
 | CONTENT_TYPE_TILESET | Tileset |
 
-### 3d-tiles-tools
+## 预渲染验证详解
 
-#### 安装
-```bash
-npm install -g 3d-tiles-tools
-```
+### 验证原理
 
-#### 常用命令
+预渲染验证通过分析3D数据的结构和内容，在不使用可视化工具的情况下检测可能导致渲染问题的因素。
 
-```bash
-# 验证瓦片集
-npx 3d-tiles-tools validate -i tileset.json
+### 验证内容
 
-# 优化瓦片集
-npx 3d-tiles-tools optimize -i ./input/ -o ./optimized/ --draco
+#### glTF文件验证
 
-# 升级版本
-npx 3d-tiles-tools upgrade -i ./tileset.json -o ./upgraded/ --targetVersion 1.1
+- **几何数据验证**
+  - 顶点数量有效性
+  - 三角形数量有效性
+  - 索引有效性
+  - 顶点属性完整性
 
-# Gzip压缩
-npx 3d-tiles-tools gzip -i ./input/ -o ./output/
+- **材质数据验证**
+  - 材质定义完整性
+  - 纹理引用有效性
+  - 着色器参数有效性
 
-# 合并瓦片集
-npx 3d-tiles-tools combine -i ./input/ -o ./output/
+- **纹理数据验证**
+  - 纹理尺寸有效性
+  - 纹理格式支持性
+  - 纹理引用有效性
 
-# 分析瓦片集
-npx 3d-tiles-tools analyze -i /path/to/tiles/
-```
+- **场景图验证**
+  - 节点层次结构
+  - 变换矩阵有效性
+  - 边界体积正确性
+
+#### tileset.json验证
+
+- **瓦片结构验证**
+  - 瓦片层次结构
+  - 瓦片引用有效性
+  - 瓦片内容类型
+
+- **边界体积验证**
+  - 边界体积格式正确性
+  - 边界体积数值有效性
+  - 边界体积包含关系
+
+- **几何误差验证**
+  - 几何误差数值有效性
+  - 几何误差层次一致性
+
+### 常见渲染问题检测
+
+| 问题类型 | 检测方法 | 严重性 |
+|----------|----------|--------|
+| INVALID_TRIANGLE_COUNT | 三角形数量与顶点数量不匹配 | ERROR |
+| INVALID_BOUNDING_VOLUME_FORMAT | 边界体积格式错误 | ERROR |
+| INVALID_GEOMETRIC_ERROR | 几何误差值无效 | ERROR |
+| MISSING_TEXTURE | 纹理文件缺失 | WARNING |
+| INVALID_MATERIAL | 材质定义无效 | WARNING |
+| INVALID_TRANSFORM | 变换矩阵无效 | ERROR |
 
 ## 常见错误修复
+
+### 预渲染验证常见问题
+
+| 错误代码 | 问题描述 | 解决方案 |
+|----------|----------|----------|
+| INVALID_TRIANGLE_COUNT | 三角形数量与顶点数量不匹配 | 检查索引数组和顶点数组的长度 |
+| INVALID_BOUNDING_VOLUME_FORMAT | 边界体积格式错误 | 确保边界体积使用正确的格式（box、sphere、region） |
+| INVALID_GEOMETRIC_ERROR | 几何误差值无效 | 确保geometricError为非负数 |
+| MISSING_TEXTURE | 纹理文件缺失 | 检查纹理路径是否正确 |
+| INVALID_MATERIAL | 材质定义无效 | 检查材质定义是否符合规范 |
+| INVALID_TRANSFORM | 变换矩阵无效 | 检查变换矩阵是否可逆 |
 
 ### glTF验证常见问题
 
@@ -412,6 +462,16 @@ npx 3d-tiles-tools analyze -i /path/to/tiles/
 | INVALID_GEOMETRIC_ERROR | 几何误差值无效 | 确保geometricError为非负数 |
 | MISSING_REQUIRED_PROPERTY | 缺少必需属性 | 检查tileset.json结构完整性 |
 | INVALID_TILE_CONTENT | 瓦片内容无效 | 检查B3DM/glb文件格式 |
+
+### 框架使用常见问题
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| "测试套件不存在: xxx" | test_config.json中未定义该测试套件 | 检查test_config.json中的test_suites配置 |
+| "验证模式不存在: xxx" | test_config.json中未定义该验证模式 | 检查test_config.json中的validation_modes配置 |
+| "配置文件不存在" | test_config.json路径错误 | 确保test_config.json在正确的位置 |
+| "输入文件不存在" | 测试用例的输入路径错误 | 检查test_config.json中的input路径配置 |
+| "输出文件不存在" | 转换失败或输出路径错误 | 检查转换工具是否正常工作 |
 
 ## 集成到CI/CD
 
@@ -432,24 +492,106 @@ jobs:
       - name: Install dependencies
         run: |
           npm install -g gltf-validator 3d-tiles-validator
-          cargo build --release
+          pip install -r .trae/skills/3dtiles-regression-validation/requirements.txt
 
       - name: Run data quality validation
         run: |
-          python3 .trae/skills/3dtiles-regression-validation/tiles_validator.py \
-            ./test_output --type directory --recursive
+          python3 -m 3dtiles_regression validate --suite smoke --mode strict
 
       - name: Run regression tests
         run: |
-          python3 .trae/skills/3dtiles-regression-validation/run_tests.py \
-            core --mode strict --priority P0 P1
+          python3 -m 3dtiles_regression run --suite core --mode strict --priority P0 P1
+
+      - name: Generate test reports
+        if: always()
+        run: |
+          python3 -m 3dtiles_regression report --format both --output ./reports
 
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v3
         with:
           name: test-results
-          path: test_output/
+          path: ./reports/
+```
+
+### GitLab CI示例
+
+```yaml
+# .gitlab-ci.yml
+stages:
+  - validate
+  - test
+  - report
+
+variables:
+  PYTHON_VERSION: "3.10"
+
+validate:
+  stage: validate
+  script:
+    - pip install -r .trae/skills/3dtiles-regression-validation/requirements.txt
+    - npm install -g gltf-validator 3d-tiles-validator
+    - python3 -m 3dtiles_regression validate --suite smoke --mode strict
+
+test:
+  stage: test
+  script:
+    - python3 -m 3dtiles_regression run --suite core --mode strict --priority P0 P1
+  artifacts:
+    when: always
+    paths:
+      - ./reports/
+
+report:
+  stage: report
+  script:
+    - python3 -m 3dtiles_regression report --format both --output ./reports
+  artifacts:
+    when: always
+    paths:
+      - ./reports/
+```
+
+### Jenkins Pipeline示例
+
+```groovy
+pipeline {
+    agent any
+
+    stages {
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install -g gltf-validator 3d-tiles-validator'
+                sh 'pip install -r .trae/skills/3dtiles-regression-validation/requirements.txt'
+            }
+        }
+
+        stage('Validate Data Quality') {
+            steps {
+                sh 'python3 -m 3dtiles_regression validate --suite smoke --mode strict'
+            }
+        }
+
+        stage('Run Regression Tests') {
+            steps {
+                sh 'python3 -m 3dtiles_regression run --suite core --mode strict --priority P0 P1'
+            }
+        }
+
+        stage('Generate Reports') {
+            steps {
+                sh 'python3 -m 3dtiles_regression report --format both --output ./reports'
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: './reports/**/*', allowEmptyArchive: true
+        }
+    }
+}
 ```
 
 ## 重构工作流程
@@ -460,8 +602,11 @@ jobs:
 1. 准备阶段
    ├── 确保所有测试数据可用
    ├── 安装验证工具
+   │   ├── npm install -g gltf-validator 3d-tiles-validator
+   │   └── pip install -r requirements.txt
    ├── 构建当前版本（重构前）
-   └── 运行 ./generate_baseline.sh --suite core
+   └── 生成基准数据
+       └── python3 -m 3dtiles_regression generate --suite core
 
 2. 重构阶段
    ├── 进行代码重构
@@ -471,15 +616,42 @@ jobs:
 3. 验证阶段
    ├── 构建新版本（重构后）
    ├── 运行数据质量验证
-   │   └── python3 tiles_validator.py ./output -r
+   │   └── python3 -m 3dtiles_regression validate --suite core --mode strict
    ├── 运行回归测试
-   │   └── python3 run_tests.py core --mode strict
-   └── 检查验证报告
+   │   └── python3 -m 3dtiles_regression run --suite core --mode strict
+   └── 生成测试报告
+       └── python3 -m 3dtiles_regression report --format both --output ./reports
 
 4. 问题处理
    ├── 如果验证失败，分析差异原因
    ├── 判断是否为预期内的变化
-   └── 修复代码或更新基准数据
+   ├── 修复代码或更新基准数据
+   │   └── python3 -m 3dtiles_regression generate --suite core --force
+   └── 重新运行验证
+```
+
+### 日常开发流程
+
+```
+1. 开发新功能
+   ├── 编写代码
+   ├── 运行单元测试
+   └── 运行冒烟测试
+       └── python3 -m 3dtiles_regression run --suite smoke --mode fast
+
+2. 提交前验证
+   ├── 运行核心测试套件
+   │   └── python3 -m 3dtiles_regression run --suite core --mode relaxed
+   ├── 生成测试报告
+   │   └── python3 -m 3dtiles_regression report --format html --output ./reports
+   └── 检查测试结果
+
+3. 发布前验证
+   ├── 运行完整测试套件
+   │   └── python3 -m 3dtiles_regression run --suite all --mode strict
+   ├── 生成详细报告
+   │   └── python3 -m 3dtiles_regression report --format both --output ./reports
+   └── 审查所有测试结果
 ```
 
 ## 最佳实践
@@ -519,6 +691,18 @@ B3DM文件结构验证：
 - 自定义忽略字段
 
 ## 更新日志
+
+### v4.0 (2025-02-05)
+- 完全重构为Python框架
+- 新增预渲染验证功能，无需可视化工具即可检测渲染问题
+- 集成官方验证工具（gltf-validator、3d-tiles-validator）
+- 新增命令行接口（CLI）
+- 支持多种验证模式（strict、relaxed、fast）
+- 支持并发测试执行
+- 生成HTML和JSON格式的详细报告
+- 完善的配置管理系统
+- 支持测试套件和测试用例的灵活配置
+- 新增冒烟测试套件，包含OSGB、Shapefile、FBX转换测试
 
 ### v3.0 (2025-02-04)
 - 合并3dtiles-validation技能

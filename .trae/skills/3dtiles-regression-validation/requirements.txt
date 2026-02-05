@@ -1,0 +1,10 @@
+# 3D Tiles回归测试框架 - Python依赖
+
+# 核心依赖
+pydantic>=2.0.0
+rich>=13.0.0
+
+# 可选依赖（用于官方验证器）
+# 需要单独安装Node.js和npm
+# npm install -g gltf-validator
+# npm install -g 3d-tiles-validator

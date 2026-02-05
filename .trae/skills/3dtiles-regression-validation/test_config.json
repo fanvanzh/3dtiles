@@ -1,482 +1,443 @@
 {
-  "version": "2.0",
-  "description": "3D Tiles回归测试配置 - 生产环境完整版",
-  "metadata": {
-    "created": "2025-02-04",
-    "updated": "2025-02-04",
-    "author": "3dtiles-regression-validation",
-    "coverage_target": "95%"
-  },
-  "test_suites": {
-    "smoke": {
-      "description": "冒烟测试 - 快速验证核心功能 (< 1分钟)",
-      "timeout": 60,
-      "ci_required": true,
+  "test_suites": [
+    {
+      "name": "smoke",
+      "description": "冒烟测试 - 快速验证核心功能",
       "tests": [
         {
-          "name": "osgb_basic",
-          "description": "OSGB基础转换测试 - 验证核心转换流程",
-          "input": "data/OSGB/bench.osgb",
-          "format": "osgb",
+          "name": "osgb_to_gltf_bench",
+          "description": "单个OSGB转glTF测试 - 验证基础转换功能",
+          "input": "OSGB/bench.osgb",
+          "format": "gltf",
           "args": [],
+          "output": "bench.glb",
           "priority": "P0",
-          "max_size_mb": 10,
-          "expected_outputs": ["tileset.json", "tile/"]
-        }
-      ]
-    },
-    "core": {
-      "description": "核心功能测试 - 验证主要转换流程 (< 5分钟)",
-      "timeout": 300,
-      "ci_required": true,
-      "tests": [
-        {
-          "name": "osgb_basic",
-          "description": "OSGB基础转换测试",
-          "input": "data/OSGB/bench.osgb",
-          "format": "osgb",
-          "args": [],
-          "priority": "P0",
-          "expected_outputs": ["tileset.json"]
+          "expected_outputs": ["bench.glb"],
+          "timeout": 60,
+          "validation": {
+            "check_geometry": true,
+            "check_materials": true
+          },
+          "notes": "基础功能测试，验证OSGB到glTF的转换"
         },
         {
-          "name": "osgb_power_tower",
-          "description": "OSGB电力塔模型测试 - 验证不同几何类型处理",
-          "input": "data/OSGB/power_tower.osgb",
-          "format": "osgb",
-          "args": [],
-          "priority": "P1",
-          "expected_outputs": ["tileset.json"]
-        },
-        {
-          "name": "osgb_street_lamp",
-          "description": "OSGB路灯模型测试 - 验证小规模模型处理",
-          "input": "data/OSGB/street_lamp.osgb",
-          "format": "osgb",
-          "args": [],
-          "priority": "P2",
-          "expected_outputs": ["tileset.json"]
-        },
-        {
-          "name": "oblique_basic",
-          "description": "倾斜摄影数据测试 - 验证完整Data目录结构处理",
-          "input": "data/Oblique/OSGBny",
-          "format": "osgb",
-          "args": [],
-          "priority": "P0",
-          "condition": "dir_exists",
-          "expected_outputs": ["tileset.json", "Data/"]
-        },
-        {
-          "name": "oblique_part",
-          "description": "倾斜摄影部分数据测试 - 验证部分瓦片处理",
-          "input": "data/Oblique/part",
-          "format": "osgb",
-          "args": [],
-          "priority": "P2",
-          "condition": "dir_exists",
-          "expected_outputs": ["tileset.json"]
-        },
-        {
-          "name": "shp_basic",
-          "description": "Shapefile建筑数据测试 - 验证建筑轮廓生成",
-          "input": "data/SHP/nanjing_buildings/南京市_百度建筑.shp",
+          "name": "shapefile_to_3dtiles",
+          "description": "Shapefile转3dtiles测试 - 验证建筑轮廓生成",
+          "input": "SHP/1758464001_building/1758464001_building.shp",
           "format": "shape",
           "args": ["--height", "height"],
+          "output": "tileset.json",
           "priority": "P0",
-          "expected_outputs": ["tileset.json"]
+          "expected_outputs": ["tileset.json"],
+          "timeout": 60,
+          "validation": {
+            "check_tileset_structure": true,
+            "check_bounding_volume": true
+          },
+          "notes": "验证Shapefile到3D Tiles的转换"
         },
         {
-          "name": "fbx_basic",
-          "description": "FBX基础转换测试 - 验证带地理坐标的模型导入",
-          "input": "data/FBX/TZCS_0829.FBX",
+          "name": "oblique_to_3dtiles",
+          "description": "倾斜摄影转3dtiles测试 - 验证完整Data目录结构处理",
+          "input": "Oblique/OSGBny",
+          "format": "osgb",
+          "args": [],
+          "output": "tileset.json",
+          "priority": "P0",
+          "condition": "dir_exists",
+          "expected_outputs": ["tileset.json", "Data/"],
+          "timeout": 300,
+          "validation": {
+            "check_tile_hierarchy": true,
+            "check_lod_structure": true
+          },
+          "notes": "验证倾斜摄影数据到3D Tiles的转换"
+        },
+        {
+          "name": "fbx_to_3dtiles",
+          "description": "FBX转3dtiles测试 - 验证带地理坐标的模型导入",
+          "input": "FBX/taizhou-indoor.fbx",
           "format": "fbx",
           "args": ["--lon", "118", "--lat", "32", "--alt", "20"],
-          "priority": "P1",
-          "expected_outputs": ["tileset.json"]
+          "output": "tileset.json",
+          "priority": "P0",
+          "expected_outputs": ["tileset.json"],
+          "timeout": 120,
+          "validation": {
+            "check_tileset_structure": true,
+            "check_geographic_coords": true
+          },
+          "notes": "验证FBX到3D Tiles的转换"
+        }
+      ]
+    },
+    {
+      "name": "osgb_conversion",
+      "description": "OSGB转换测试 - 验证各种OSGB模型的转换",
+      "tests": [
+        {
+          "name": "osgb_to_gltf_bench",
+          "description": "单个OSGB转glTF - bench模型",
+          "input": "OSGB/bench.osgb",
+          "format": "gltf",
+          "args": [],
+          "output": "bench.glb",
+          "priority": "P0",
+          "expected_outputs": ["bench.glb"],
+          "timeout": 60,
+          "validation": {
+            "check_geometry": true,
+            "check_materials": true,
+            "check_normals": true
+          },
+          "notes": "验证bench模型的转换"
         },
         {
-          "name": "fbx_indoor",
-          "description": "FBX室内模型测试 - 验证复杂模型处理",
-          "input": "data/FBX/taizhou-indoor.fbx",
+          "name": "osgb_to_gltf_power_tower",
+          "description": "单个OSGB转glTF - 电力塔模型",
+          "input": "OSGB/power_tower.osgb",
+          "format": "gltf",
+          "args": [],
+          "output": "power_tower.glb",
+          "priority": "P1",
+          "expected_outputs": ["power_tower.glb"],
+          "timeout": 60,
+          "validation": {
+            "check_geometry": true,
+            "check_materials": true
+          },
+          "notes": "验证电力塔模型的转换"
+        },
+        {
+          "name": "osgb_to_gltf_power_tower2",
+          "description": "单个OSGB转glTF - 电力塔模型2",
+          "input": "OSGB/power_tower2.osgb",
+          "format": "gltf",
+          "args": [],
+          "output": "power_tower2.glb",
+          "priority": "P1",
+          "expected_outputs": ["power_tower2.glb"],
+          "timeout": 60,
+          "validation": {
+            "check_geometry": true,
+            "check_materials": true
+          },
+          "notes": "验证电力塔模型2的转换"
+        },
+        {
+          "name": "osgb_to_gltf_street_lamp",
+          "description": "单个OSGB转glTF - 路灯模型",
+          "input": "OSGB/street_lamp.osgb",
+          "format": "gltf",
+          "args": [],
+          "output": "street_lamp.glb",
+          "priority": "P1",
+          "expected_outputs": ["street_lamp.glb"],
+          "timeout": 60,
+          "validation": {
+            "check_geometry": true,
+            "check_materials": true
+          },
+          "notes": "验证路灯模型的转换"
+        }
+      ]
+    },
+    {
+      "name": "shapefile_conversion",
+      "description": "Shapefile转换测试 - 验证不同坐标系的Shapefile转换",
+      "tests": [
+        {
+          "name": "shapefile_to_3dtiles_1758464001",
+          "description": "Shapefile转3dtiles - 1758464001建筑轮廓",
+          "input": "SHP/1758464001_building/1758464001_building.shp",
+          "format": "shape",
+          "args": ["--height", "height"],
+          "output": "tileset.json",
+          "priority": "P0",
+          "expected_outputs": ["tileset.json"],
+          "timeout": 60,
+          "validation": {
+            "check_tileset_structure": true,
+            "check_bounding_volume": true,
+            "check_geometric_error": true
+          },
+          "notes": "验证1758464001建筑轮廓的转换"
+        },
+        {
+          "name": "shapefile_to_3dtiles_cgcs2000",
+          "description": "Shapefile转3dtiles - CGCS2000坐标系建筑",
+          "input": "SHP/building_cgcs2000/building_cgcs2000.shp",
+          "format": "shape",
+          "args": ["--height", "height"],
+          "output": "tileset.json",
+          "priority": "P1",
+          "expected_outputs": ["tileset.json"],
+          "timeout": 60,
+          "validation": {
+            "check_tileset_structure": true,
+            "check_bounding_volume": true
+          },
+          "notes": "验证CGCS2000坐标系建筑的转换"
+        },
+        {
+          "name": "shapefile_to_3dtiles_epsg4548",
+          "description": "Shapefile转3dtiles - EPSG4548坐标系建筑",
+          "input": "SHP/building_epsg4548/building_epsg4548.shp",
+          "format": "shape",
+          "args": ["height"],
+          "output": "tileset.json",
+          "priority": "P1",
+          "expected_outputs": ["tileset.json"],
+          "timeout": 60,
+          "validation": {
+            "check_tileset_structure": true,
+            "check_bounding_volume": true
+          },
+          "notes": "验证EPSG4548坐标系建筑的转换"
+        },
+        {
+          "name": "shapefile_to_3dtiles_nanjing",
+          "description": "Shapefile转3dtiles - 南京市建筑",
+          "input": "SHP/nanjing_buildings/南京市_百度建筑.shp",
+          "format": "shape",
+          "args": ["height"],
+          "output": "tileset.json",
+          "priority": "P2",
+          "expected_outputs": ["tileset.json"],
+          "timeout": 120,
+          "validation": {
+            "check_tileset_structure": true,
+            "check_bounding_volume": true
+          },
+          "notes": "验证南京市建筑的转换"
+        }
+      ]
+    },
+    {
+      "name": "fbx_conversion",
+      "description": "FBX转换测试 - 验证各种FBX模型的转换",
+      "tests": [
+        {
+          "name": "fbx_to_3dtiles_taizhou_indoor",
+          "description": "FBX转3dtiles - 台州室内模型",
+          "input": "FBX/taizhou-indoor.fbx",
           "format": "fbx",
           "args": ["--lon", "118", "--lat", "32", "--alt", "20"],
-          "priority": "P2",
-          "expected_outputs": ["tileset.json"]
-        }
-      ]
-    },
-    "optimization": {
-      "description": "优化参数测试 - 验证所有优化功能 (< 10分钟)",
-      "timeout": 600,
-      "ci_required": true,
-      "tests": [
-        {
-          "name": "osgb_simplify",
-          "description": "OSGB网格简化测试 - 验证--enable-simplify参数",
-          "input": "data/OSGB/bench.osgb",
-          "format": "osgb",
-          "args": ["--enable-simplify"],
-          "priority": "P1",
+          "output": "tileset.json",
+          "priority": "P0",
           "expected_outputs": ["tileset.json"],
+          "timeout": 120,
           "validation": {
-            "file_size_check": true,
-            "size_reduction_min_percent": 10
-          }
+            "check_tileset_structure": true,
+            "check_geographic_coords": true
+          },
+          "notes": "验证台州室内模型的转换"
         },
         {
-          "name": "osgb_draco",
-          "description": "OSGB Draco压缩测试 - 验证--enable-draco参数",
-          "input": "data/OSGB/bench.osgb",
-          "format": "osgb",
-          "args": ["--enable-draco"],
+          "name": "fbx_to_3dtiles_as501",
+          "description": "FBX转3dtiles - AS-501生产运维楼",
+          "input": "FBX/AS-501生产运维楼.fbx",
+          "format": "fbx",
+          "args": ["--lon", "118", "--lat", "32", "--alt", "20"],
+          "output": "tileset.json",
           "priority": "P1",
           "expected_outputs": ["tileset.json"],
+          "timeout": 120,
           "validation": {
-            "file_size_check": true,
-            "size_reduction_min_percent": 30
-          }
+            "check_tileset_structure": true,
+            "check_geographic_coords": true
+          },
+          "notes": "验证AS-501生产运维楼的转换"
         },
         {
-          "name": "osgb_texture_compress",
-          "description": "OSGB纹理压缩测试 - 验证--enable-texture-compress参数",
-          "input": "data/OSGB/bench.osgb",
-          "format": "osgb",
-          "args": ["--enable-texture-compress"],
+          "name": "fbx_to_3dtiles_as501_m",
+          "description": "FBX转3dtiles - AS-501生产运维楼(简化版)",
+          "input": "FBX/AS-501生产运维楼-m.fbx",
+          "format": "fbx",
+          "args": ["--lon", "118", "--lat", "32", "--alt", "20"],
+          "output": "tileset.json",
           "priority": "P1",
           "expected_outputs": ["tileset.json"],
-          "notes": "需要纹理数据才能生效"
-        },
-        {
-          "name": "osgb_unlit",
-          "description": "OSGB无光照材质测试 - 验证--enable-unlit参数",
-          "input": "data/OSGB/bench.osgb",
-          "format": "osgb",
-          "args": ["--enable-unlit"],
-          "priority": "P2",
-          "expected_outputs": ["tileset.json"],
+          "timeout": 120,
           "validation": {
-            "json_check": "extensionsUsed should contain KHR_materials_unlit"
-          }
+            "check_tileset_structure": true,
+            "check_geographic_coords": true
+          },
+          "notes": "验证AS-501生产运维楼简化版的转换"
         },
         {
-          "name": "shp_lod",
-          "description": "Shapefile LOD测试 - 验证--enable-lod参数",
-          "input": "data/SHP/nanjing_buildings/南京市_百度建筑.shp",
-          "format": "shape",
-          "args": ["--height", "height", "--enable-lod"],
-          "priority": "P1",
-          "expected_outputs": ["tileset.json", "content_lod0.b3dm", "content_lod1.b3dm", "content_lod2.b3dm"]
-        },
-        {
-          "name": "shp_simplify",
-          "description": "Shapefile简化测试 - 验证--enable-simplify参数",
-          "input": "data/SHP/nanjing_buildings/南京市_百度建筑.shp",
-          "format": "shape",
-          "args": ["--height", "height", "--enable-simplify"],
-          "priority": "P1",
-          "expected_outputs": ["tileset.json"]
-        },
-        {
-          "name": "shp_draco",
-          "description": "Shapefile Draco压缩测试 - 验证--enable-draco参数",
-          "input": "data/SHP/nanjing_buildings/南京市_百度建筑.shp",
-          "format": "shape",
-          "args": ["--height", "height", "--enable-draco"],
-          "priority": "P1",
-          "expected_outputs": ["tileset.json"]
-        },
-        {
-          "name": "fbx_simplify",
-          "description": "FBX简化测试 - 验证--enable-simplify参数",
-          "input": "data/FBX/TZCS_0829.FBX",
+          "name": "fbx_to_3dtiles_tzcs",
+          "description": "FBX转3dtiles - TZCS模型",
+          "input": "FBX/TZCS_0829.FBX",
           "format": "fbx",
-          "args": ["--lon", "118", "--lat", "32", "--alt", "20", "--enable-simplify"],
+          "args": ["--lon", "118", "--lat", "32", "--alt", "20"],
+          "output": "tileset.json",
           "priority": "P2",
-          "expected_outputs": ["tileset.json"]
-        },
-        {
-          "name": "fbx_draco",
-          "description": "FBX Draco压缩测试 - 验证--enable-draco参数",
-          "input": "data/FBX/TZCS_0829.FBX",
-          "format": "fbx",
-          "args": ["--lon", "118", "--lat", "32", "--alt", "20", "--enable-draco"],
-          "priority": "P2",
-          "expected_outputs": ["tileset.json"]
-        },
-        {
-          "name": "fbx_texture_compress",
-          "description": "FBX纹理压缩测试 - 验证--enable-texture-compress参数",
-          "input": "data/FBX/TZCS_0829.FBX",
-          "format": "fbx",
-          "args": ["--lon", "118", "--lat", "32", "--alt", "20", "--enable-texture-compress"],
-          "priority": "P2",
-          "expected_outputs": ["tileset.json"]
-        }
-      ]
-    },
-    "combination": {
-      "description": "参数组合测试 - 验证多参数协同工作 (< 15分钟)",
-      "timeout": 900,
-      "ci_required": false,
-      "tests": [
-        {
-          "name": "osgb_simplify_draco",
-          "description": "OSGB简化+Draco组合 - 验证双重优化",
-          "input": "data/OSGB/bench.osgb",
-          "format": "osgb",
-          "args": ["--enable-simplify", "--enable-draco"],
-          "priority": "P1",
           "expected_outputs": ["tileset.json"],
+          "timeout": 120,
           "validation": {
-            "file_size_check": true,
-            "size_reduction_min_percent": 40
-          }
+            "check_tileset_structure": true,
+            "check_geographic_coords": true
+          },
+          "notes": "验证TZCS模型的转换"
         },
         {
-          "name": "osgb_all_optimizations",
-          "description": "OSGB全部优化参数组合 - 最大压缩效果",
-          "input": "data/OSGB/bench.osgb",
-          "format": "osgb",
-          "args": ["--enable-simplify", "--enable-draco", "--enable-texture-compress"],
-          "priority": "P1",
+          "name": "fbx_to_3dtiles_yizheng",
+          "description": "FBX转3dtiles - 仪征三维视图模型",
+          "input": "FBX/仪征_D1_DC_AS_CD-三维视图.fbx",
+          "format": "fbx",
+          "args": ["--lon", "118", "--lat", "32", "--alt", "20"],
+          "output": "tileset.json",
+          "priority": "P2",
           "expected_outputs": ["tileset.json"],
-          "notes": "推荐的最大压缩配置"
+          "timeout": 120,
+          "validation": {
+            "check_tileset_structure": true,
+            "check_geographic_coords": true
+          },
+          "notes": "验证仪征三维视图模型的转换"
         },
         {
-          "name": "shp_lod_simplify",
-          "description": "Shapefile LOD+简化组合 - 多层次细节+简化",
-          "input": "data/SHP/nanjing_buildings/南京市_百度建筑.shp",
-          "format": "shape",
-          "args": ["--height", "height", "--enable-lod", "--enable-simplify"],
-          "priority": "P1",
-          "expected_outputs": ["tileset.json", "content_lod0.b3dm", "content_lod1.b3dm", "content_lod2.b3dm"]
-        },
-        {
-          "name": "shp_lod_simplify_draco",
-          "description": "Shapefile LOD+简化+Draco组合 - 推荐配置",
-          "input": "data/SHP/nanjing_buildings/南京市_百度建筑.shp",
-          "format": "shape",
-          "args": ["--height", "height", "--enable-lod", "--enable-simplify", "--enable-draco"],
-          "priority": "P1",
-          "expected_outputs": ["tileset.json", "content_lod0.b3dm", "content_lod1.b3dm", "content_lod2.b3dm"],
-          "notes": "Shapefile推荐配置"
-        },
-        {
-          "name": "fbx_simplify_draco",
-          "description": "FBX简化+Draco组合",
-          "input": "data/FBX/TZCS_0829.FBX",
+          "name": "fbx_to_3dtiles_20260128",
+          "description": "FBX转3dtiles - 20260128模型",
+          "input": "FBX/20260128_114012_012.fbx",
           "format": "fbx",
-          "args": ["--lon", "118", "--lat", "32", "--alt", "20", "--enable-simplify", "--enable-draco"],
+          "args": ["--lon", "118", "--lat", "32", "--alt", "20"],
+          "output": "tileset.json",
           "priority": "P2",
-          "expected_outputs": ["tileset.json"]
-        },
-        {
-          "name": "fbx_all_optimizations",
-          "description": "FBX全部优化参数组合",
-          "input": "data/FBX/TZCS_0829.FBX",
-          "format": "fbx",
-          "args": ["--lon", "118", "--lat", "32", "--alt", "20", "--enable-simplify", "--enable-draco", "--enable-texture-compress"],
-          "priority": "P2",
-          "expected_outputs": ["tileset.json"]
+          "expected_outputs": ["tileset.json"],
+          "timeout": 120,
+          "validation": {
+            "check_tileset_structure": true,
+            "check_geographic_coords": true
+          },
+          "notes": "验证20260128模型的转换"
         }
       ]
     },
-    "export": {
-      "description": "导出功能测试 - 验证GLTF/B3DM导出",
-      "timeout": 300,
-      "ci_required": false,
+    {
+      "name": "oblique_conversion",
+      "description": "倾斜摄影转换测试 - 验证倾斜摄影数据的转换",
       "tests": [
         {
-          "name": "osgb_to_gltf",
-          "description": "OSGB转GLTF测试 - 验证gltf格式导出",
-          "input": "data/OSGB/bench.osgb",
-          "format": "gltf",
+          "name": "oblique_to_3dtiles_osgbny",
+          "description": "倾斜摄影转3dtiles - OSGBny完整目录",
+          "input": "Oblique/OSGBny",
+          "format": "osgb",
           "args": [],
+          "output": "tileset.json",
+          "priority": "P0",
+          "condition": "dir_exists",
+          "expected_outputs": ["tileset.json", "Data/"],
+          "timeout": 300,
+          "validation": {
+            "check_tile_hierarchy": true,
+            "check_lod_structure": true,
+            "check_bounding_volume": true,
+            "check_geometric_error": true
+          },
+          "notes": "验证OSGBny倾斜摄影数据的转换"
+        },
+        {
+          "name": "oblique_to_3dtiles_part",
+          "description": "倾斜摄影转3dtiles - part部分目录",
+          "input": "Oblique/part",
+          "format": "osgb",
+          "args": [],
+          "output": "tileset.json",
           "priority": "P1",
-          "expected_outputs": ["bench.glb"]
-        },
-        {
-          "name": "osgb_to_gltf_simplify",
-          "description": "OSGB转GLTF+简化测试",
-          "input": "data/OSGB/bench.osgb",
-          "format": "gltf",
-          "args": ["--enable-simplify"],
-          "priority": "P2",
-          "expected_outputs": ["bench.glb"]
-        },
-        {
-          "name": "b3dm_to_glb",
-          "description": "B3DM转GLB测试 - 验证逆向转换",
-          "input": "output/tile/0/0/0/content_lod0.b3dm",
-          "format": "b3dm",
-          "args": [],
-          "priority": "P2",
-          "condition": "file_exists",
-          "expected_outputs": ["content_lod0.glb"],
-          "notes": "需要先有B3DM文件"
-        }
-      ]
-    },
-    "performance": {
-      "description": "性能测试 - 大数据集和基准测试",
-      "timeout": 1800,
-      "ci_required": false,
-      "tests": [
-        {
-          "name": "osgb_performance_baseline",
-          "description": "OSGB性能基准 - 记录转换时间和文件大小",
-          "input": "data/OSGB/bench.osgb",
-          "format": "osgb",
-          "args": [],
-          "priority": "P2",
-          "expected_outputs": ["tileset.json"],
-          "metrics": ["conversion_time", "file_size", "memory_usage", "vertex_count", "triangle_count"]
-        },
-        {
-          "name": "osgb_performance_optimized",
-          "description": "OSGB优化性能测试 - 对比优化前后的性能",
-          "input": "data/OSGB/bench.osgb",
-          "format": "osgb",
-          "args": ["--enable-simplify", "--enable-draco"],
-          "priority": "P2",
-          "expected_outputs": ["tileset.json"],
-          "metrics": ["conversion_time", "file_size", "compression_ratio"]
-        },
-        {
-          "name": "large_oblique",
-          "description": "大规模倾斜摄影测试",
-          "input": "data/Oblique/large_dataset",
-          "format": "osgb",
-          "args": [],
-          "priority": "P2",
-          "condition": "manual",
-          "expected_outputs": ["tileset.json"],
-          "notes": "手动执行，需要大数据集"
-        }
-      ]
-    },
-    "edge_cases": {
-      "description": "边界情况测试 - 异常输入和边界条件",
-      "timeout": 300,
-      "ci_required": false,
-      "tests": [
-        {
-          "name": "osgb_minimal",
-          "description": "极小OSGB模型测试 - 验证小规模数据处理",
-          "input": "data/OSGB/street_lamp.osgb",
-          "format": "osgb",
-          "args": [],
-          "priority": "P2",
-          "expected_outputs": ["tileset.json"]
-        },
-        {
-          "name": "shp_no_height",
-          "description": "Shapefile无高度字段测试 - 验证错误处理",
-          "input": "data/SHP/nanjing_buildings/南京市_百度建筑.shp",
-          "format": "shape",
-          "args": [],
-          "priority": "P2",
-          "expected_behavior": "should_fail_or_use_default",
-          "notes": "测试无--height参数时的行为"
-        },
-        {
-          "name": "fbx_no_coordinates",
-          "description": "FBX无地理坐标测试 - 验证默认坐标处理",
-          "input": "data/FBX/TZCS_0829.FBX",
-          "format": "fbx",
-          "args": [],
-          "priority": "P2",
-          "expected_behavior": "should_use_default_or_fail",
-          "notes": "测试无--lon/--lat参数时的行为"
+          "condition": "dir_exists",
+          "expected_outputs": ["tileset.json", "Data/"],
+          "timeout": 300,
+          "validation": {
+            "check_tile_hierarchy": true,
+            "check_lod_structure": true,
+            "check_bounding_volume": true
+          },
+          "notes": "验证part倾斜摄影数据的转换"
         }
       ]
     }
-  },
-  "validation": {
-    "modes": {
-      "strict": {
-        "description": "严格模式 - 字节级比较，用于发布前验证",
-        "float_tolerance": 1e-9,
-        "ignore_fields": ["generator", "created"],
-        "skip_content_validation": false,
-        "use_official_validator": true
-      },
-      "relaxed": {
-        "description": "宽松模式 - 允许浮点误差，用于开发阶段",
-        "float_tolerance": 1e-4,
-        "ignore_fields": ["generator", "created", "timestamp", "version"],
-        "skip_content_validation": false,
-        "use_official_validator": true
-      },
-      "fast": {
-        "description": "快速模式 - 仅验证结构，用于快速反馈",
-        "float_tolerance": 1e-2,
-        "ignore_fields": ["generator", "created", "timestamp", "version", "geometricError"],
-        "skip_content_validation": true,
-        "use_official_validator": false
-      }
+  ],
+  "validation_modes": {
+    "strict": {
+      "name": "strict",
+      "description": "严格模式 - 用于发布前验证",
+      "float_tolerance": 1e-9,
+      "use_official_validator": true,
+      "check_content": true,
+      "byte_level_comparison": true
+    },
+    "relaxed": {
+      "name": "relaxed",
+      "description": "宽松模式 - 用于开发阶段验证",
+      "float_tolerance": 1e-4,
+      "use_official_validator": true,
+      "check_content": true,
+      "byte_level_comparison": true
+    },
+    "fast": {
+      "name": "fast",
+      "description": "快速模式 - 用于快速反馈",
+      "float_tolerance": 1e-2,
+      "use_official_validator": false,
+      "check_content": false,
+      "byte_level_comparison": false
     }
   },
   "selection_criteria": {
-    "P0": {
-      "description": "关键功能 - 必须100%通过，失败会阻塞发布",
-      "blocking": true,
-      "ci_required": true,
-      "notification": "immediate",
-      "examples": ["osgb_basic", "oblique_basic", "shp_basic"]
+    "priority": {
+      "P0": "核心功能，必须通过",
+      "P1": "重要功能，建议通过",
+      "P2": "次要功能，可选通过"
     },
-    "P1": {
-      "description": "重要功能 - 应该通过，失败需要评估影响",
-      "blocking": false,
-      "ci_required": true,
-      "notification": "daily",
-      "examples": ["osgb_simplify", "shp_lod", "fbx_basic", "osgb_draco"]
-    },
-    "P2": {
-      "description": "次要功能 - 最好通过，失败不阻塞",
-      "blocking": false,
-      "ci_required": false,
-      "notification": "weekly",
-      "examples": ["osgb_texture_compress", "fbx_indoor", "large_oblique", "b3dm_to_glb"]
+    "timeout": {
+      "short": 60,
+      "medium": 120,
+      "long": 300
     }
   },
   "execution_profiles": {
-    "local_development": {
+    "local_dev": {
+      "name": "local_dev",
       "description": "本地开发 - 快速验证",
-      "command": "python3 run_tests.py smoke --mode fast",
-      "estimated_time": "< 1分钟"
+      "suites": ["smoke"],
+      "mode": "fast",
+      "parallel": 1,
+      "timeout": 60
     },
     "pre_commit": {
+      "name": "pre_commit",
       "description": "提交前 - 验证关键功能",
-      "command": "python3 run_tests.py core --mode strict --priority P0",
-      "estimated_time": "< 3分钟"
+      "suites": ["smoke", "osgb_conversion"],
+      "mode": "strict",
+      "priority": "P0",
+      "parallel": 2,
+      "timeout": 180
     },
     "ci_standard": {
+      "name": "ci_standard",
       "description": "CI标准 - 核心功能测试",
-      "command": "python3 run_tests.py core --mode strict",
-      "estimated_time": "< 5分钟"
+      "suites": ["smoke", "osgb_conversion", "shapefile_conversion", "fbx_conversion"],
+      "mode": "strict",
+      "parallel": 4,
+      "timeout": 300
     },
     "ci_full": {
-      "description": "CI完整 - 包含优化参数",
-      "command": "python3 run_tests.py core optimization --mode relaxed",
-      "estimated_time": "< 15分钟"
+      "name": "ci_full",
+      "description": "CI完整 - 包含倾斜摄影",
+      "suites": ["smoke", "osgb_conversion", "shapefile_conversion", "fbx_conversion", "oblique_conversion"],
+      "mode": "relaxed",
+      "parallel": 4,
+      "timeout": 600
     },
-    "pre_release": {
+    "release": {
+      "name": "release",
       "description": "发布前 - 完整测试",
-      "command": "python3 run_tests.py core optimization combination export --mode strict",
-      "estimated_time": "< 30分钟"
-    },
-    "nightly": {
-      "description": "夜间构建 - 包含性能和边界测试",
-      "command": "python3 run_tests.py full performance edge_cases --mode relaxed",
-      "estimated_time": "< 60分钟"
+      "suites": ["smoke", "osgb_conversion", "shapefile_conversion", "fbx_conversion", "oblique_conversion"],
+      "mode": "strict",
+      "parallel": 2,
+      "timeout": 900
     }
-  },
-  "maintenance": {
-    "baseline_update_frequency": "weekly",
-    "report_retention_days": 30,
-    "auto_cleanup": true,
-    "notification_channels": ["console", "file", "slack"]
   }
 }
