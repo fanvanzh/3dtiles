@@ -16,13 +16,15 @@ endif()
 
 set(HEADERS
     src/attribute_storage.h
-    src/coordinate_system.h
-    src/coordinate_transformer.h
+    src/core/coordinate/coordinate_system.h
+    src/core/coordinate/coordinate_converter.h
+    src/core/coordinate/enu_context.h
+    src/core/coordinate/transform_builder.h
+    src/core/coordinate/geo_transform.h
     src/dxt_img.h
     src/extern.h
     src/FBXPipeline.h
     src/fbx.h
-    src/GeoTransform.h
     src/lod_pipeline.h
     src/mesh_processor.h
     src/osg_fix.h
@@ -31,12 +33,14 @@ set(HEADERS
 
 set(SOURCES
     src/attribute_storage.cpp
-    src/coordinate_system.cpp
-    src/coordinate_transformer.cpp
+    src/core/coordinate/coordinate_system.cpp
+    src/core/coordinate/coordinate_converter.cpp
+    src/core/coordinate/enu_context.cpp
+    src/core/coordinate/transform_builder.cpp
+    src/core/coordinate/geo_transform.cpp
     src/dxt_img.cpp
     src/fbx.cpp
     src/FBXPipeline.cpp
-    src/GeoTransform.cpp
     src/lod_pipeline.cpp
     src/mesh_processor.cpp
     src/osgb23dtile.cpp
@@ -110,17 +114,9 @@ find_package(OpenSceneGraph REQUIRED COMPONENTS
 
 if (OpenSceneGraph_FOUND)
     message(STATUS "OpenSceneGraph include dirs: ${OSG_INCLUDE_DIR}, libraries: ${OSG_LIBRARIES}")
-    target_link_libraries(_3dtile PRIVATE
-        osg
-        osgDB
-        osgUtil
-        OpenThreads
-    )
-    # On Linux/macOS, OSG plugins are static libraries that must be linked
-    # On Windows, plugins may be dynamic and loaded at runtime
-    if(UNIX)
-        target_link_libraries(_3dtile PRIVATE osgdb_osg)
-    endif()
+    target_link_libraries(_3dtile PRIVATE ${OSG_LIBRARIES})
+    # OSG plugins are loaded dynamically at runtime on macOS
+    # No need to link them statically
     target_include_directories(_3dtile PUBLIC ${OSG_INCLUDE_DIR})
 endif()
 
@@ -168,6 +164,11 @@ target_link_libraries(_3dtile PUBLIC Eigen3::Eigen)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 target_link_libraries(_3dtile PRIVATE unofficial::sqlite3::sqlite3)
 
+# Tests
+option(BUILD_TESTS "Build tests" ON)
+if(BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
 
 install(TARGETS _3dtile DESTINATION lib)
 install(TARGETS ufbx DESTINATION lib)

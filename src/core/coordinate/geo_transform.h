@@ -1,10 +1,15 @@
 #pragma once
+
 /* vcpkg path */
 #include <ogr_spatialref.h>
 #include <ogrsf_frmts.h>
 #include <memory>
-
+#include <glm/glm.hpp>
 #include "coordinate_system.h"
+#include "coordinate_converter.h"
+#include "transform_builder.h"
+
+namespace Tiles::Core::Geo {
 
 struct OGRCTDeleter
 {
@@ -17,6 +22,15 @@ struct OGRCTDeleter
     }
 };
 
+/**
+ * GeoTransform - Global coordinate transformation state manager.
+ *
+ * This class provides thread-local storage for coordinate transformation state,
+ * including the coordinate transformation object, origin points, and ENU matrices.
+ *
+ * Note: This is a legacy compatibility class. New code should use CoordinateConverter
+ * and TransformBuilder directly.
+ */
 class GeoTransform
 {
 public:
@@ -33,12 +47,21 @@ public:
     static inline thread_local bool IsENU = false;
     static inline thread_local glm::dmat4 EcefToEnuMatrix = glm::dmat4(1);
 
-    static inline thread_local Tiles::Core::Geo::CoordinateSystem sourceCS;
-    static inline thread_local Tiles::Core::Geo::CoordinateSystem targetCS;
+    static inline thread_local CoordinateSystem sourceCS;
+    static inline thread_local CoordinateSystem targetCS;
 
-    static glm::dmat4 CalcEnuToEcefMatrix(double lnt, double lat, double height_min);
-    static glm::dvec3 CartographicToEcef(double lnt, double lat, double height);
+    static glm::dmat4 CalcEnuToEcefMatrix(double lnt, double lat, double height_min)
+    {
+        return CoordinateConverter::calcEnuToEcefMatrix(lnt, lat, height_min);
+    }
+
+    static glm::dvec3 CartographicToEcef(double lnt, double lat, double height)
+    {
+        return CoordinateConverter::geographicToEcef(lnt, lat, height);
+    }
+
     static void Init(OGRCoordinateTransformation *pOgrCT, double *Origin);
+
     static void SetGeographicOrigin(double lon, double lat, double height);
 
     static void InitFromSource(const OGRSpatialReference* spatialRef, const glm::dvec3& refPoint);
@@ -49,7 +72,12 @@ public:
 
     static glm::dvec3 transformPoint(double x, double y, double z);
 
-    static const Tiles::Core::Geo::CoordinateSystem& getSourceCoordinateSystem() {
+    static const CoordinateSystem& getSourceCoordinateSystem() {
         return sourceCS;
     }
 };
+
+} // namespace Tiles::Core::Geo
+
+// Global alias for backward compatibility
+using GeoTransform = Tiles::Core::Geo::GeoTransform;

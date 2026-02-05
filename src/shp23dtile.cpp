@@ -5,8 +5,8 @@
 
 #include "mesh_processor.h"
 #include "attribute_storage.h"
-#include "GeoTransform.h"
-#include "coordinate_transformer.h"
+#include "core/coordinate/geo_transform.h"
+#include "core/coordinate/coordinate_converter.h"
 #include "lod_pipeline.h"
 #include "shape.h"
 
@@ -343,7 +343,7 @@ static bool write_node_tileset(const TileMeta& node,
     double transform_lon = center_lon;
     double transform_lat = center_lat;
     if (sourceCS.isProjected()) {
-        glm::dvec3 centerGeo = Tiles::Core::Geo::CoordinateTransformer::projectedToGeographic(
+        glm::dvec3 centerGeo = Tiles::Core::Geo::CoordinateConverter::projectedToGeographic(
             glm::dvec3(center_lon, center_lat, 0.0), sourceCS.epsgCode);
         transform_lon = centerGeo.x;
         transform_lat = centerGeo.y;
@@ -390,7 +390,7 @@ static bool write_node_tileset(const TileMeta& node,
          double child_transform_lon = child_center_lon;
          double child_transform_lat = child_center_lat;
          if (sourceCS.isProjected()) {
-             glm::dvec3 childCenterGeo = Tiles::Core::Geo::CoordinateTransformer::projectedToGeographic(
+             glm::dvec3 childCenterGeo = Tiles::Core::Geo::CoordinateConverter::projectedToGeographic(
                  glm::dvec3(child_center_lon, child_center_lat, 0.0), sourceCS.epsgCode);
              child_transform_lon = childCenterGeo.x;
              child_transform_lat = childCenterGeo.y;
