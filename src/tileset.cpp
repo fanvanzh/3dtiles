@@ -9,7 +9,7 @@
 #include <ogrsf_frmts.h>
 
 #include "extern.h"
-#include "GeoTransform.h"
+#include "core/coordinate/geo_transform.h"
 
 ///////////////////////
 static const double pi = std::acos(-1);

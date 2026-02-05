@@ -29,7 +29,7 @@
 #include <tiny_gltf.h>
 #include <nlohmann/json.hpp>
 #include "extern.h"
-#include "GeoTransform.h"
+#include "core/coordinate/geo_transform.h"
 
 using namespace std;
 

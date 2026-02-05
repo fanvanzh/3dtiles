@@ -1,6 +1,6 @@
 #include "FBXPipeline.h"
 #include "extern.h"
-#include "GeoTransform.h"
+#include "core/coordinate/geo_transform.h"
 #include <osg/MatrixTransform>
 #include <osg/Geode>
 #include <osg/Material>
