@@ -42,6 +42,14 @@ jobs:
         if: startsWith(inputs.os, 'macos')
         run: brew install autoconf autoconf-archive automake libtool
 
+      - name: Clean build artifacts
+        if: inputs.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force target -ErrorAction SilentlyContinue
+          Write-Host "Cleaned build artifacts for Windows"
+
       - name: Cache vcpkg
         uses: actions/cache@v5
         id: cache-vcpkg
@@ -58,7 +66,6 @@ jobs:
           runVcpkgInstall: ${{ steps.cache-vcpkg-installed.outputs.cache-hit != 'true' || inputs.package }}
           runVcpkgFormatString: ${{ inputs.os == 'macos-15' && '[`install`, `--recurse`, `--clean-after-build`, `--x-install-root`, `$[env.VCPKG_INSTALLED_DIR]`, `--triplet`, `$[env.VCPKG_DEFAULT_TRIPLET]`, `--allow-unsupported`]' || '' }}
         env:
-          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
           VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
 
       - name: Install Rust toolchain
@@ -67,7 +74,7 @@ jobs:
           toolchain: stable
 
       - name: Build
-        run: cargo build -vv --release
+        run: cargo clean && cargo build -vv --release
         env:
           VCPKG_HAS_BEEN_INSTALLED: 1
 

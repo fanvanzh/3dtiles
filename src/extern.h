@@ -4,6 +4,16 @@
 #include <fmt/printf.h>
 #include <spdlog/spdlog.h>
 
+namespace {
+struct SpdlogInitializer {
+    SpdlogInitializer() {
+        spdlog::set_level(spdlog::level::info);
+        spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%l] %v");
+    }
+};
+static SpdlogInitializer g_spdlog_init;
+}
+
 /////////////////////////
 // extern function impl by rust
 extern "C" bool mkdirs(const char* path);
