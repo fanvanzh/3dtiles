@@ -66,7 +66,6 @@ jobs:
           runVcpkgInstall: ${{ steps.cache-vcpkg-installed.outputs.cache-hit != 'true' || inputs.package }}
           runVcpkgFormatString: ${{ inputs.os == 'macos-15' && '[`install`, `--recurse`, `--clean-after-build`, `--x-install-root`, `$[env.VCPKG_INSTALLED_DIR]`, `--triplet`, `$[env.VCPKG_DEFAULT_TRIPLET]`, `--allow-unsupported`]' || '' }}
         env:
-          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
           VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
 
       - name: Install Rust toolchain
