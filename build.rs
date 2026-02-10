@@ -696,6 +696,11 @@ fn print_vcpkg_tree(root: &Path) -> io::Result<()> {
 
 fn main() {
     std::env::set_var("RUST_BACKTRACE", "full");
+
+    // Ensure Cargo re-runs build.rs (and thus CMake) when C++ sources change.
+    println!("cargo:rerun-if-changed=CMakeLists.txt");
+    println!("cargo:rerun-if-changed=src/");
+
     match env::var("TARGET") {
         Ok(val) => match val.as_str() {
             "x86_64-unknown-linux-gnu" => build_linux_unknown(),

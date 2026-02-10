@@ -75,7 +75,7 @@ jobs:
           toolchain: stable
 
       - name: Build
-        run: cargo build -vv --release
+        run: cargo clean && cargo build -vv --release
         env:
           VCPKG_HAS_BEEN_INSTALLED: 1
 
