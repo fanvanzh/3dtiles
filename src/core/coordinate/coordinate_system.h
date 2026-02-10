@@ -6,7 +6,7 @@
 #include <optional>
 #include <fmt/format.h>
 
-struct OGRSpatialReference;
+class OGRSpatialReference;
 
 namespace Tiles::Core::Geo {
 

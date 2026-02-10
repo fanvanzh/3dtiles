@@ -33,6 +33,7 @@ set(HEADERS
 
 set(SOURCES
     src/attribute_storage.cpp
+    src/core/coordinate/coordinate_system.cpp
     src/core/coordinate/coordinate_converter.cpp
     src/core/coordinate/enu_context.cpp
     src/core/coordinate/transform_builder.cpp
