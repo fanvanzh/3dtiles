@@ -93,7 +93,11 @@ endif()
 if (WIN32)
     target_compile_definitions(_3dtile PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
     target_compile_options(_3dtile PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Zc:preprocessor>)
-    target_precompile_headers(_3dtile PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/osg_fix.h")
+    # Force-include osg_fix.h (WINGDIAPI etc.) without PCH.
+    # PCH with /Yu can silently break incremental builds when source files are
+    # added or removed, leading to LNK2019 unresolved-external errors.
+    target_compile_options(_3dtile PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/FI${CMAKE_CURRENT_SOURCE_DIR}/src/osg_fix.h>)
 endif()
 
 # Find packages using vcpkg
