@@ -30,6 +30,40 @@ void GeoTransform::Init(OGRCoordinateTransformation *pOgrCT, double *Origin)
     glm::dmat4 EnuToEcefMatrix = CoordinateConverter::calcEnuToEcefMatrix(
         origin_cartographic.x, origin_cartographic.y, origin_cartographic.z);
     GeoTransform::EcefToEnuMatrix = glm::inverse(EnuToEcefMatrix);
+
+    GeoTransform::GlobalInitialized_ = true;
+}
+
+void GeoTransform::EnsureThreadTransform()
+{
+    if (GeoTransform::pOgrCT) return;  // Already initialized on this thread
+    if (!GeoTransform::GlobalInitialized_) return;  // Global state not set yet
+    if (GeoTransform::IsENU) return;  // ENU: SRSOrigin is already baked into geometry, skip Correction
+
+    OGRSpatialReference outRs;
+    outRs.importFromEPSG(4326);
+    outRs.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+
+    OGRSpatialReference inRs;
+    if (GeoTransform::SourceEPSG_ > 0) {
+        // Recreate transform from stored EPSG code
+        inRs.importFromEPSG(GeoTransform::SourceEPSG_);
+        inRs.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+    } else if (!GeoTransform::SourceWKT_.empty()) {
+        // Recreate transform from stored WKT
+        inRs.importFromWkt(GeoTransform::SourceWKT_.c_str());
+        inRs.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+    } else {
+        return;  // No source SRS info available
+    }
+
+    OGRCoordinateTransformation* poCT = OGRCreateCoordinateTransformation(&inRs, &outRs);
+    if (poCT) {
+        GeoTransform::pOgrCT.reset(poCT);
+        fprintf(stderr, "[GeoTransform] Worker thread: created per-thread OGR transform\n");
+    } else {
+        fprintf(stderr, "[GeoTransform] Worker thread: FAILED to create OGR transform\n");
+    }
 }
 
 void GeoTransform::SetGeographicOrigin(double lon, double lat, double height)

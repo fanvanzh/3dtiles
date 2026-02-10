@@ -34,6 +34,7 @@ epsg_convert(int insrs, double* val, char* gdal_data, char *proj_lib) {
     fprintf(stderr, "[SRS] EPSG:%d -> EPSG:4326 (axis=traditional)\n", insrs);
     fprintf(stderr, "[Origin ENU] x=%.6f y=%.6f z=%.3f\n", val[0], val[1], val[2]);
     OGRCoordinateTransformation *poCT = OGRCreateCoordinateTransformation(&inRs, &outRs );
+    GeoTransform::SourceEPSG_ = insrs;  // Store for worker thread lazy init
     GeoTransform::Init(poCT, val);
     if (poCT) {
         if (poCT->Transform( 1, val, val + 1)) {
@@ -83,6 +84,7 @@ enu_init(double lon, double lat, double* origin_enu, char* gdal_data, char* proj
 extern "C" bool
 wkt_convert(char* wkt, double* val, char* path) {
     CPLSetConfigOption("GDAL_DATA", path);
+    const char* wkt_orig = wkt;  // Save original pointer before importFromWkt advances it
     OGRSpatialReference inRs,outRs;
     inRs.importFromWkt(&wkt);
     outRs.importFromEPSG(4326);
@@ -91,6 +93,7 @@ wkt_convert(char* wkt, double* val, char* path) {
     fprintf(stderr, "[SRS] WKT -> EPSG:4326 (axis=traditional)\n");
     fprintf(stderr, "[Origin ENU] x=%.6f y=%.6f z=%.3f\n", val[0], val[1], val[2]);
     OGRCoordinateTransformation *poCT = OGRCreateCoordinateTransformation( &inRs, &outRs );
+    GeoTransform::SourceWKT_ = std::string(wkt_orig);  // Store for worker thread lazy init
     GeoTransform::Init(poCT, val);
     if (poCT) {
         if (poCT->Transform( 1, val, val + 1)) {

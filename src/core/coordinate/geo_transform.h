@@ -4,6 +4,7 @@
 #include <ogr_spatialref.h>
 #include <ogrsf_frmts.h>
 #include <memory>
+#include <string>
 #include <glm/glm.hpp>
 #include "coordinate_system.h"
 #include "coordinate_converter.h"
@@ -36,16 +37,25 @@ class GeoTransform
 public:
     static inline thread_local std::unique_ptr<OGRCoordinateTransformation, OGRCTDeleter> pOgrCT = nullptr;
 
-    static inline thread_local double OriginX = 0.0;
-    static inline thread_local double OriginY = 0.0;
-    static inline thread_local double OriginZ = 0.0;
+    // Shared state: set once on main thread before parallel processing, read on worker threads
+    static inline double OriginX = 0.0;
+    static inline double OriginY = 0.0;
+    static inline double OriginZ = 0.0;
 
-    static inline thread_local double GeoOriginLon = 0.0;
-    static inline thread_local double GeoOriginLat = 0.0;
-    static inline thread_local double GeoOriginHeight = 0.0;
+    static inline double GeoOriginLon = 0.0;
+    static inline double GeoOriginLat = 0.0;
+    static inline double GeoOriginHeight = 0.0;
 
-    static inline thread_local bool IsENU = false;
-    static inline thread_local glm::dmat4 EcefToEnuMatrix = glm::dmat4(1);
+    static inline bool IsENU = false;
+    static inline glm::dmat4 EcefToEnuMatrix = glm::dmat4(1);
+
+    // Source SRS info for lazy per-thread OGR transform creation
+    static inline int SourceEPSG_ = 0;
+    static inline std::string SourceWKT_;
+    static inline bool GlobalInitialized_ = false;
+
+    // Ensure the current thread has a valid pOgrCT (lazy init for worker threads)
+    static void EnsureThreadTransform();
 
     static inline thread_local CoordinateSystem sourceCS;
     static inline thread_local CoordinateSystem targetCS;

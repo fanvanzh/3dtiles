@@ -162,6 +162,7 @@ public:
         else
             other_geometry_array.push_back(&geometry);
 
+        GeoTransform::EnsureThreadTransform();
         if (GeoTransform::pOgrCT)
         {
             osg::Vec3Array *vertexArr = (osg::Vec3Array *)geometry.getVertexArray();

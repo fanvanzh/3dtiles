@@ -471,7 +471,7 @@ fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enab
     let mut center_y = 0f64;
     let mut max_lvl = None;
     let mut trans_region = None;
-    let enu_offset: Option<(f64, f64, f64)> = None;
+    let mut enu_offset: Option<(f64, f64, f64)> = None;
     let mut origin_height: Option<f64> = None;
 
     // try parse metadata.xml
@@ -547,8 +547,10 @@ fn convert_osgb(src: &str, dest: &str, config: &str, enable_simplify: bool, enab
                                                     }
                                                 }
 
-                                                // For ENU systems, use height=0 (or terrain elevation) for root transform
-                                                // The SRSOrigin offset is already baked into the tile geometry coordinates
+                                                // ENU mode: OSGB vertices are in local coords relative to SRSOrigin.
+                                                // Apply SRSOrigin offset via the root tileset transform matrix
+                                                // (per-vertex Correction is skipped for ENU).
+                                                enu_offset = Some((offset_x, offset_y, offset_z));
                                                 origin_height = Some(0.0);
 
                                                 info!("ENU SRSOrigin offset detected: x={}, y={}, z={}", offset_x, offset_y, offset_z);
