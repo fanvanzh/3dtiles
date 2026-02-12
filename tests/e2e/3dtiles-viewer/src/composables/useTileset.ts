@@ -22,6 +22,9 @@ export function useTileset() {
         immediatelyLoadDesiredLevelOfDetail: false,
         loadSiblings: false,
         cullWithChildrenBounds: true,
+        // Fix floating and drift issues when terrain is enabled
+        // Clamp tileset to ground to prevent floating
+        clampToGround: true,
         ...options
       });
 

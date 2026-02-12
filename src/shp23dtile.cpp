@@ -400,7 +400,7 @@ static bool write_node_tileset(const TileMeta& node,
          compute_half_dimensions(child.bbox.minx, child.bbox.maxx, child.bbox.miny, child.bbox.maxy, child_half_w, child_half_h, child_center_lat);
          child_half_w *= BOUNDING_VOLUME_SCALE_FACTOR;
          child_half_h *= BOUNDING_VOLUME_SCALE_FACTOR;
-         double child_half_z = (child.bbox.maxHeight - child.bbox.maxHeight) * 0.5 * BOUNDING_VOLUME_SCALE_FACTOR;
+        double child_half_z = (child.bbox.maxHeight - child.bbox.minHeight) * 0.5 * BOUNDING_VOLUME_SCALE_FACTOR;
         double child_min_h = child.bbox.minHeight;
 
         // Child boundingVolume is defined in the child's local coordinate system.

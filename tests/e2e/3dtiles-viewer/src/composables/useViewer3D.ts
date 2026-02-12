@@ -44,6 +44,12 @@ export function useViewer3D() {
 
     viewer.value = map.value.viewer;
 
+    // Disable collision detection and configure camera for indoor navigation
+    // This prevents camera drift issues with 3D tiles
+    viewer.value.scene.screenSpaceCameraController.enableCollisionDetection = false;
+    viewer.value.scene.logarithmicDepthBuffer = true;
+    viewer.value.camera.frustum.near = 0.1;
+
     isReady.value = true;
   }
 
