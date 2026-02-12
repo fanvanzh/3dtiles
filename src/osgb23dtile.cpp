@@ -29,7 +29,7 @@
 #include <tiny_gltf.h>
 #include <nlohmann/json.hpp>
 #include "extern.h"
-#include "GeoTransform.h"
+#include "core/coordinate/geo_transform.h"
 
 using namespace std;
 
@@ -162,6 +162,7 @@ public:
         else
             other_geometry_array.push_back(&geometry);
 
+        GeoTransform::EnsureThreadTransform();
         if (GeoTransform::pOgrCT)
         {
             osg::Vec3Array *vertexArr = (osg::Vec3Array *)geometry.getVertexArray();
@@ -479,6 +480,13 @@ struct MeshInfo
 
 template<class T>
 void alignment_buffer(std::vector<T>& buf) {
+    while (buf.size() % 8 != 0) {
+        buf.push_back(0x00);
+    }
+}
+
+template<class T>
+void alignment_buffer_4(std::vector<T>& buf) {
     while (buf.size() % 4 != 0) {
         buf.push_back(0x00);
     }
@@ -704,7 +712,7 @@ bool triangulate_quad_like(const std::vector<uint32_t>& indices, GLenum mode,
 }
 
 void
-write_vec3_array(osg::Vec3Array* v3f, OsgBuildState* osgState, osg::Vec3f& point_max, osg::Vec3f& point_min)
+write_vec3_array(osg::Vec3Array* v3f, OsgBuildState* osgState, osg::Vec3f& point_max, osg::Vec3f& point_min, bool isNormal = false)
 {
     int vec_start = 0;
     int vec_end   = v3f->size();
@@ -717,6 +725,17 @@ write_vec3_array(osg::Vec3Array* v3f, OsgBuildState* osgState, osg::Vec3f& point
     for (int vidx = vec_start; vidx < vec_end; vidx++)
     {
         osg::Vec3f point = v3f->at(vidx);
+        // Per glTF spec: Normal vectors must be unit length
+        // Fix zero-length normals by replacing with (0, 0, 1)
+        if (isNormal) {
+            float len = point.length();
+            if (len < 0.0001f) {
+                point.set(0.0f, 0.0f, 1.0f);
+            } else if (std::abs(len - 1.0f) > 0.0001f) {
+                // Normalize if not already unit length
+                point.normalize();
+            }
+        }
         put_val(osgState->buffer->data, point.x());
         put_val(osgState->buffer->data, point.y());
         put_val(osgState->buffer->data, point.z());
@@ -947,7 +966,7 @@ void write_element_array_primitive(osg::Geometry* g, osg::PrimitiveSet* ps,
         if (pmtState->normalAccessor == -1 && osgState->draw_array_first == -1) {
           pmtState->normalAccessor = osgState->model->accessors.size();
         }
-        write_vec3_array(normalArr, osgState, point_max, point_min);
+        write_vec3_array(normalArr, osgState, point_max, point_min, true);
       }
     }
   }
@@ -1320,20 +1339,42 @@ bool osgb2b3dm_buf(std::string path, std::string& b3dm_buf, TileBox& tile_box, i
     int feature_bin_len = 0;
     int batch_json_len = batch_json_string.size();
     int batch_bin_len = 0;
-    int total_len = 28 /*header size*/ + feature_json_len + batch_json_len + glb_buf.size();
 
+    int header_len = 28;
+
+    // First, build the B3DM buffer without GLB to calculate the correct total length
     b3dm_buf += "b3dm";
     int version = 1;
     put_val(b3dm_buf, version);
-    put_val(b3dm_buf, total_len);
+    // Placeholder for total_len, will update later
+    int total_len_offset = b3dm_buf.size();
+    put_val(b3dm_buf, 0); // placeholder
     put_val(b3dm_buf, feature_json_len);
     put_val(b3dm_buf, feature_bin_len);
     put_val(b3dm_buf, batch_json_len);
     put_val(b3dm_buf, batch_bin_len);
-    //put_val(b3dm_buf, total_len);
     b3dm_buf.append(feature_json_string.begin(),feature_json_string.end());
     b3dm_buf.append(batch_json_string.begin(),batch_json_string.end());
+
+    // Ensure Feature Table JSON + Batch Table JSON end at 8-byte boundary
+    // so that GLB starts at 8-byte aligned offset
+    while (b3dm_buf.size() % 8 != 0) {
+        b3dm_buf.push_back(0x00);
+    }
+
+    // Append GLB data
     b3dm_buf.append(glb_buf);
+
+    // Per 3D Tiles spec: B3DM total length must be 8-byte aligned
+    // Ensure the final B3DM buffer is 8-byte aligned
+    while (b3dm_buf.size() % 8 != 0) {
+        b3dm_buf.push_back(0x00);
+    }
+
+    // Update total_len in the header
+    int total_len = b3dm_buf.size();
+    *reinterpret_cast<int*>(&b3dm_buf[total_len_offset]) = total_len;
+
     return true;
 }
 
@@ -1476,6 +1517,8 @@ encode_tile_json(osg_tree& tree, double x, double y)
     char buf[512];
     sprintf(buf, "{ \"geometricError\":%.2f,", tree.geometricError);
     std::string tile = buf;
+    // Per 3D Tiles spec: refine property must be set in root tiles
+    tile += " \"refine\":\"REPLACE\",";
     TileBox cBox = tree.bbox;
     //cBox.extend(0.1);
     std::string content_box = get_boundingBox(cBox);
@@ -1496,17 +1539,22 @@ encode_tile_json(osg_tree& tree, double x, double y)
         tile += content_box;
         tile += "}";
     }
-    tile += ",\"children\":[";
-    for ( auto& i : tree.sub_nodes ){
-        std::string node_json = encode_tile_json(i,x,y);
-        if (!node_json.empty()) {
-            tile += node_json;
-            tile += ",";
+    // Only include children array if there are sub-nodes
+    // Per 3D Tiles spec: Empty children arrays cause validation warnings
+    if (!tree.sub_nodes.empty()) {
+        tile += ",\"children\":[";
+        for ( auto& i : tree.sub_nodes ){
+            std::string node_json = encode_tile_json(i,x,y);
+            if (!node_json.empty()) {
+                tile += node_json;
+                tile += ",";
+            }
         }
+        if (tile.back() == ',')
+            tile.pop_back();
+        tile += "]";
     }
-    if (tile.back() == ',')
-        tile.pop_back();
-    tile += "]}";
+    tile += "}";
     return tile;
 }
 

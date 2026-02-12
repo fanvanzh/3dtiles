@@ -42,6 +42,14 @@ jobs:
         if: startsWith(inputs.os, 'macos')
         run: brew install autoconf autoconf-archive automake libtool
 
+      - name: Clean build artifacts
+        if: inputs.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force target -ErrorAction SilentlyContinue
+          Write-Host "Cleaned build artifacts for Windows"
+
       - name: Cache vcpkg
         uses: actions/cache@v5
         id: cache-vcpkg
@@ -67,7 +75,7 @@ jobs:
           toolchain: stable
 
       - name: Build
-        run: cargo build -vv --release
+        run: cargo clean && cargo build -vv --release
         env:
           VCPKG_HAS_BEEN_INSTALLED: 1
 

@@ -6,3 +6,7 @@
 /build/
 /.idea/
 .DS_Store
+node_modules/
+output/
+test_data/
+data/

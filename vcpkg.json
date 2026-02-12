@@ -9,6 +9,7 @@
     "earcut-hpp",
     "eigen3",
     "fmt",
+    "gtest",
     {
       "name": "gdal",
       "default-features": false,

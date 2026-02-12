@@ -5,7 +5,8 @@
 
 #include "mesh_processor.h"
 #include "attribute_storage.h"
-#include "GeoTransform.h"
+#include "core/coordinate/geo_transform.h"
+#include "core/coordinate/coordinate_converter.h"
 #include "lod_pipeline.h"
 #include "shape.h"
 
@@ -80,7 +81,7 @@ struct bbox
 class node {
 public:
     bbox _box;
-    // 1 km ~ 0.01
+    // 1 km ~ 0.01 degrees for geographic, 1000 meters for projected
     double metric = 0.01;
     node* subnode[4];
     std::vector<int> geo_items;
@@ -93,6 +94,10 @@ public:
         _x = x;
         _y = y;
         _z = z;
+    }
+
+    void set_metric(double m) {
+        metric = m;
     }
 
 public:
@@ -123,6 +128,7 @@ public:
                         bbox box(_box.minx, c_x, _box.miny, c_y);
                         subnode[i] = new node(box);
                         subnode[i]->set_no(_x * 2, _y * 2, _z + 1);
+                        subnode[i]->set_metric(metric);
                     }
                     break;
                     case 1:
@@ -130,6 +136,7 @@ public:
                         bbox box(c_x, _box.maxx, _box.miny, c_y);
                         subnode[i] = new node(box);
                         subnode[i]->set_no(_x * 2 + 1, _y * 2, _z + 1);
+                        subnode[i]->set_metric(metric);
                     }
                     break;
                     case 2:
@@ -137,6 +144,7 @@ public:
                         bbox box(c_x, _box.maxx, c_y, _box.maxy);
                         subnode[i] = new node(box);
                         subnode[i]->set_no(_x * 2 + 1, _y * 2 + 1, _z + 1);
+                        subnode[i]->set_metric(metric);
                     }
                     break;
                     case 3:
@@ -144,6 +152,7 @@ public:
                         bbox box(_box.minx, c_x, c_y, _box.maxy);
                         subnode[i] = new node(box);
                         subnode[i]->set_no(_x * 2, _y * 2 + 1, _z + 1);
+                        subnode[i]->set_metric(metric);
                     }
                     break;
                 }
@@ -299,25 +308,60 @@ static double compute_geometric_error_from_spans(double span_x, double span_y, d
     return max_span / 20.0;
 }
 
+static void compute_half_dimensions(double minx, double maxx, double miny, double maxy,
+                                     double& half_w, double& half_h, double center_lat) {
+    double width = maxx - minx;
+    double height = maxy - miny;
+
+    const auto& sourceCS = GeoTransform::getSourceCoordinateSystem();
+
+    if (sourceCS.isGeographic()) {
+        double lon_rad_span = degree2rad(width);
+        double lat_rad_span = degree2rad(height);
+        half_w = longti_to_meter(lon_rad_span * 0.5, degree2rad(center_lat)) * 1.05;
+        half_h = lati_to_meter(lat_rad_span * 0.5) * 1.05;
+    } else if (sourceCS.isProjected()) {
+        half_w = width * 0.5 * 1.05;
+        half_h = height * 0.5 * 1.05;
+    } else {
+        half_w = width * 0.5 * 1.05;
+        half_h = height * 0.5 * 1.05;
+    }
+}
+
 static bool write_node_tileset(const TileMeta& node,
                                const std::unordered_map<uint64_t, TileMeta>& nodes,
                                const std::string& dest_root,
                                int min_z_root) {
-    // parent bbox in degrees/meters
     double center_lon = (node.bbox.minx + node.bbox.maxx) * 0.5;
     double center_lat = (node.bbox.miny + node.bbox.maxy) * 0.5;
-    double width_deg = (node.bbox.maxx - node.bbox.minx);
-    double height_deg = (node.bbox.maxy - node.bbox.miny);
-    double lon_rad_span = degree2rad(width_deg);
-    double lat_rad_span = degree2rad(height_deg);
-    // Pad bounding volumes to reduce near-plane/frustum culling when zoomed in
+
+    const auto& sourceCS = GeoTransform::getSourceCoordinateSystem();
+
+    // For projected coordinate systems, convert center to geographic coordinates (degrees)
+    // because make_transform expects longitude/latitude in degrees
+    double transform_lon = center_lon;
+    double transform_lat = center_lat;
+    if (sourceCS.isProjected()) {
+        glm::dvec3 centerGeo = Tiles::Core::Geo::CoordinateConverter::projectedToGeographic(
+            glm::dvec3(center_lon, center_lat, 0.0), sourceCS.epsgCode);
+        transform_lon = centerGeo.x;
+        transform_lat = centerGeo.y;
+        fprintf(stderr, "[DEBUG] Projected center: %.3f, %.3f -> Geographic: %.10f, %.10f\n",
+                center_lon, center_lat, transform_lon, transform_lat);
+    } else {
+        fprintf(stderr, "[DEBUG] Geographic center: %.10f, %.10f\n", transform_lon, transform_lat);
+    }
+
     const double BOUNDING_VOLUME_SCALE_FACTOR = 2.0;
-    double half_w = longti_to_meter(lon_rad_span * 0.5, degree2rad(center_lat)) * 1.05 * BOUNDING_VOLUME_SCALE_FACTOR;
-    double half_h = lati_to_meter(lat_rad_span * 0.5) * 1.05 * BOUNDING_VOLUME_SCALE_FACTOR;
+    double half_w, half_h;
+    compute_half_dimensions(node.bbox.minx, node.bbox.maxx, node.bbox.miny, node.bbox.maxy, half_w, half_h, center_lat);
+    half_w *= BOUNDING_VOLUME_SCALE_FACTOR;
+    half_h *= BOUNDING_VOLUME_SCALE_FACTOR;
     double half_z = (node.bbox.maxHeight - node.bbox.minHeight) * 0.5 * BOUNDING_VOLUME_SCALE_FACTOR;
     double min_h = node.bbox.minHeight;
 
-    glm::dmat4 parent_global = make_transform(center_lon, center_lat, min_h);
+    glm::dmat4 parent_global = make_transform(transform_lon, transform_lat, min_h);
 
     nlohmann::json root;
     root["asset"] = { {"version", "1.0"}, {"gltfUpAxis", "Z"} };
@@ -339,12 +383,23 @@ static bool write_node_tileset(const TileMeta& node,
         }
         const TileMeta& child = it->second;
         nlohmann::json child_node;
-        double child_center_lon = (child.bbox.minx + child.bbox.maxx) * 0.5;
-        double child_center_lat = (child.bbox.miny + child.bbox.maxy) * 0.5;
-        double child_lon_span = degree2rad(child.bbox.maxx - child.bbox.minx);
-        double child_lat_span = degree2rad(child.bbox.maxy - child.bbox.miny);
-        double child_half_w = longti_to_meter(child_lon_span * 0.5, degree2rad(child_center_lat)) * 1.05 * BOUNDING_VOLUME_SCALE_FACTOR;
-        double child_half_h = lati_to_meter(child_lat_span * 0.5) * 1.05 * BOUNDING_VOLUME_SCALE_FACTOR;
+         double child_center_lon = (child.bbox.minx + child.bbox.maxx) * 0.5;
+         double child_center_lat = (child.bbox.miny + child.bbox.maxy) * 0.5;
+
+         // For projected coordinate systems, convert child center to geographic coordinates (degrees)
+         double child_transform_lon = child_center_lon;
+         double child_transform_lat = child_center_lat;
+         if (sourceCS.isProjected()) {
+             glm::dvec3 childCenterGeo = Tiles::Core::Geo::CoordinateConverter::projectedToGeographic(
+                 glm::dvec3(child_center_lon, child_center_lat, 0.0), sourceCS.epsgCode);
+             child_transform_lon = childCenterGeo.x;
+             child_transform_lat = childCenterGeo.y;
+         }
+
+         double child_half_w, child_half_h;
+         compute_half_dimensions(child.bbox.minx, child.bbox.maxx, child.bbox.miny, child.bbox.maxy, child_half_w, child_half_h, child_center_lat);
+         child_half_w *= BOUNDING_VOLUME_SCALE_FACTOR;
+         child_half_h *= BOUNDING_VOLUME_SCALE_FACTOR;
         double child_half_z = (child.bbox.maxHeight - child.bbox.minHeight) * 0.5 * BOUNDING_VOLUME_SCALE_FACTOR;
         double child_min_h = child.bbox.minHeight;
 
@@ -362,7 +417,7 @@ static bool write_node_tileset(const TileMeta& node,
         child_node["geometricError"] = child.geometric_error;
 
         // Child transform: relative matrix = parent_global^-1 * child_global to preserve hierarchy in ECEF
-        glm::dmat4 child_global = make_transform(child_center_lon, child_center_lat, child_min_h);
+        glm::dmat4 child_global = make_transform(child_transform_lon, child_transform_lat, child_min_h);
         glm::dmat4 relative = glm::inverse(parent_global) * child_global;
         child_node["transform"] = flatten_mat(relative);
 
@@ -659,6 +714,8 @@ void calc_normal(int baseCnt, int ptNum, Polygon_Mesh &mesh)
 Polygon_Mesh
 convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double height)
 {
+    GeoTransform::setCenterPoint(center_x, center_y, 0.0);
+
     //double bottom = 0.0;
     Polygon_Mesh mesh;
     OGRLinearRing* pRing = polyon->getExteriorRing();
@@ -670,9 +727,10 @@ convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double hei
     for (int i = 0; i < ptNum; i++) {
         OGRPoint pt;
         pRing->getPoint(i, &pt);
-		double bottom = pt.getZ();
-        float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
-        float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
+        double bottom = pt.getZ();
+        glm::dvec3 transformed = GeoTransform::transformPoint(pt.getX(), pt.getY(), bottom);
+        float point_x = static_cast<float>(transformed.x);
+        float point_y = static_cast<float>(transformed.y);
         mesh.vertex.push_back({ point_x , point_y, (float)bottom });
         mesh.vertex.push_back({ point_x , point_y, (float)height });
         // double vertex
@@ -701,9 +759,10 @@ convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double hei
         for (int i = 0; i < ptNum; i++) {
             OGRPoint pt;
             pRing->getPoint(i, &pt);
-			double bottom = pt.getZ();
-            float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
-            float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
+            double bottom = pt.getZ();
+            glm::dvec3 transformed = GeoTransform::transformPoint(pt.getX(), pt.getY(), bottom);
+            float point_x = static_cast<float>(transformed.x);
+            float point_y = static_cast<float>(transformed.y);
             mesh.vertex.push_back({ point_x , point_y, (float)bottom });
             mesh.vertex.push_back({ point_x , point_y, (float)height });
             // double vertex
@@ -733,9 +792,10 @@ convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double hei
             {
                 OGRPoint pt;
                 pRing->getPoint(i, &pt);
-				double bottom = pt.getZ();
-                float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
-                float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
+                double bottom = pt.getZ();
+                glm::dvec3 transformed = GeoTransform::transformPoint(pt.getX(), pt.getY(), bottom);
+                float point_x = static_cast<float>(transformed.x);
+                float point_y = static_cast<float>(transformed.y);
                 polygon[0].push_back({ point_x, point_y });
                 mesh.vertex.push_back({ point_x , point_y, (float)bottom });
                 mesh.vertex.push_back({ point_x , point_y, (float)height });
@@ -753,9 +813,10 @@ convert_polygon(OGRPolygon* polyon, double center_x, double center_y, double hei
             {
                 OGRPoint pt;
                 pRing->getPoint(i, &pt);
-				double bottom = pt.getZ();
-                float point_x = (float)longti_to_meter(degree2rad(pt.getX() - center_x), degree2rad(center_y));
-                float point_y = (float)lati_to_meter(degree2rad(pt.getY() - center_y));
+                double bottom = pt.getZ();
+                glm::dvec3 transformed = GeoTransform::transformPoint(pt.getX(), pt.getY(), bottom);
+                float point_x = static_cast<float>(transformed.x);
+                float point_y = static_cast<float>(transformed.y);
                 polygon[j].push_back({ point_x, point_y });
                 mesh.vertex.push_back({ point_x , point_y, (float)bottom });
                 mesh.vertex.push_back({ point_x , point_y, (float)height });
@@ -891,13 +952,24 @@ shp23dtile(const ShapeConversionParams* params)
         LOG_E("no extent found in shapefile");
         return false;
     }
-    if (envelop.MaxX > 180 || envelop.MinX < -180 || envelop.MaxY > 90 || envelop.MinY < -90) {
-        LOG_E("only support WGS-84 now");
-        return false;
-    }
+
+    OGRSpatialReference* poSRS = (OGRSpatialReference*)poLayer->GetSpatialRef();
+    double center_x = (envelop.MinX + envelop.MaxX) / 2;
+    double center_y = (envelop.MinY + envelop.MaxY) / 2;
+    glm::dvec3 refPoint(center_x, center_y, 0.0);
+    GeoTransform::InitFromSource(poSRS, refPoint);
+
+    const auto& sourceCS = GeoTransform::getSourceCoordinateSystem();
+    LOG_I("Detected coordinate system: EPSG=%s, type=%s",
+          sourceCS.epsgCode.c_str(),
+          sourceCS.isGeographic() ? "GEOGRAPHIC" : (sourceCS.isProjected() ? "PROJECTED" : "OTHER"));
 
     bbox bound(envelop.MinX, envelop.MaxX, envelop.MinY, envelop.MaxY);
     node root(bound);
+    // Set metric based on coordinate system: 0.01 degrees for geographic, 1000 meters for projected
+    if (sourceCS.isProjected()) {
+        root.set_metric(1000.0);
+    }
     OGRFeature *poFeature;
     poLayer->ResetReading();
     while ((poFeature = poLayer->GetNextFeature()) != NULL)
@@ -1054,14 +1126,12 @@ shp23dtile(const ShapeConversionParams* params)
 
         double box_width = (_node->_box.maxx - _node->_box.minx);
         double box_height = (_node->_box.maxy - _node->_box.miny);
-        const double pi = std::acos(-1);
-        double radian_x = degree2rad(center_x);
-        double radian_y = degree2rad(center_y);
 
-        // Convert angular span to meters and inflate slightly for safety
-        double tile_w_m = longti_to_meter(degree2rad(box_width) * 1.05, radian_y);
-        double tile_h_m = lati_to_meter(degree2rad(box_height) * 1.05);
-        double tile_z_m = std::max(max_height, 5.0); // height range already in meters (extrusion height)
+        double tile_w_m, tile_h_m;
+        compute_half_dimensions(_node->_box.minx, _node->_box.maxx, _node->_box.miny, _node->_box.maxy, tile_w_m, tile_h_m, center_y);
+        tile_w_m *= 2.0;
+        tile_h_m *= 2.0;
+        double tile_z_m = std::max(max_height, 5.0);
 
         // Geometric error per commit fc40399...: max span divided by 20
         double ge = compute_geometric_error_from_spans(tile_w_m, tile_h_m, tile_z_m);
@@ -1227,6 +1297,13 @@ void put_val(std::string& buf, T val) {
 
 template<class T>
 void alignment_buffer(std::vector<T>& buf) {
+    while (buf.size() % 4 != 0) {
+        buf.push_back(0x00);
+    }
+}
+
+template<class T>
+void alignment_buffer_4(std::vector<T>& buf) {
     while (buf.size() % 4 != 0) {
         buf.push_back(0x00);
     }
@@ -1493,17 +1570,32 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes,
                 batchid_accessor_index = model.accessors.size();
                 tinygltf::Accessor acc;
                 acc.byteOffset = 0;
-                acc.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
+
+                // Per glTF spec: Vertex attribute data must be aligned to 4-byte boundaries
+                // gltf-validator requires element size to be 4-byte aligned for vertex attributes
+                // Use FLOAT (4 bytes) for _BATCHID to ensure 4-byte alignment
+                // UNSIGNED_BYTE (1 byte) and UNSIGNED_SHORT (2 bytes) are not 4-byte aligned
+                // UNSIGNED_INT (4 bytes) is not allowed for mesh attributes
+                acc.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+
                 acc.count = merged_batch_ids.size();
                 acc.type = TINYGLTF_TYPE_SCALAR;
                 acc.maxValues = {(double)max_batch};
                 acc.minValues = {0.0};
 
                 if (!draco_requested) {
+                    // Per glTF spec: Vertex attribute data must be aligned to 4-byte boundaries
+                    // Ensure buffer is 4-byte aligned before writing _BATCHID data
+                    alignment_buffer_4(buffer.data);
                     int byteOffset = buffer.data.size();
+                    // Write as FLOAT (4 bytes) for 4-byte alignment
                     for (auto batch_id : merged_batch_ids) {
-                        put_val(buffer.data, batch_id);
+                        float val = static_cast<float>(batch_id);
+                        put_val(buffer.data, val);
                     }
+                    // Per glTF spec: Vertex attribute data must be aligned to 4-byte boundaries
+                    // Ensure the _BATCHID data itself is 4-byte aligned
+                    alignment_buffer_4(buffer.data);
                     acc.bufferView = model.bufferViews.size();
                     alignment_buffer(buffer.data);
                     tinygltf::BufferView bfv = create_buffer_view(TINYGLTF_TARGET_ARRAY_BUFFER, byteOffset,
@@ -1573,6 +1665,13 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes,
         model.materials = { make_color_material(1.0, 1.0, 1.0) };
     }
 
+    // Ensure buffer data is 8-byte aligned so that generated GLB is 8-byte aligned
+    // This is required for B3DM total length to be 8-byte aligned
+    int buffer_padding = (8 - (buffer.data.size() % 8)) % 8;
+    for (int i = 0; i < buffer_padding; ++i) {
+        buffer.data.push_back(0x00);
+    }
+
     model.buffers.push_back(std::move(buffer));
     model.asset.version = "2.0";
     model.asset.generator = "fanfan";
@@ -1590,6 +1689,38 @@ std::string make_polymesh(std::vector<Polygon_Mesh> &meshes,
     std::ostringstream ss;
     bool res = gltf.WriteGltfSceneToStream(&model, ss, false, true);
     std::string buf = ss.str();
+
+    // Ensure GLB is 8-byte aligned for B3DM total length alignment
+    // GLB structure: header(12) + JSON chunk(8 + len) + BIN chunk(8 + len)
+    int glb_padding = (8 - (buf.size() % 8)) % 8;
+    if (glb_padding > 0) {
+        // Extend BIN chunk by adding padding to the end
+        // BIN chunk length is at offset: 12 + 8 + json_chunk_length + 4
+        // But we need to find the BIN chunk header first
+
+        // Read JSON chunk length from GLB
+        int json_chunk_len = *reinterpret_cast<const int*>(&buf[12]);
+        int bin_chunk_header_offset = 12 + 8 + json_chunk_len;
+        // Ensure bin_chunk_header_offset is 4-byte aligned (GLB spec)
+        if (bin_chunk_header_offset % 4 != 0) {
+            bin_chunk_header_offset += 4 - (bin_chunk_header_offset % 4);
+        }
+
+        // Read current BIN chunk length
+        int bin_chunk_len = *reinterpret_cast<const int*>(&buf[bin_chunk_header_offset]);
+
+        // Update BIN chunk length
+        int new_bin_chunk_len = bin_chunk_len + glb_padding;
+        *reinterpret_cast<int*>(&buf[bin_chunk_header_offset]) = new_bin_chunk_len;
+
+        // Add padding bytes to the end of GLB
+        buf.append(glb_padding, '\0');
+
+        // Update GLB header length
+        int new_glb_len = buf.size();
+        *reinterpret_cast<int*>(&buf[8]) = new_glb_len;
+    }
+
     return buf;
 }
 
@@ -1600,7 +1731,11 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height, bool 
     feature_json_string += "{\"BATCH_LENGTH\":";
     feature_json_string += std::to_string(meshes.size());
     feature_json_string += "}";
-    while (feature_json_string.size() % 4 != 0 ) {
+    // Per 3D Tiles spec: Feature Table Binary must start at 8-byte aligned offset
+    // Feature Table Binary starts at: header_len(28) + feature_json_len
+    // So feature_json_len must be such that (28 + feature_json_len) % 8 == 0
+    // Since 28 % 8 = 4, we need feature_json_len % 8 == 4
+    while ((28 + feature_json_string.size()) % 8 != 0) {
         feature_json_string.push_back(' ');
     }
 
@@ -1650,9 +1785,6 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height, bool 
     }
 
     std::string batch_json_string = batch_json.dump();
-    while (batch_json_string.size() % 4 != 0 ) {
-        batch_json_string.push_back(' ');
-    }
 
     std::string glb_buf = make_polymesh(meshes, enable_simplify, simplification_params, enable_draco, draco_params);
     if (glb_buf.size() == 0) {
@@ -1660,11 +1792,54 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height, bool 
         return std::string();
     }
 
+    int header_len = 28;
+
+    // Per 3D Tiles spec 1.0:
+    // - Feature Table Binary starts at (28 + feature_json_len), must be 8-byte aligned
+    // - Batch Table JSON starts at (28 + feature_json_len + feature_bin_len), must be 8-byte aligned
+    // - Batch Table Binary starts at (28 + feature_json_len + feature_bin_len + batch_json_len), must be 8-byte aligned
+    // - GLB data starts at (28 + feature_json_len + feature_bin_len + batch_json_len + batch_bin_len), must be 8-byte aligned
+    // - Total byte length must be 8-byte aligned
+
+    // Calculate padding for Feature Table JSON
+    // Feature Table Binary starts at (28 + feature_json_len), must be 8-byte aligned
+    // Since 28 % 8 = 4, we need feature_json_len % 8 == 4
+    int feature_json_padding = (4 - (feature_json_string.size() % 8)) % 8;
+    feature_json_string.append(feature_json_padding, ' ');
+
+    // Calculate padding for Batch Table JSON
+    // Batch Table Binary starts at (28 + feature_json_len + batch_json_len), must be 8-byte aligned
+    // Since feature_bin_len = 0 and (28 + feature_json_len) % 8 == 0, we need batch_json_len % 8 == 0
+    // Note: We need to ensure batch_json_len itself is a multiple of 8
+    int batch_json_padding = (8 - (batch_json_string.size() % 8)) % 8;
+    if (batch_json_padding > 0) {
+        batch_json_string.append(batch_json_padding, ' ');
+    }
+
     int feature_json_len = feature_json_string.size();
     int feature_bin_len = 0;
     int batch_json_len = batch_json_string.size();
     int batch_bin_len = 0;
-    int total_len = 28 /*header size*/ + feature_json_len + batch_json_len + glb_buf.size();
+
+    // Verify alignments
+    int feature_table_binary_start = 28 + feature_json_len;
+    int batch_table_json_start = feature_table_binary_start + feature_bin_len;
+    int batch_table_binary_start = batch_table_json_start + batch_json_len;
+    int glb_start = batch_table_binary_start + batch_bin_len;
+
+    // All must be 8-byte aligned
+    // feature_table_binary_start % 8 == 0 (ensured by feature_json_padding)
+    // batch_table_json_start % 8 == 0 (since feature_bin_len = 0)
+    // batch_table_binary_start % 8 == 0 (ensured by batch_json_padding)
+    // glb_start % 8 == 0 (since batch_bin_len = 0)
+
+    // Total length must also be 8-byte aligned
+    // At this point:
+    // - (28 + feature_json_len) % 8 == 0
+    // - batch_json_len % 8 == 0
+    // - glb_buf.size() % 8 == 0 (ensured by buffer padding in GLB generation)
+    // So total_len % 8 == 0
+    int total_len = 28 + feature_json_len + batch_json_len + glb_buf.size();
 
     std::string b3dm_buf;
     b3dm_buf += "b3dm";
@@ -1675,9 +1850,11 @@ std::string make_b3dm(std::vector<Polygon_Mesh>& meshes, bool with_height, bool 
     put_val(b3dm_buf, feature_bin_len);
     put_val(b3dm_buf, batch_json_len);
     put_val(b3dm_buf, batch_bin_len);
-    //put_val(b3dm_buf, total_len);
     b3dm_buf.append(feature_json_string.begin(),feature_json_string.end());
     b3dm_buf.append(batch_json_string.begin(),batch_json_string.end());
+
+    // Append GLB data
     b3dm_buf.append(glb_buf);
+
     return b3dm_buf;
 }

@@ -197,7 +197,7 @@
   </div>
 
   <script>
-    // Initialize Viewer
+    // Initialize Viewer with OpenStreetMap imagery
     const viewer = new Cesium.Viewer('cesiumContainer', {
       terrainProvider: undefined,
       baseLayerPicker: false,
@@ -206,7 +206,10 @@
       timeline: false,
       fullscreenButton: false,
       infoBox: false, // Disable default info box as we use custom panel
-      selectionIndicator: true
+      selectionIndicator: true,
+      baseLayer: new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({
+        url: 'https://a.tile.openstreetmap.org/'
+      }))
     });
 
     // Set fixed time to 10:00 AM (UTC+8) to ensure good lighting

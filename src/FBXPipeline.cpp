@@ -1,6 +1,6 @@
 #include "FBXPipeline.h"
 #include "extern.h"
-#include "GeoTransform.h"
+#include "core/coordinate/geo_transform.h"
 #include <osg/MatrixTransform>
 #include <osg/Geode>
 #include <osg/Material>
@@ -1007,28 +1007,56 @@ void appendGeometryToModel(tinygltf::Model& model, const std::vector<InstanceRef
         int bvPosIdx = -1, bvNormIdx = -1, bvTexIdx = -1, bvIndIdx = -1, bvBatchIdx = -1;
 
         if (!dracoCompressed) {
-            // Write to buffer
+            auto alignTo4 = [](size_t currentSize) -> size_t {
+                size_t padding = (4 - (currentSize % 4)) % 4;
+                return padding;
+            };
+
+            size_t posPadding = alignTo4(buffer.data.size());
+            for (size_t i = 0; i < posPadding; ++i) {
+                buffer.data.push_back(0);
+            }
+
             size_t posOffset = buffer.data.size();
             size_t posLen = positions.size() * sizeof(float);
             buffer.data.resize(posOffset + posLen);
             memcpy(buffer.data.data() + posOffset, positions.data(), posLen);
+
+            size_t normPadding = alignTo4(buffer.data.size());
+            for (size_t i = 0; i < normPadding; ++i) {
+                buffer.data.push_back(0);
+            }
 
             size_t normOffset = buffer.data.size();
             size_t normLen = normals.size() * sizeof(float);
             buffer.data.resize(normOffset + normLen);
             memcpy(buffer.data.data() + normOffset, normals.data(), normLen);
 
+            size_t texPadding = alignTo4(buffer.data.size());
+            for (size_t i = 0; i < texPadding; ++i) {
+                buffer.data.push_back(0);
+            }
+
             size_t texOffset = buffer.data.size();
             size_t texLen = texcoords.size() * sizeof(float);
             buffer.data.resize(texOffset + texLen);
             memcpy(buffer.data.data() + texOffset, texcoords.data(), texLen);
+
+            size_t indPadding = alignTo4(buffer.data.size());
+            for (size_t i = 0; i < indPadding; ++i) {
+                buffer.data.push_back(0);
+            }
 
             size_t indOffset = buffer.data.size();
             size_t indLen = indices.size() * sizeof(unsigned int);
             buffer.data.resize(indOffset + indLen);
             memcpy(buffer.data.data() + indOffset, indices.data(), indLen);
 
-            // Batch IDs
+            size_t batchPadding = alignTo4(buffer.data.size());
+            for (size_t i = 0; i < batchPadding; ++i) {
+                buffer.data.push_back(0);
+            }
+
             size_t batchOffset = buffer.data.size();
             size_t batchLen = batchIds.size() * sizeof(float);
             buffer.data.resize(batchOffset + batchLen);
@@ -2062,57 +2090,100 @@ std::pair<std::string, osg::BoundingBoxd> FBXPipeline::createB3DM(const std::vec
     };
 
     std::string featureTableString = featureTable.dump();
+    size_t featureTableJsonByteLength = featureTableString.size();
+    // Per 3D Tiles spec: JSON must be padded with spaces to 8-byte boundary
+    // The padding ensures the NEXT section starts at an 8-byte aligned offset
+    // Padding calculation: (8 - (current_offset + json_length) % 8) % 8
+    // where current_offset is the byte offset where JSON starts (28 for B3DM)
+    size_t featureTableStartOffset = sizeof(B3dmHeader);  // 28 bytes
+    size_t featureTablePadding = (8 - ((featureTableStartOffset + featureTableJsonByteLength) % 8)) % 8;
+    featureTableString.append(featureTablePadding, ' ');
+    featureTableJsonByteLength = featureTableString.size();  // Update to include padding
 
-    // Calculate Padding
-    // Header (28 bytes) + FeatureTableJSON (N bytes) + Padding (P bytes)
-    // Spec: "The byte length of the Feature Table JSON ... must be aligned to 8 bytes."
-    // This strictly means featureTableJSONByteLength % 8 == 0.
-
-    size_t jsonLen = featureTableString.size();
-    size_t padding = (8 - (jsonLen % 8)) % 8;
-    for(size_t i=0; i<padding; ++i) {
-        featureTableString += " ";
-    }
-
-    // Serialize Batch Table
     std::string batchTableString = "";
+    size_t batchTableJsonByteLength = 0;
+    size_t batchTablePadding = 0;
     if (!batchTableJson.empty()) {
         batchTableString = batchTableJson.dump();
-        size_t batchPadding = (8 - (batchTableString.size() % 8)) % 8;
-        for(size_t i=0; i<batchPadding; ++i) {
-            batchTableString += " ";
-        }
+        batchTableJsonByteLength = batchTableString.size();
+        // Batch Table JSON starts after Feature Table JSON
+        // Feature Table Binary length is 0, so Batch Table JSON starts at featureTableStartOffset + featureTableJsonByteLength
+        size_t batchTableStartOffset = featureTableStartOffset + featureTableJsonByteLength;
+        batchTablePadding = (8 - ((batchTableStartOffset + batchTableJsonByteLength) % 8)) % 8;
+        batchTableString.append(batchTablePadding, ' ');
+        batchTableJsonByteLength = batchTableString.size();  // Update to include padding
     }
 
-    // Now featureTableString.size() is multiple of 8.
-    // Header is 28 bytes.
-    // 28 + featureTableString.size() is 4 mod 8.
-    // So GLB starts at 4 mod 8. This is valid for GLB (4-byte alignment).
+    // Note: Per glTF 2.0 spec, GLB file does not require padding at the end
+    // The file should end immediately after the last chunk
+    // GLB chunks must be aligned to 4-byte (not 8-byte) boundaries
 
-    // Also, align GLB data size to 8 bytes (Spec recommendation for B3DM body end? No, just good practice)
-    // Actually, B3DM byteLength doesn't need to be aligned, but let's align it to 8 bytes for safety.
-    size_t glbLen = glbData.size();
-    size_t glbPadding = (8 - (glbLen % 8)) % 8;
-    for(size_t i=0; i<glbPadding; ++i) {
-        glbData += '\0';
+    // Update GLB header length
+    // GLB header: magic(4) + version(4) + length(4) = 12 bytes
+    // Per glTF 2.0 spec: length is the total length of the GLB file in bytes,
+    // including the header and all chunks
+    size_t glbTotalSize = glbData.size();
+    if (glbData.size() >= 12) {
+        uint32_t* glbLengthPtr = reinterpret_cast<uint32_t*>(&glbData[8]);
+        *glbLengthPtr = static_cast<uint32_t>(glbTotalSize);
     }
+
+    // Per 3D Tiles spec 1.0: Header is 28 bytes, no padding after header
+    // Feature Table JSON starts immediately after header at byte 28
+    // Each JSON section is padded to 8-byte boundary within its length field
+
+    // Calculate positions for alignment verification
+    // Note: featureTableJsonByteLength and batchTableJsonByteLength INCLUDE padding
+    size_t featureTableJsonStart = sizeof(B3dmHeader);  // 28 bytes
+    size_t featureTableBinaryStart = featureTableJsonStart + featureTableJsonByteLength;  // Aligned to 8 bytes
+    size_t batchTableJsonStart = featureTableBinaryStart;  // Since featureTableBinaryByteLength = 0
+    size_t batchTableBinaryStart = batchTableJsonStart + batchTableJsonByteLength;  // Aligned to 8 bytes
+    size_t glbStart = batchTableBinaryStart;  // Since batchTableBinaryByteLength = 0
+
+    // Calculate total byte length
+    // Per 3D Tiles spec 1.0: The total byte length must be aligned to 8 bytes
+    size_t totalByteLength = glbStart + glbData.size();
+    size_t filePadding = (8 - (totalByteLength % 8)) % 8;
+    totalByteLength += filePadding;
 
     // Write header
+    // Per 3D Tiles spec 1.0 and validator implementation:
+    // - JSON byte length INCLUDES padding to 8-byte boundary
+    // - Binary byte length INCLUDES padding to 8-byte boundary
+    // The validator calculates offsets by summing these lengths
     B3dmHeader header;
     header.magic = B3DM_MAGIC;
     header.version = 1;
-    header.featureTableJSONByteLength = (uint32_t)featureTableString.size();
-    header.featureTableBinaryByteLength = 0;
-    header.batchTableJSONByteLength = (uint32_t)batchTableString.size();
-    header.batchTableBinaryByteLength = 0;
-    header.byteLength = (uint32_t)(sizeof(B3dmHeader) + featureTableString.size() + batchTableString.size() + glbData.size());
+    // featureTableJsonByteLength and batchTableJsonByteLength already include padding
+    header.featureTableJSONByteLength = (uint32_t)featureTableJsonByteLength;
+    header.featureTableBinaryByteLength = 0;  // No binary data
+    header.batchTableJSONByteLength = (uint32_t)batchTableJsonByteLength;
+    header.batchTableBinaryByteLength = 0;  // No binary data
+    header.byteLength = (uint32_t)totalByteLength;
 
     outfile.write(reinterpret_cast<const char*>(&header), sizeof(B3dmHeader));
-    outfile.write(featureTableString.c_str(), featureTableString.size());
+
+    // Per 3D Tiles spec 1.0: Header is 28 bytes, Feature Table JSON starts immediately after
+    // No padding between header and Feature Table JSON
+    // Feature Table JSON must be padded to 8-byte boundary so that next section is aligned
+
+    // Write feature table JSON (padding is already included in the string)
+    outfile.write(featureTableString.c_str(), featureTableJsonByteLength);
+
+    // Write batch table JSON (padding is already included in the string)
     if (!batchTableString.empty()) {
-        outfile.write(batchTableString.c_str(), batchTableString.size());
+        outfile.write(batchTableString.c_str(), batchTableJsonByteLength);
     }
+
     outfile.write(glbData.data(), glbData.size());
+
+    // Write file padding to ensure total byte length is aligned to 8 bytes
+    // Per 3D Tiles spec: padding must be 0x00 (null bytes)
+    if (filePadding > 0) {
+        std::vector<char> paddingBytes(filePadding, '\0');
+        outfile.write(paddingBytes.data(), filePadding);
+    }
+
     outfile.close();
 
     return {filename, contentBox};
