@@ -8,7 +8,8 @@
 import { provide, computed } from 'vue';
 
 const props = defineProps<{
-  viewer: any;  null;
+  viewer: any | null;
+  map: mars3d.Map | null;
   tilesetLayer: mars3d.layer.TilesetLayer | null;
   tilesetInfo: any;
   geoJsonLayer: any;

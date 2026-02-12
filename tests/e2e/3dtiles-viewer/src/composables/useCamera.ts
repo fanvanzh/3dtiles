@@ -1,4 +1,4 @@
-import { shallowRef, computed } from 'vue';
+import { shallowRef  } from 'vue';
 import type { Ref } from 'vue';
 import type { CameraInfo } from '../types';
 
