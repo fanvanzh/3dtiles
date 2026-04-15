@@ -67,3 +67,13 @@ Pre-release versions will be automatically marked as "Pre-release" on GitHub.
 - [How to build?](https://github.com/fanvanzh/3dtiles/wiki/How-to-build)
 - [How to debug?](https://github.com/fanvanzh/3dtiles/wiki/How-to-debug)
 
+
+
+## StarMap
+<a href="https://starmapper.bruniaux.com/fanvanzh/3dtiles">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://starmapper.bruniaux.com/api/map-image/fanvanzh/3dtiles?theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://starmapper.bruniaux.com/api/map-image/fanvanzh/3dtiles?theme=light" />
+    <img alt="StarMapper" src="https://starmapper.bruniaux.com/api/map-image/fanvanzh/3dtiles" />
+  </picture>
+</a>
