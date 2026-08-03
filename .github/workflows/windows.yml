@@ -15,4 +15,4 @@ jobs:
     with:
       os: windows-latest
       platform: windows-x86_64
-      package: false
+      package: true
