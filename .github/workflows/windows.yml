@@ -1,9 +1,10 @@
-name: Windows
+﻿name: Windows
 
 on:
   push:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,4 +16,4 @@ jobs:
     with:
       os: windows-latest
       platform: windows-x86_64
-      package: false
+      package: true

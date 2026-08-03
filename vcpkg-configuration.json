@@ -1,4 +1,7 @@
 {
+  "overlay-ports": [
+    "./vcpkg-overlay-ports"
+  ],
   "registries": [
     {
       "kind": "artifact",
