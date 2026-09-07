@@ -29,6 +29,12 @@ jobs:
     runs-on: ${{ inputs.os }}
     outputs:
       artifact-name: ${{ steps.package.outputs.artifact-name }}
+    env:
+      # Must be job-scoped, not step-scoped: build.rs runs CMake with the vcpkg
+      # toolchain, which performs a SECOND manifest-mode `vcpkg install` during
+      # `cargo build`. Without the overlay there, the stale upstream tinygltf
+      # SHA512 is used and the download fails.
+      VCPKG_OVERLAY_PORTS: ${{ github.workspace }}/vcpkg-overlays
     steps:
       - uses: actions/checkout@v6
         with:
@@ -42,24 +48,37 @@ jobs:
         if: startsWith(inputs.os, 'macos')
         run: brew install autoconf autoconf-archive automake libtool
 
-      - name: Cache vcpkg
-        uses: actions/cache@v5
+      - name: Restore vcpkg cache
+        uses: actions/cache/restore@v5
         id: cache-vcpkg
         with:
           path: ${{ github.workspace }}/vcpkg_installed/
-          key: ${{ runner.os }}${{ inputs.os == 'macos-15' && '-arm' || inputs.os == 'macos-15-intel' && '-x64' || '' }}-vcpkg-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+          key: ${{ runner.os }}${{ inputs.os == 'macos-15' && '-arm' || inputs.os == 'macos-15-intel' && '-x64' || '' }}-vcpkg-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg-overlays/**') }}
           restore-keys: ${{ runner.os }}${{ inputs.os == 'macos-15' && '-arm' || inputs.os == 'macos-15-intel' && '-x64' || '' }}-vcpkg-
 
       - name: Setup vcpkg
+        id: setup-vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           doNotCache: true
           vcpkgGitCommitId: '84bab45d415d22042bd0b9081aea57f362da3f35'
-          runVcpkgInstall: ${{ steps.cache-vcpkg-installed.outputs.cache-hit != 'true' || inputs.package }}
+          vcpkgJsonGlob: 'vcpkg.json'
+          runVcpkgInstall: ${{ steps.cache-vcpkg.outputs.cache-hit != 'true' || inputs.package }}
           runVcpkgFormatString: ${{ inputs.os == 'macos-15' && '[`install`, `--recurse`, `--clean-after-build`, `--x-install-root`, `$[env.VCPKG_INSTALLED_DIR]`, `--triplet`, `$[env.VCPKG_DEFAULT_TRIPLET]`, `--allow-unsupported`]' || '' }}
         env:
-          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+          # NOTE: do not re-add 'clear;x-gha' — vcpkg removed the x-gha backend, and
+          # 'clear' also disabled the default files cache, so every port was rebuilt
+          # from source on every run (~80 min). Left unset = default files cache.
           VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
+
+      # Persist the ~80 min vcpkg tree even if a later step fails, so the next
+      # run does not rebuild every port from source.
+      - name: Save vcpkg cache
+        if: always() && steps.setup-vcpkg.outcome == 'success' && steps.cache-vcpkg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ github.workspace }}/vcpkg_installed/
+          key: ${{ steps.cache-vcpkg.outputs.cache-primary-key }}
 
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
